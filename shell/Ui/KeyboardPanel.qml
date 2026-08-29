@@ -50,13 +50,23 @@ PanelWindow {
   // next to its widget. The surface is already full-screen, so this only moves
   // the card inside it.
   property bool centerOnScreen: true
-  // Entry/exit motion. `buttonScale` is how small the card starts, as a
-  // fraction of full size, when it grows out of its bar button.
-  property int openMotionDuration: 320
-  property int closeMotionDuration: 160
-  property int fadeDuration: 200
-  property int closeFadeDuration: 160
-  property real buttonScale: 0.55
+  // Entry/exit motion.
+  //
+  // The card emerges rather than growing out of the button. Scaling a card far
+  // enough to read as "coming from" a 26px bar button means scaling its text
+  // and sliders with it, and stretching glyphs is what makes the movement look
+  // cheap -- you watch the contents deform instead of a panel arriving. So the
+  // scale change is kept below the threshold where deformation is legible, and
+  // the link to the button is carried by direction instead: the card enters
+  // from the button's side, travelling a short capped distance rather than the
+  // full journey across the screen.
+  property int openMotionDuration: 260
+  property int closeMotionDuration: 150
+  property int fadeDuration: 180
+  property int closeFadeDuration: 130
+  property real emergeScale: 0.96
+  property real travelFraction: 0.12
+  property real maxTravel: Style.space(56)
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
   property bool popoutSwitching: false
@@ -109,7 +119,7 @@ PanelWindow {
       // grow into place -- so the panel visibly comes from that button.
       card.slideX = offsetToAnchor.x
       card.slideY = offsetToAnchor.y
-      card.originScale = buttonScale
+      card.originScale = emergeScale
     }
     entryMotion.restart()
   }
@@ -252,10 +262,17 @@ PanelWindow {
     return Qt.point(screenW - barW / 2, anchorScreenPos.y + anchorH / 2)
   }
 
-  // Offset that puts the card's centre exactly on the button's centre.
-  readonly property point offsetToAnchor: Qt.point(
-    anchorCenter.x - (cardOrigin.x + contentWidth / 2),
-    anchorCenter.y - (cardOrigin.y + contentHeight / 2))
+  // A short offset pointing at the owning button, rather than all the way to
+  // it. Same direction as the full journey, a fraction of the distance and
+  // capped, so the card enters from the right side without the visible trip.
+  readonly property point offsetToAnchor: {
+    var dx = anchorCenter.x - (cardOrigin.x + contentWidth / 2)
+    var dy = anchorCenter.y - (cardOrigin.y + contentHeight / 2)
+    var length = Math.sqrt(dx * dx + dy * dy)
+    if (length < 1) return Qt.point(0, 0)
+    var travel = Math.min(length * travelFraction, maxTravel)
+    return Qt.point(dx / length * travel, dy / length * travel)
+  }
 
   readonly property point cardOrigin: {
     if (centerOnScreen && screenW > 0 && screenH > 0) {
@@ -330,14 +347,14 @@ PanelWindow {
     onTriggered: if (root.open) root.focusPrimed = true
   }
 
-  // The two axes deliberately run different curves. Identical easing on x and
-  // y produces a dead-straight diagonal, which is what makes a move read as
-  // mechanical; letting y settle ahead of x bends the path into a shallow arc
-  // instead. Scale rides with x so the growth stays tied to the longer axis.
+  // One curve across all three properties now. Splitting x and y bent the path
+  // into an arc, which was worth doing when the card crossed the screen; over
+  // a ~56px offset an arc is invisible and the mismatched curves only stop the
+  // card moving as one rigid object.
   ParallelAnimation {
     id: entryMotion
     NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
-    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutExpo }
+    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
     NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
   }
 
@@ -352,8 +369,8 @@ PanelWindow {
   ParallelAnimation {
     id: exitMotion
     NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
-    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.OutQuad }
-    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "originScale"; to: root.emergeScale; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
   }
 
   Timer {
