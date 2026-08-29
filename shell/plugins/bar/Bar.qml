@@ -81,6 +81,8 @@ Item {
   property bool tooltipShown: false
   property int tooltipRequest: 0
   property var activePopout: null
+  // Darkness of the wash behind an open panel. See PanelScrim below.
+  property real panelScrimAlpha: 0.32
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
@@ -988,6 +990,67 @@ Item {
 
         screen: modelData
         ghostScreen: modelData
+      }
+    }
+  }
+
+  Variants {
+    model: Quickshell.screens
+
+    delegate: Component {
+      PanelScrim {
+        required property var modelData
+
+        screen: modelData
+      }
+    }
+  }
+
+  // One full-screen wash owned by the bar, rather than one per panel.
+  //
+  // Panels are separate layer surfaces that unmap and remap as you tab between
+  // them, so a scrim living inside a panel blinks out mid-handoff and takes
+  // Hyprland's blur with it -- the backdrop visibly snaps sharp and back. The
+  // popout coordinator claims the incoming owner before the outgoing one
+  // releases (requestPopout / releasePopout above), so `activePopout` is never
+  // null during a switch, and a surface bound to it stays mapped throughout.
+  //
+  // Paint only: `mask` keeps it out of hit-testing, so outside-clicks still
+  // land on the panel's own dismissal surface above it.
+  component PanelScrim: PanelWindow {
+    id: scrimWindow
+
+    readonly property bool shown: root.activePopout !== null
+
+    visible: shown || scrimFill.opacity > 0
+    color: "transparent"
+    exclusionMode: ExclusionMode.Ignore
+    mask: Region { width: 0; height: 0 }
+
+    WlrLayershell.namespace: "omarchy-panel-scrim"
+    // Top, not Overlay. Panels are Overlay surfaces, and layer-shell orders
+    // Top strictly below Overlay -- so the card is guaranteed to sit above the
+    // scrim and stay unblurred. Putting both on Overlay and trying to separate
+    // them with a layer_rule `order` does not do this: the scrim came out on
+    // top and blurred the panel along with the desktop.
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+    anchors {
+      top: true
+      bottom: true
+      left: true
+      right: true
+    }
+
+    Rectangle {
+      id: scrimFill
+      anchors.fill: parent
+      color: Qt.rgba(0, 0, 0, root.panelScrimAlpha)
+      opacity: scrimWindow.shown ? 1.0 : 0
+
+      Behavior on opacity {
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
       }
     }
   }

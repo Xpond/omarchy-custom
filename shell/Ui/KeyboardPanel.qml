@@ -50,9 +50,11 @@ PanelWindow {
   // next to its widget. The surface is already full-screen, so this only moves
   // the card inside it.
   property bool centerOnScreen: true
-  // Alpha of the full-screen wash behind the card. Must be non-zero for
-  // Hyprland's layer blur to have anything to bite on.
-  property real scrimAlpha: 0.32
+  // Entry/exit motion. `buttonScale` is how small the card starts, as a
+  // fraction of full size, when it grows out of its bar button.
+  property int openMotionDuration: 260
+  property int closeMotionDuration: 140
+  property real buttonScale: 0.25
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
   property bool popoutSwitching: false
@@ -94,13 +96,28 @@ PanelWindow {
       bar.lastSwitchDirection = 0
     }
     if (popoutSwitching && dir !== 0) {
+      // Panel handoff: keep the flat horizontal slide, no scaling. The card is
+      // already on screen and merely changing contents -- growing it out of a
+      // button here would read as a second, competing open.
       card.slideX = dir * Style.space(56)
       card.slideY = 0
+      card.originScale = 1
     } else {
-      card.slideX = 0
-      card.slideY = Style.space(20)
+      // Fresh open: start small, centred on the button that was clicked, and
+      // grow into place -- so the panel visibly comes from that button.
+      card.slideX = offsetToAnchor.x
+      card.slideY = offsetToAnchor.y
+      card.originScale = buttonScale
     }
     entryMotion.restart()
+  }
+
+  // Collapse back into the owning button, mirroring the open. Skipped during a
+  // panel handoff, where the outgoing card is replaced rather than dismissed.
+  function startExitMotion() {
+    exitX.to = offsetToAnchor.x
+    exitY.to = offsetToAnchor.y
+    exitMotion.restart()
   }
 
   // --- screen + lifetime ---------------------------------------------------
@@ -219,6 +236,25 @@ PanelWindow {
   // centering the card under the icon.
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
+  // Centre of the bar button that owns this panel, in surface coordinates --
+  // the point the card grows out of and collapses back into. The parallel
+  // axis (along the bar) uses the anchor's own position; the perpendicular
+  // one uses the bar window's thickness, for the same reason cardOrigin does:
+  // the anchor's reported position on that axis has the bar's internal
+  // layout padding baked in.
+  readonly property point anchorCenter: {
+    anchorWatcher.transform  // reactive dependency
+    if (barPos === "bottom") return Qt.point(anchorScreenPos.x + anchorW / 2, screenH - barH / 2)
+    if (barPos === "top")    return Qt.point(anchorScreenPos.x + anchorW / 2, barH / 2)
+    if (barPos === "left")   return Qt.point(barW / 2, anchorScreenPos.y + anchorH / 2)
+    return Qt.point(screenW - barW / 2, anchorScreenPos.y + anchorH / 2)
+  }
+
+  // Offset that puts the card's centre exactly on the button's centre.
+  readonly property point offsetToAnchor: Qt.point(
+    anchorCenter.x - (cardOrigin.x + contentWidth / 2),
+    anchorCenter.y - (cardOrigin.y + contentHeight / 2))
+
   readonly property point cardOrigin: {
     if (centerOnScreen && screenW > 0 && screenH > 0) {
       return Qt.point(Math.round(screenW / 2 - contentWidth / 2),
@@ -278,6 +314,7 @@ PanelWindow {
       popoutSwitching = false
       if (bar.activePopout === coordinatorKey) bar.releasePopout(coordinatorKey)
       if (popoutSwitchClosing) closeSwitchTimer.restart()
+      else startExitMotion()
     }
   }
 
@@ -293,8 +330,18 @@ PanelWindow {
 
   ParallelAnimation {
     id: entryMotion
-    NumberAnimation { target: card; property: "slideX"; to: 0; duration: 220; easing.type: Easing.OutCubic }
-    NumberAnimation { target: card; property: "slideY"; to: 0; duration: 220; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
+  }
+
+  // Matches the card's 140ms opacity fade, so the collapse finishes rather
+  // than being cut off when the surface unmaps.
+  ParallelAnimation {
+    id: exitMotion
+    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
+    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
+    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
   }
 
   Timer {
@@ -413,28 +460,6 @@ PanelWindow {
     }
   }
 
-  // --- scrim ---------------------------------------------------------------
-
-  // Full-screen wash behind the card. Hyprland blurs this surface through
-  // `layerrule = blur on, match:namespace omarchy-keyboard-panel`, and blur
-  // only applies where alpha is non-zero -- so this rectangle is what makes
-  // the desktop behind the panel go soft. The card above is opaque and stays
-  // sharp. No MouseArea: clicks fall through to dismissArea as before.
-  Rectangle {
-    anchors.fill: parent
-    color: Qt.rgba(0, 0, 0, root.scrimAlpha)
-    opacity: root.open ? 1.0 : 0
-    visible: opacity > 0
-
-    // Snap rather than fade while switching panels, exactly like the card
-    // below. Two panels are briefly alive during a switch; cross-fading both
-    // scrims would stack them and pulse the backdrop darker mid-switch.
-    Behavior on opacity {
-      enabled: !root.popoutSwitching && !root.popoutSwitchClosing
-      NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-    }
-  }
-
   // --- card ----------------------------------------------------------------
 
   BorderSurface {
@@ -453,7 +478,19 @@ PanelWindow {
     // transform so it never fights the x/y bindings on cardOrigin.
     property real slideX: 0
     property real slideY: 0
-    transform: Translate { x: card.slideX; y: card.slideY }
+    property real originScale: 1
+    // Scale about the card's own centre first, then translate that centre onto
+    // the button. Listed order is application order, so reversing these two
+    // would scale the offset as well and the card would miss the button.
+    transform: [
+      Scale {
+        origin.x: card.width / 2
+        origin.y: card.height / 2
+        xScale: card.originScale
+        yScale: card.originScale
+      },
+      Translate { x: card.slideX; y: card.slideY }
+    ]
 
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing
