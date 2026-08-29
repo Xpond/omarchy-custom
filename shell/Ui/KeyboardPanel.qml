@@ -52,9 +52,10 @@ PanelWindow {
   property bool centerOnScreen: true
   // Entry/exit motion. `buttonScale` is how small the card starts, as a
   // fraction of full size, when it grows out of its bar button.
-  property int openMotionDuration: 260
-  property int closeMotionDuration: 140
-  property real buttonScale: 0.25
+  property int openMotionDuration: 320
+  property int closeMotionDuration: 180
+  property int fadeDuration: 200
+  property real buttonScale: 0.55
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
   property bool popoutSwitching: false
@@ -328,20 +329,24 @@ PanelWindow {
     onTriggered: if (root.open) root.focusPrimed = true
   }
 
+  // The two axes deliberately run different curves. Identical easing on x and
+  // y produces a dead-straight diagonal, which is what makes a move read as
+  // mechanical; letting y settle ahead of x bends the path into a shallow arc
+  // instead. Scale rides with x so the growth stays tied to the longer axis.
   ParallelAnimation {
     id: entryMotion
-    NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
-    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
-    NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
+    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutExpo }
+    NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
   }
 
   // Matches the card's 140ms opacity fade, so the collapse finishes rather
   // than being cut off when the surface unmaps.
   ParallelAnimation {
     id: exitMotion
-    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
-    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
-    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.InCubic }
+    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.InQuint }
+    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.InExpo }
+    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.InQuint }
   }
 
   Timer {
@@ -479,6 +484,14 @@ PanelWindow {
     property real slideX: 0
     property real slideY: 0
     property real originScale: 1
+
+    // Render the card to a texture for the duration of the motion, so the
+    // frames in between are a scaled quad rather than a full re-rasterization
+    // of every slider, glyph and border at a new scale. This is the jank:
+    // without it the scene graph re-renders the whole panel each frame.
+    // Only while moving -- a permanent layer would soften static text.
+    layer.enabled: entryMotion.running || exitMotion.running
+    layer.smooth: true
     // Scale about the card's own centre first, then translate that centre onto
     // the button. Listed order is application order, so reversing these two
     // would scale the offset as well and the card would miss the button.
@@ -492,9 +505,13 @@ PanelWindow {
       Translate { x: card.slideX; y: card.slideY }
     ]
 
+    // Slightly shorter than the motion, and eased so it is essentially opaque
+    // by the time the card is most of the way home. A fade that finishes long
+    // before the movement does is what makes the panel look like it pops and
+    // then slides.
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing
-      NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+      NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutQuad }
     }
 
     // Swallow clicks on the card so they don't bubble to the dismissal
