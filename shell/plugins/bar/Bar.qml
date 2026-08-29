@@ -83,6 +83,10 @@ Item {
   property var activePopout: null
   // Darkness of the wash behind an open panel. See PanelScrim below.
   property real panelScrimAlpha: 0.32
+  // How long the scrim outlives the last panel closing. Must cover the panel's
+  // close animation (Ui/KeyboardPanel.qml fadeDuration) or the backdrop drops
+  // out from under a card that is still animating away.
+  property int panelScrimHoldMs: 200
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
@@ -1020,9 +1024,32 @@ Item {
   component PanelScrim: PanelWindow {
     id: scrimWindow
 
-    readonly property bool shown: root.activePopout !== null
+    // `wanted` follows the coordinator; `shown` trails it on the way out.
+    // activePopout is cleared the instant a panel starts closing, but that
+    // panel still has its fade and collapse to play -- dropping the scrim on
+    // that edge pulls the blurred backdrop out from under a card that is
+    // still visibly on screen, and the card reads as lagging behind.
+    // Held rather than faded: animating the scrim's alpha is what made
+    // Hyprland re-blur every frame.
+    readonly property bool wanted: root.activePopout !== null
+    property bool shown: false
 
-    visible: shown || scrimFill.opacity > 0
+    onWantedChanged: {
+      if (wanted) {
+        scrimHold.stop()
+        shown = true
+      } else {
+        scrimHold.restart()
+      }
+    }
+
+    Timer {
+      id: scrimHold
+      interval: root.panelScrimHoldMs
+      onTriggered: scrimWindow.shown = false
+    }
+
+    visible: shown
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     mask: Region { width: 0; height: 0 }
