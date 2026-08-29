@@ -101,7 +101,13 @@ PanelWindow {
   // a fresh open rises. `lastSwitchDirection` is single-use -- reading it
   // clears it, so a later mouse-driven switch doesn't inherit a stale
   // direction from an earlier keyboard one.
+  // Play once per open. Both the `open` edge and the surface-mapped edge call
+  // in, because either can be the one that arrives second.
+  property bool entryPlayed: false
+
   function startEntryMotion() {
+    if (entryPlayed) return
+    entryPlayed = true
     var dir = 0
     if (bar && bar.lastSwitchDirection !== undefined) {
       dir = bar.lastSwitchDirection
@@ -156,7 +162,13 @@ PanelWindow {
     ? (focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
     : WlrKeyboardFocus.None
 
-  onBackingWindowVisibleChanged: beginFocusPrime()
+  // The usual path: `open` flips, Qt creates the layer surface, and the
+  // compositor maps it some frames later. This is the first moment the card is
+  // actually on screen, so it is the only honest moment to start moving it.
+  onBackingWindowVisibleChanged: {
+    beginFocusPrime()
+    if (backingWindowVisible && open) startEntryMotion()
+  }
 
   // Full-screen layer-shell. The visible card is positioned inside via
   // `cardOrigin`. The `mask` below makes the bar area click-through (so
@@ -326,14 +338,19 @@ PanelWindow {
       popoutSwitchClosing = false
       popoutSwitching = bar.activePopout && bar.activePopout !== coordinatorKey
       bar.requestPopout(coordinatorKey)
+      // Only if the surface is already mapped -- otherwise wait for it. An
+      // entry animation started here would run to completion against a window
+      // the compositor has not shown yet, and the user would see only whatever
+      // fraction of it survives the map latency.
       if (popoutSwitching) popoutSwitchTimer.restart()
-      startEntryMotion()
+      if (backingWindowVisible) startEntryMotion()
     } else {
       popoutSwitchClosing = !!(owner && owner.popoutSwitchClosing)
       popoutSwitching = false
       if (bar.activePopout === coordinatorKey) bar.releasePopout(coordinatorKey)
       if (popoutSwitchClosing) closeSwitchTimer.restart()
       else startExitMotion()
+      entryPlayed = false
     }
   }
 
