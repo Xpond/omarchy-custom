@@ -50,16 +50,10 @@ PanelWindow {
   // next to its widget. The surface is already full-screen, so this only moves
   // the card inside it.
   property bool centerOnScreen: true
-  // Entry/exit motion.
-  //
-  // The card emerges rather than growing out of the button. Scaling a card far
-  // enough to read as "coming from" a 26px bar button means scaling its text
-  // and sliders with it, and stretching glyphs is what makes the movement look
-  // cheap -- you watch the contents deform instead of a panel arriving. So the
-  // scale change is kept below the threshold where deformation is legible, and
-  // the link to the button is carried by direction instead: the card enters
-  // from the button's side, travelling a short capped distance rather than the
-  // full journey across the screen.
+  // Entry/exit motion. The card enters from its button's direction over a
+  // short capped distance, with a scale change small enough that its text and
+  // sliders do not visibly deform on the way -- scaling far enough to read as
+  // "out of a 26px button" stretches the contents, which is what looks cheap.
   property int openMotionDuration: 260
   property int closeMotionDuration: 150
   property int fadeDuration: 180
@@ -109,13 +103,10 @@ PanelWindow {
     if (open && backingWindowVisible) focusPrimeTimer.restart()
   }
 
-  // Seed the card's offset for this open, then animate it back to rest.
-  // A switch slides in horizontally from the side the switch travelled;
-  // a fresh open rises. `lastSwitchDirection` is single-use -- reading it
-  // clears it, so a later mouse-driven switch doesn't inherit a stale
-  // direction from an earlier keyboard one.
-  // Play once per open. Both the `open` edge and the surface-mapped edge call
-  // in, because either can be the one that arrives second.
+  // Guards startEntryMotion to once per open: both the `open` edge and the
+  // surface-mapped edge call in, and either can be the one that lands second.
+  // lastSwitchDirection is single-use -- reading it clears it, so a later
+  // mouse-driven switch cannot inherit a stale direction from a keyboard one.
   property bool entryPlayed: false
 
   function startEntryMotion() {
@@ -127,15 +118,13 @@ PanelWindow {
       bar.lastSwitchDirection = 0
     }
     if (popoutSwitching && dir !== 0) {
-      // Panel handoff: keep the flat horizontal slide, no scaling. The card is
-      // already on screen and merely changing contents -- growing it out of a
-      // button here would read as a second, competing open.
-      card.slideX = dir * Style.space(56)
+      // Handoff: flat horizontal slide, no scaling. The card is already on
+      // screen and only its contents change, so scaling it here would read as
+      // a second, competing open.
+      card.slideX = dir * maxTravel
       card.slideY = 0
       card.originScale = 1
     } else {
-      // Fresh open: start small, centred on the button that was clicked, and
-      // grow into place -- so the panel visibly comes from that button.
       card.slideX = offsetToAnchor.x
       card.slideY = offsetToAnchor.y
       card.originScale = emergeScale
@@ -143,8 +132,8 @@ PanelWindow {
     entryMotion.restart()
   }
 
-  // Collapse back into the owning button, mirroring the open. Skipped during a
-  // panel handoff, where the outgoing card is replaced rather than dismissed.
+  // Retreat toward the owning button. Skipped during a handoff, where the
+  // outgoing card is replaced rather than dismissed.
   function startExitMotion() {
     exitX.to = offsetToAnchor.x
     exitY.to = offsetToAnchor.y
@@ -274,12 +263,11 @@ PanelWindow {
   // centering the card under the icon.
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
-  // Centre of the bar button that owns this panel, in surface coordinates --
-  // the point the card grows out of and collapses back into. The parallel
-  // axis (along the bar) uses the anchor's own position; the perpendicular
-  // one uses the bar window's thickness, for the same reason cardOrigin does:
-  // the anchor's reported position on that axis has the bar's internal
-  // layout padding baked in.
+  // Centre of the bar button that owns this panel, in surface coordinates.
+  // The parallel axis (along the bar) uses the anchor's own position; the
+  // perpendicular one uses the bar window's thickness, for the same reason
+  // cardOrigin does -- the anchor's position on that axis has the bar's
+  // internal layout padding baked in.
   readonly property point anchorCenter: {
     anchorWatcher.transform  // reactive dependency
     if (barPos === "bottom") return Qt.point(anchorScreenPos.x + anchorW / 2, screenH - barH / 2)
@@ -380,10 +368,8 @@ PanelWindow {
     onTriggered: if (root.open) root.focusPrimed = true
   }
 
-  // One curve across all three properties now. Splitting x and y bent the path
-  // into an arc, which was worth doing when the card crossed the screen; over
-  // a ~56px offset an arc is invisible and the mismatched curves only stop the
-  // card moving as one rigid object.
+  // One curve across all three properties, so the card moves as a rigid
+  // object. Splitting x and y to bend the path only reads over long travel.
   ParallelAnimation {
     id: entryMotion
     NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
@@ -391,14 +377,9 @@ PanelWindow {
     NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
   }
 
-  // Matches the card's 140ms opacity fade, so the collapse finishes rather
-  // than being cut off when the surface unmaps.
-  // Out curves, not the In curves that mirror the entry. A geometric mirror is
-  // the wrong model for a dismissal: InQuint has covered 0.5^5 = 3% of the
-  // distance at the halfway point, so the card sits still for most of the
-  // animation and then jumps. Since the fade is already well underway by then,
-  // what you see is a stationary card dissolving in place. Leaving promptly is
-  // what makes a dismissal feel connected to the click.
+  // Out curves, not the In curves that would mirror the entry. A dismissal
+  // has to leave promptly: InQuint covers 3% of the distance by the halfway
+  // point, so the card hangs still while the fade runs and then jumps.
   ParallelAnimation {
     id: exitMotion
     NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
@@ -542,9 +523,8 @@ PanelWindow {
     property real slideY: 0
     property real originScale: 1
 
-    // Scale about the card's own centre first, then translate that centre onto
-    // the button. Listed order is application order, so reversing these two
-    // would scale the offset as well and the card would miss the button.
+    // Scale about the card's own centre, then translate. Listed order is
+    // application order; reversed, the scale would shrink the offset too.
     transform: [
       Scale {
         origin.x: card.width / 2
@@ -555,10 +535,9 @@ PanelWindow {
       Translate { x: card.slideX; y: card.slideY }
     ]
 
-    // Slightly shorter than the motion, and eased so it is essentially opaque
-    // by the time the card is most of the way home. A fade that finishes long
-    // before the movement does is what makes the panel look like it pops and
-    // then slides.
+    // Shorter than the motion but eased so the card is essentially opaque by
+    // the time it arrives. A fade that finishes far earlier reads as a pop
+    // followed by a slide.
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing
       // Asymmetric on purpose: `open` is already false by the time this is

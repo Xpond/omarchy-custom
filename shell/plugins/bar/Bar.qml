@@ -83,8 +83,8 @@ Item {
   property var activePopout: null
   // Darkness of the wash behind an open panel. See PanelScrim below.
   property real panelScrimAlpha: 0.32
-  // How long the scrim outlives the last panel closing. Must cover the panel's
-  // close animation (Ui/KeyboardPanel.qml fadeDuration) or the backdrop drops
+  // How long the scrim outlives the last panel closing. Must stay >= the
+  // panel's closeFadeDuration (Ui/KeyboardPanel.qml) or the backdrop drops
   // out from under a card that is still animating away.
   property int panelScrimHoldMs: 150
   // Panels whose layer surface is actually mapped, not merely logically open.
@@ -1019,27 +1019,20 @@ Item {
     }
   }
 
-  // One full-screen wash owned by the bar, rather than one per panel.
-  //
-  // Panels are separate layer surfaces that unmap and remap as you tab between
-  // them, so a scrim living inside a panel blinks out mid-handoff and takes
-  // Hyprland's blur with it -- the backdrop visibly snaps sharp and back. The
-  // popout coordinator claims the incoming owner before the outgoing one
-  // releases (requestPopout / releasePopout above), so `activePopout` is never
-  // null during a switch, and a surface bound to it stays mapped throughout.
+  // One full-screen wash owned by the bar, rather than one per panel. Panels
+  // are separate layer surfaces that unmap and remap as you tab between them,
+  // so a scrim living inside a panel blinks out mid-handoff and takes
+  // Hyprland's blur with it -- the backdrop visibly snaps sharp and back.
   //
   // Paint only: `mask` keeps it out of hit-testing, so outside-clicks still
   // land on the panel's own dismissal surface above it.
   component PanelScrim: PanelWindow {
     id: scrimWindow
 
-    // `wanted` follows the coordinator; `shown` trails it on the way out.
-    // activePopout is cleared the instant a panel starts closing, but that
-    // panel still has its fade and collapse to play -- dropping the scrim on
-    // that edge pulls the blurred backdrop out from under a card that is
-    // still visibly on screen, and the card reads as lagging behind.
-    // Held rather than faded: animating the scrim's alpha is what made
-    // Hyprland re-blur every frame.
+    // `shown` trails `wanted` on the way out. A closing panel drops out of
+    // the count immediately but still has its fade and retreat to play, so
+    // releasing the scrim on that edge would pull the backdrop out from under
+    // a card still on screen -- which reads as the card lagging behind.
     readonly property bool wanted: root.visiblePanelSurfaces > 0
     property bool shown: false
 
@@ -1079,17 +1072,14 @@ Item {
       right: true
     }
 
+    // Constant alpha, never animated. Fading it would change the layer
+    // surface's alpha every frame, making Hyprland recompute a fullscreen
+    // blur every frame -- and crossing ignore_alpha (0.05) partway would pop
+    // the blur in rather than bringing it with the scrim. The Hyprland side
+    // needs no_anim on this namespace for the same reason.
     Rectangle {
-      id: scrimFill
       anchors.fill: parent
       color: Qt.rgba(0, 0, 0, root.panelScrimAlpha)
-      // Deliberately not animated. Fading this rectangle changes the layer
-      // surface's alpha every frame, so Hyprland recomputes the fullscreen
-      // blur every frame for the length of the fade -- and because the fade
-      // crosses ignore_alpha (0.05) partway, the blur also pops in rather
-      // than appearing with the scrim. Constant alpha lets the blur be
-      // computed once and cached while the card animates above it.
-      opacity: scrimWindow.shown ? 1.0 : 0
     }
   }
 
