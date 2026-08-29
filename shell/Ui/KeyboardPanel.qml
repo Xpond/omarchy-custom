@@ -53,8 +53,9 @@ PanelWindow {
   // Entry/exit motion. `buttonScale` is how small the card starts, as a
   // fraction of full size, when it grows out of its bar button.
   property int openMotionDuration: 320
-  property int closeMotionDuration: 180
+  property int closeMotionDuration: 160
   property int fadeDuration: 200
+  property int closeFadeDuration: 160
   property real buttonScale: 0.55
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
@@ -342,11 +343,17 @@ PanelWindow {
 
   // Matches the card's 140ms opacity fade, so the collapse finishes rather
   // than being cut off when the surface unmaps.
+  // Out curves, not the In curves that mirror the entry. A geometric mirror is
+  // the wrong model for a dismissal: InQuint has covered 0.5^5 = 3% of the
+  // distance at the halfway point, so the card sits still for most of the
+  // animation and then jumps. Since the fade is already well underway by then,
+  // what you see is a stationary card dissolving in place. Leaving promptly is
+  // what makes a dismissal feel connected to the click.
   ParallelAnimation {
     id: exitMotion
-    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.InQuint }
-    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.InExpo }
-    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.InQuint }
+    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.OutQuad }
+    NumberAnimation { target: card; property: "originScale"; to: root.buttonScale; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
   }
 
   Timer {
@@ -504,7 +511,9 @@ PanelWindow {
     // then slides.
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing
-      NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutQuad }
+      // Asymmetric on purpose: `open` is already false by the time this is
+      // evaluated for a close, so the shorter close duration applies there.
+      NumberAnimation { duration: root.open ? root.fadeDuration : root.closeFadeDuration; easing.type: Easing.OutQuad }
     }
 
     // Swallow clicks on the card so they don't bubble to the dismissal

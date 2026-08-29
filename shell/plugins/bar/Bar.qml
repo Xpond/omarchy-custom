@@ -86,7 +86,7 @@ Item {
   // How long the scrim outlives the last panel closing. Must cover the panel's
   // close animation (Ui/KeyboardPanel.qml fadeDuration) or the backdrop drops
   // out from under a card that is still animating away.
-  property int panelScrimHoldMs: 200
+  property int panelScrimHoldMs: 180
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
