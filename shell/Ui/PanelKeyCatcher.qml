@@ -56,6 +56,15 @@ Item {
       event.accepted = true
       return
     }
+    // Ctrl+Left/Right walks between panels. Bare arrows stay with the panel
+    // itself -- in the monitor panel they drive the brightness/text-size
+    // sliders and the scale buttons, so taking them would cost that control.
+    if ((event.modifiers & Qt.ControlModifier)
+        && (event.key === Qt.Key_Right || event.key === Qt.Key_Left)) {
+      tabRequested(event.key === Qt.Key_Right ? 1 : -1)
+      event.accepted = true
+      return
+    }
     if (event.key === Qt.Key_Down || event.text === "j") {
       moveRequested(0, 1); event.accepted = true; return
     }

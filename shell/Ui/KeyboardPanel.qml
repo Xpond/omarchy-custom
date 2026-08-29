@@ -46,6 +46,13 @@ PanelWindow {
   property int contentHeight: Style.space(200)
   property var borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
   property bool centerOnBar: false
+  // Center the card on the screen instead of tucking it against the bar edge
+  // next to its widget. The surface is already full-screen, so this only moves
+  // the card inside it.
+  property bool centerOnScreen: true
+  // Alpha of the full-screen wash behind the card. Must be non-zero for
+  // Hyprland's layer blur to have anything to bite on.
+  property real scrimAlpha: 0.32
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
   property bool popoutSwitching: false
@@ -73,6 +80,27 @@ PanelWindow {
 
   function beginFocusPrime() {
     if (open && backingWindowVisible) focusPrimeTimer.restart()
+  }
+
+  // Seed the card's offset for this open, then animate it back to rest.
+  // A switch slides in horizontally from the side the switch travelled;
+  // a fresh open rises. `lastSwitchDirection` is single-use -- reading it
+  // clears it, so a later mouse-driven switch doesn't inherit a stale
+  // direction from an earlier keyboard one.
+  function startEntryMotion() {
+    var dir = 0
+    if (bar && bar.lastSwitchDirection !== undefined) {
+      dir = bar.lastSwitchDirection
+      bar.lastSwitchDirection = 0
+    }
+    if (popoutSwitching && dir !== 0) {
+      card.slideX = dir * Style.space(56)
+      card.slideY = 0
+    } else {
+      card.slideX = 0
+      card.slideY = Style.space(20)
+    }
+    entryMotion.restart()
   }
 
   // --- screen + lifetime ---------------------------------------------------
@@ -192,6 +220,10 @@ PanelWindow {
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
   readonly property point cardOrigin: {
+    if (centerOnScreen && screenW > 0 && screenH > 0) {
+      return Qt.point(Math.round(screenW / 2 - contentWidth / 2),
+                      Math.round(screenH / 2 - contentHeight / 2))
+    }
     if (!anchorItem || !bar) return Qt.point(margin, margin)
     var x = 0, y = 0
     if (centerOnBar && (barPos === "top" || barPos === "bottom")) {
@@ -240,6 +272,7 @@ PanelWindow {
       popoutSwitching = bar.activePopout && bar.activePopout !== coordinatorKey
       bar.requestPopout(coordinatorKey)
       if (popoutSwitching) popoutSwitchTimer.restart()
+      startEntryMotion()
     } else {
       popoutSwitchClosing = !!(owner && owner.popoutSwitchClosing)
       popoutSwitching = false
@@ -256,6 +289,12 @@ PanelWindow {
     // immediate hide/re-summon acceptance case.
     interval: 75
     onTriggered: if (root.open) root.focusPrimed = true
+  }
+
+  ParallelAnimation {
+    id: entryMotion
+    NumberAnimation { target: card; property: "slideX"; to: 0; duration: 220; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "slideY"; to: 0; duration: 220; easing.type: Easing.OutCubic }
   }
 
   Timer {
@@ -374,6 +413,28 @@ PanelWindow {
     }
   }
 
+  // --- scrim ---------------------------------------------------------------
+
+  // Full-screen wash behind the card. Hyprland blurs this surface through
+  // `layerrule = blur on, match:namespace omarchy-keyboard-panel`, and blur
+  // only applies where alpha is non-zero -- so this rectangle is what makes
+  // the desktop behind the panel go soft. The card above is opaque and stays
+  // sharp. No MouseArea: clicks fall through to dismissArea as before.
+  Rectangle {
+    anchors.fill: parent
+    color: Qt.rgba(0, 0, 0, root.scrimAlpha)
+    opacity: root.open ? 1.0 : 0
+    visible: opacity > 0
+
+    // Snap rather than fade while switching panels, exactly like the card
+    // below. Two panels are briefly alive during a switch; cross-fading both
+    // scrims would stack them and pulse the backdrop darker mid-switch.
+    Behavior on opacity {
+      enabled: !root.popoutSwitching && !root.popoutSwitchClosing
+      NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+    }
+  }
+
   // --- card ----------------------------------------------------------------
 
   BorderSurface {
@@ -387,6 +448,12 @@ PanelWindow {
     padding: root.padding
     radius: Style.cornerRadius
     opacity: root.open || root.popoutSwitching ? 1.0 : 0
+
+    // Offset from the resting position, animated to zero on open. Kept as a
+    // transform so it never fights the x/y bindings on cardOrigin.
+    property real slideX: 0
+    property real slideY: 0
+    transform: Translate { x: card.slideX; y: card.slideY }
 
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing

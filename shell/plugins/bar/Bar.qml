@@ -432,6 +432,11 @@ Item {
     return slot ? String(slot.moduleName || "") : ""
   }
 
+  // Direction (-1/+1) of the most recent panel switch, read once by the
+  // incoming KeyboardPanel to pick which side it slides in from, then
+  // cleared by that read. 0 means "not a directional switch".
+  property int lastSwitchDirection: 0
+
   function switchPanelFrom(owner, direction) {
     if (!owner) return false
 
@@ -461,6 +466,7 @@ Item {
     var nextSlot = slots[(currentIndex + step + slots.length) % slots.length]
     if (!nextSlot || !nextSlot.activeItem || nextSlot.activeItem === owner) return false
 
+    lastSwitchDirection = step
     nextSlot.activeItem.open()
     return true
   }
