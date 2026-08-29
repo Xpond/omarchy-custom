@@ -87,6 +87,15 @@ Item {
   // close animation (Ui/KeyboardPanel.qml fadeDuration) or the backdrop drops
   // out from under a card that is still animating away.
   property int panelScrimHoldMs: 150
+  // Panels whose layer surface is actually mapped, not merely logically open.
+  // A panel's surface takes ~100ms to create, and the scrim's does not, so
+  // keying the scrim off `open` put the blurred backdrop on screen a tenth of
+  // a second before the card it belongs to.
+  property int visiblePanelSurfaces: 0
+
+  function panelSurfaceVisible(shown) {
+    visiblePanelSurfaces = Math.max(0, visiblePanelSurfaces + (shown ? 1 : -1))
+  }
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
@@ -1031,7 +1040,7 @@ Item {
     // still visibly on screen, and the card reads as lagging behind.
     // Held rather than faded: animating the scrim's alpha is what made
     // Hyprland re-blur every frame.
-    readonly property bool wanted: root.activePopout !== null
+    readonly property bool wanted: root.visiblePanelSurfaces > 0
     property bool shown: false
 
     onWantedChanged: {

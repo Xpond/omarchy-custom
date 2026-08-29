@@ -92,6 +92,19 @@ PanelWindow {
     else root.open = false
   }
 
+  // Tell the bar when this panel's surface is genuinely on screen, so the
+  // scrim can appear with the card instead of ahead of it. Counted up only
+  // once the compositor has mapped us; counted down as soon as we close, so
+  // the scrim's hold covers the fade rather than trailing it.
+  property bool surfaceCounted: false
+
+  function syncSurfaceCount() {
+    var onScreen = backingWindowVisible && open
+    if (onScreen === surfaceCounted) return
+    surfaceCounted = onScreen
+    if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(onScreen)
+  }
+
   function beginFocusPrime() {
     if (open && backingWindowVisible) focusPrimeTimer.restart()
   }
@@ -167,6 +180,7 @@ PanelWindow {
   // actually on screen, so it is the only honest moment to start moving it.
   onBackingWindowVisibleChanged: {
     beginFocusPrime()
+    syncSurfaceCount()
     if (backingWindowVisible && open) startEntryMotion()
   }
 
@@ -344,6 +358,7 @@ PanelWindow {
       // fraction of it survives the map latency.
       if (popoutSwitching) popoutSwitchTimer.restart()
       if (backingWindowVisible) startEntryMotion()
+      syncSurfaceCount()
     } else {
       popoutSwitchClosing = !!(owner && owner.popoutSwitchClosing)
       popoutSwitching = false
@@ -351,6 +366,7 @@ PanelWindow {
       if (popoutSwitchClosing) closeSwitchTimer.restart()
       else startExitMotion()
       entryPlayed = false
+      syncSurfaceCount()
     }
   }
 
