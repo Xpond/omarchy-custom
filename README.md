@@ -21,11 +21,31 @@ behind it, and how it arrives.
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested` (bare arrows still drive sliders) |
 | `plugins/bar/Bar.qml` | `lastSwitchDirection`, so the incoming panel knows which side to slide in from |
 
-Plus, in `~/.config/hypr/` (backed up as `*.bak.centered-panel`):
+Plus, in `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
 
-- `looknfeel.lua` — `decoration.blur.enabled = true` (Omarchy ships it off, so
-  layer blur was inert)
-- `hyprland.conf` — `layerrule = blur on, match:namespace omarchy-keyboard-panel`
+```lua
+decoration = { blur = { enabled = true, size = 8, passes = 3 } }
+
+hl.layer_rule({
+  match = { namespace = "omarchy-keyboard-panel" },
+  blur = true,
+  ignore_alpha = 0.05,
+})
+```
+
+Two things that cost time here, worth writing down:
+
+1. **Omarchy 4 uses Hyprland's Lua parser.** Legacy `layerrule = blur on, ...`
+   lines in a `.conf` file are silently ignored — no error, no warning, no
+   blur. Layer rules must go through `hl.layer_rule({...})`.
+2. **`ignore_alpha` must sit below the scrim's alpha.** Hyprland skips blur on
+   regions it considers too transparent, so a 0.32 scrim needs a threshold
+   below 0.32 or the blur never renders — while the dim still does, which
+   makes it look like the scrim itself is broken.
+
+Note: `layerrule = blur on, match:namespace logout_dialog` in your
+`hyprland.conf` is legacy syntax too, and has never done anything. Left alone —
+it predates this work.
 
 ## Caveat
 
