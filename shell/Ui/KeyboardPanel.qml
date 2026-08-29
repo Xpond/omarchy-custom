@@ -485,13 +485,6 @@ PanelWindow {
     property real slideY: 0
     property real originScale: 1
 
-    // Render the card to a texture for the duration of the motion, so the
-    // frames in between are a scaled quad rather than a full re-rasterization
-    // of every slider, glyph and border at a new scale. This is the jank:
-    // without it the scene graph re-renders the whole panel each frame.
-    // Only while moving -- a permanent layer would soften static text.
-    layer.enabled: entryMotion.running || exitMotion.running
-    layer.smooth: true
     // Scale about the card's own centre first, then translate that centre onto
     // the button. Listed order is application order, so reversing these two
     // would scale the offset as well and the card would miss the button.

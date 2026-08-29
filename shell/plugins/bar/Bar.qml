@@ -1047,11 +1047,13 @@ Item {
       id: scrimFill
       anchors.fill: parent
       color: Qt.rgba(0, 0, 0, root.panelScrimAlpha)
+      // Deliberately not animated. Fading this rectangle changes the layer
+      // surface's alpha every frame, so Hyprland recomputes the fullscreen
+      // blur every frame for the length of the fade -- and because the fade
+      // crosses ignore_alpha (0.05) partway, the blur also pops in rather
+      // than appearing with the scrim. Constant alpha lets the blur be
+      // computed once and cached while the card animates above it.
       opacity: scrimWindow.shown ? 1.0 : 0
-
-      Behavior on opacity {
-        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-      }
     }
   }
 
