@@ -11,52 +11,36 @@ behind it, and how it arrives.
 
     orig/     pristine v4.0.0.alpha files — the revert source, never edit
     shell/    patched copies, mirroring /usr/share/omarchy/shell/
+    docs/     centered-panels.md — the full writeup
     install.sh / revert.sh
 
-## What changed
+## Use
 
-| File | Change |
-|---|---|
-| `Ui/KeyboardPanel.qml` | `centerOnScreen` placement in `cardOrigin`; full-screen scrim; `slideX/slideY` transform driven by `entryMotion` |
-| `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested` (bare arrows still drive sliders) |
-| `plugins/bar/Bar.qml` | `lastSwitchDirection`, so the incoming panel knows which side to slide in from |
-
-Plus, in `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
-
-```lua
-decoration = { blur = { enabled = true, size = 8, passes = 3 } }
-
-hl.layer_rule({
-  match = { namespace = "omarchy-keyboard-panel" },
-  blur = true,
-  ignore_alpha = 0.05,
-})
+```bash
+./install.sh   # patch the packaged shell, restart it (asks for sudo)
+./revert.sh    # restore pristine QML + hypr config
 ```
 
-Two things that cost time here, worth writing down:
+The three shell files are **package-owned**: `omarchy update` overwrites them.
+Re-run `install.sh` afterwards.
 
-1. **Omarchy 4 uses Hyprland's Lua parser.** Legacy `layerrule = blur on, ...`
-   lines in a `.conf` file are silently ignored — no error, no warning, no
-   blur. Layer rules must go through `hl.layer_rule({...})`.
-2. **`ignore_alpha` must sit below the scrim's alpha.** Hyprland skips blur on
-   regions it considers too transparent, so a 0.32 scrim needs a threshold
-   below 0.32 or the blur never renders — while the dim still does, which
-   makes it look like the scrim itself is broken.
+## The one thing that will bite you
 
-Note: `layerrule = blur on, match:namespace logout_dialog` in your
-`hyprland.conf` is legacy syntax too, and has never done anything. Left alone —
-it predates this work.
+Smooth animation depends on `env = QSG_RENDER_LOOP,threaded` in
+`~/.config/hypr/hyprland.conf`. Without it Qt drives animations from a 16ms
+timer — 62Hz against a 144Hz display — and every panel judders.
 
-## Caveat
+Hyprland exports `env` only at compositor startup, so **after adding it you
+must log out and back in.** Until you do, `omarchy restart shell` (and so
+`install.sh`) respawns the shell from Hyprland's old environment and the
+judder silently returns. Verify with:
 
-The three shell files are **package-owned**. `omarchy update` overwrites them.
-Re-run `install.sh` after an update, or `revert.sh` to back out entirely.
+```bash
+tr '\0' '\n' < /proc/$(pgrep -x quickshell)/environ | grep QSG
+```
 
-## Tuning
+## Everything else
 
-In `shell/Ui/KeyboardPanel.qml`:
-
-- `scrimAlpha` (0.32) — backdrop darkness
-- `centerOnScreen` (true) — set false for stock bar-anchored placement
-- `entryMotion` duration (220ms) and `Style.space(56)` / `Style.space(20)` —
-  slide distance and speed
+[`docs/centered-panels.md`](docs/centered-panels.md) — what changed and why,
+the Hyprland/Quickshell findings worth not rediscovering, how to measure
+frame timing properly, and the tunables.

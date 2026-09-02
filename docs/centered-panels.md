@@ -6,10 +6,12 @@ Makes Omarchy's bar panels (Display, Audio, Network, Power…) open centered on
 screen over a blurred desktop, instead of tucked against the bar edge beside
 their widget.
 
-**Working:** centering, blur, Ctrl+Left/Right panel switching, and the
-panel-to-panel handoff transition.
-**Not working:** the open/close animation. That is the whole of the remaining
-work — see [Open problem](#open-problem-the-open-close-animation).
+**Working:** centering, blur, Ctrl+Left/Right panel switching, the
+panel-to-panel handoff, and the open/close animation.
+
+The animation problem that dominated sessions 1–2 was **not in the QML at
+all** — Qt was rendering the whole shell at 62Hz on a 144Hz display. One env
+var fixed it; see [The render loop](#the-render-loop-read-this-first).
 
 ---
 
@@ -89,6 +91,72 @@ guarantee; `order` is a hint.
 
 ## 3. Findings worth not rediscovering
 
+### The render loop (read this first)
+
+**Qt renders this shell at 62Hz on a 144Hz display unless told otherwise.** On
+NVIDIA + Wayland Qt falls back to the `basic` scene-graph render loop, which
+advances animations from a fixed 16ms timer instead of vsync. Every animation
+step is then held for 2 or 3 refreshes in an uneven 2,2,3 pattern — textbook
+judder, on every panel, in both directions. Measured with a bare `qml6` app:
+
+| `QSG_RENDER_LOOP` | median frame | implied |
+|---|---|---|
+| *(default)* | 15.9ms | 63Hz |
+| `threaded` | **6.9ms** | **145Hz** |
+| `basic` | 16.0ms | 62Hz |
+
+The fix is one line in `~/.config/hypr/hyprland.conf`:
+
+```
+env = QSG_RENDER_LOOP,threaded
+```
+
+In-shell, that took the entry animation from ~12 rendered frames to ~44.
+
+One side effect worth knowing: `threaded` exposes a latent binding loop in
+stock `plugins/panels/power/Panel.qml` (`opened`) that `basic` never
+surfaced — it appears in the journal the moment the render loop changes. It
+was harmless here (this box has no battery, and power binds
+`open: root.opened && root.batteryPresent`, so that panel could never open —
+verified as 0 layer surfaces while "open", against clock's 1), and it is now
+moot: the widget was dead weight on a desktop and has been turned off with
+`omarchy plugin disable omarchy.power`, which stops the panel being
+instantiated at all. If you re-enable it on a machine with a battery, expect
+the warning back; it is stock, package-owned, and not worth a fourth patched
+file.
+
+The `height` loops in `network/Panel.qml` are unrelated, intermittent, and
+predate all of this work — they appear on shell starts going back well before
+the prototype.
+
+**Hyprland applies `env` only at compositor startup.** `hyprctl reload` does
+*not* re-export it, and `omarchy restart shell` respawns the supervisor *from
+Hyprland*, so it inherits Hyprland's environment — not your terminal's. Until
+you log out and back in, every `omarchy restart shell` (and therefore every
+`install.sh`) silently drops back to `basic` and the judder returns. To apply
+it to a running session without logging out:
+
+```bash
+kill -TERM $(pgrep -f bin/omarchy-launch-shell); sleep 2
+env QSG_RENDER_LOOP=threaded OMARCHY_PATH=/usr/share/omarchy \
+    HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr/ | head -1) \
+    setsid -f /usr/share/omarchy/bin/omarchy-launch-shell
+```
+
+Check it took with:
+`tr '\0' '\n' < /proc/$(pgrep -x quickshell)/environ | grep QSG`
+
+Two dead lines nearby, both pre-existing and left alone:
+`~/.config/hypr/envs.conf` is never sourced, and `hyprland.conf:9` sources
+`~/.local/share/omarchy/default/hypr/envs.conf`, which does not exist (Hyprland
+ignores a missing `source` silently). Neither matters: the two NVIDIA vars
+involved are set anyway by Omarchy's own `default/hypr/nvidia.lua`, which also
+picks `direct` vs `egl` rather than hardcoding one. Verify with
+`systemctl --user show-environment | grep NVD_BACKEND` before concluding a var
+is unset — this session's env comes through uwsm, not only through Hyprland.
+
+### Everything else
+
 **Omarchy 4 uses Hyprland's Lua parser.** Legacy `layerrule = blur on, …`
 lines in a `.conf` file are **silently ignored** — no error, no warning,
 `hyprctl configerrors` stays clean. Layer rules must go through
@@ -114,11 +182,15 @@ from 278ms to 132ms.
 fullscreen blur recompute per frame. It snaps on, and is *held* through the
 close by a timer instead.
 
-**Panel surfaces cost ~100ms to map.** Quickshell creates the layer surface when
-`visible` flips, and the compositor maps it some frames later. Omarchy hit this
-too and solved it for the bar by parking it off-screen rather than unmapping —
-see the comment in `BarPanel`, which puts it at ~150ms to rebuild vs ~20ms to
-tear down.
+**`backingWindowVisible` is Qt-side, and fires in the same millisecond as
+`open`.** An earlier draft of this doc claimed panel surfaces cost ~100ms to
+map and that the entry animation had to wait for that edge. Per-frame traces
+disprove it: `open=true`, `mapped=true` and `entry-start` all land at t=0. Two
+fixes built on that premise (latching the fade to the map edge, animating the
+card's height) were measured to be no-ops and were reverted.
+
+What *is* real is the delay before the first **rendered** frame, and it is
+per-panel work rather than surface mapping — see §5.
 
 **Qt Quick already applies transforms on the GPU.** `layer.enabled` to "avoid
 re-rasterization" was based on a false premise and made things measurably
@@ -132,100 +204,117 @@ then jumps. Both directions want fast-start (`Out*`) curves.
 
 ## 4. Measuring, instead of guessing
 
-Most of the wrong turns here came from tuning motion by eye and by theory. The
-measurement pipeline below is what actually found the real bugs, and it is
-cheap to re-run.
+Every wrong turn in this project came from tuning motion by eye or by theory.
+Three separate hypotheses (per-panel `onOpenedChanged` work, fade/motion
+desync, mid-animation resize) all survived code review and all died on contact
+with a frame trace. Measure first.
 
-`grim` is far too slow — 14 captures yielded **one** frame of a 200ms
-animation. Use `gpu-screen-recorder`. NVENC is broken on this box (driver
-supports nvenc API 13.0, the bundled FFmpeg needs 13.1), so force CPU encoding,
-and record a **region** so the CPU encoder can keep up:
+### The instrument that works: an in-QML frame probe
 
-```bash
-gpu-screen-recorder -w region -region 900x700+510+340 -f 144 -fm cfr \
-  -encoder cpu -fallback-cpu-encoding yes -cursor no -o rec.mp4 &
-sleep 2; omarchy-shell omarchy.monitor open
-sleep 1.5; omarchy-shell omarchy.monitor close     # ALWAYS record both halves
-sleep 1.2; kill -INT %1
+`FrameAnimation` (Qt 6.4+) fires once per *rendered* frame, so it reports what
+the compositor actually showed — dropped frames included. Drop this inside the
+card in `Ui/KeyboardPanel.qml`, buffering to an array so the logging itself
+does not perturb what it measures:
+
+```qml
+property double t0: 0          // set in onOpenChanged when open goes true
+property var probeRows: []
+
+FrameAnimation {
+  running: root.open || card.opacity > 0 || root.popoutSwitching
+  onTriggered: root.probeRows.push([
+    Math.round(Date.now() - root.t0),
+    Math.round(frameTime * 10000) / 10,   // ms since previous rendered frame
+    card.slideY, card.originScale, card.opacity, card.height
+  ].join(","))
+  onRunningChanged: if (!running) {
+    for (var i = 0; i < root.probeRows.length; i++) console.log("[fr]", root.probeRows[i])
+    root.probeRows = []
+  }
+}
 ```
 
-Per-frame change, which is what exposes dead frames and trailing churn:
+Drive it over IPC so runs are repeatable, and strip journald's ANSI prefix —
+anchoring a grep on `^[fr]` silently matches nothing:
 
 ```bash
-ffmpeg -v error -i rec.mp4 -vf \
- "scale=300:233,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-" \
- -f null - | paste - -
+since=$(date '+%Y-%m-%d %H:%M:%S.%6N')
+omarchy-shell -q omarchy.monitor open;  sleep 1.5
+omarchy-shell -q omarchy.monitor close; sleep 1.5
+journalctl -t omarchy-shell --since "$since" --no-pager -o cat \
+  | sed 's/\x1b\[[0-9;]*m//g' | grep -oE '\[fr\].*'
 ```
 
-A healthy animation is a smooth decaying series. `0.00` between changes is a
-dead frame. Drive panels over IPC (`omarchy-shell omarchy.monitor open|close`)
-so runs are repeatable.
+Read the second column. A healthy trace on this box is a wall of ~6.9ms. A
+wall of ~16ms means the render loop is wrong (see §3) — not that your
+animation is wrong. A single large value is real latency; find what runs in
+that window.
 
-**Caveat:** CPU encoding at 144fps may itself drop frames, so alternating
-zero-rows are not conclusive proof of compositor stutter. Relative comparisons
-between two runs are trustworthy; absolute frame counts are not.
+### Measuring the render loop on its own
+
+Qt's chosen render loop is a process-wide property, so it can be measured
+outside the shell entirely. `console.log` from a bare `qml6` may be swallowed
+depending on how it is invoked; returning the number through the exit code is
+immune to that:
+
+```qml
+FrameAnimation {
+  running: true
+  onTriggered: { /* collect frameTime for ~140 frames, then: */
+    Qt.exit(Math.round(medianFrameTimeMs * 10)) }
+}
+```
+
+```bash
+for rl in default threaded basic; do
+  QSG_RENDER_LOOP=$rl qml6 tick.qml; echo "$rl -> $(($? ))/10 ms"
+done
+```
+
+Note `/usr/bin/qml` is **Qt 5.15** on this box; you want `qml6`.
+
+### Video capture — a last resort
+
+Session 1 built a `gpu-screen-recorder` + `ffmpeg` per-frame-diff pipeline
+(`grim` is far too slow; NVENC is broken here, so CPU encoding and a small
+region). It found the 278ms close tail and the 104ms open gap, but CPU encoding
+at 144fps drops frames of its own, so absolute counts are untrustworthy and
+only relative comparisons hold. The QML probe above is strictly better: exact,
+cheap, and it reports values as well as timing. Reach for video only when you
+need to see something the QML side cannot report.
 
 ---
 
-## 5. Open problem: the open/close animation
+## 5. Resolved: the open/close animation
 
-The user's verdict on the current state: **worse than no animation.** The
-`monitor` panel "janks big time", others less so. Animation is required — it
-is the point of the project, not a nice-to-have.
+Sessions 1–2 treated this as an animation-code problem. It was not. The shared
+QML was correct throughout; **Qt was rendering the shell at 62Hz on a 144Hz
+display** (§3). Setting `QSG_RENDER_LOOP=threaded` fixed it, and the panels are
+smooth. `KeyboardPanel.qml` needed **no change at all** — the net QML diff for
+session 2 is zero.
 
-### What the recordings established
+Hypotheses that were disproven, so they are not re-litigated:
 
-- The animation originally never rendered at all: **one** changed frame in the
-  whole window, 71/72 identical. It was running to completion against a window
-  the compositor had not mapped yet. Starting it on `backingWindowVisible`
-  fixed that, and is what finally made the motion visible — and its problems
-  along with it.
-- The backdrop arrived **104ms before the card**. Fixed via
-  `visiblePanelSurfaces`, so blur and card appear together.
-- Close is now a clean decay: `3.40 → 2.69 → 2.02 → 1.35 → 0.98 → 0.49 → 0.26
-  → 0.15`, then one frame where the scrim snaps off.
-- Open still has dead frames and, per the user, visible jank.
+| Hypothesis | Verdict |
+|---|---|
+| Heavy panels' `onOpenedChanged` work starves the animation | **No.** `clock` does no work on open and juddered identically. |
+| The fade starts ~100ms before the motion (map latency) | **No.** `open` and `mapped` land in the same millisecond. |
+| Content resize moves the card mid-animation | **No.** All four panels probed settle `contentHeight` before the card is visible. |
 
-### The leading hypothesis
+### What is still open
 
-Jank tracks **what each panel does on open**, not the animation code, which is
-shared and identical for all of them:
+**Latency before the first frame**, which is sluggishness rather than judder:
+monitor 152ms, bluetooth 74ms, clock 44ms, network 37ms. Only `monitor` is bad
+enough to notice, and it is the 4 processes `refresh()` spawns on open. If it
+becomes worth fixing, defer that work until after the entry animation — but
+note this needs a per-panel patch, so it means more package-owned files.
 
-| Panel | Processes | `onOpenedChanged` | User reports |
-|---|---|---|---|
-| `monitor` | 4 | `refresh()` — respawns queries, rebuilds displays/brightness/scale | janks badly |
-| `power` | 4 | yes | janks |
-| `bluetooth` | 0 | yes (5 timers) | — |
-| `clock` | 0 | **none** | fine |
-
-Heavy panels spawn processes and rebuild their models in the same frames as the
-entry animation, against a **6.9ms budget** at 144Hz.
-
-A secondary possibility, **unverified**: that work changes the content height,
-and since a centered card's origin depends on `contentHeight`, the card
-re-centres mid-animation. An attempt to confirm this by measuring the card's
-bounding box across frames was **inconclusive** — the brightness threshold
-caught blurred background rather than isolating the card. Worth retrying with a
-better isolation method before acting on it.
-
-### Options for next session
-
-1. **Defer panel work until the entry animation finishes.** Targets the leading
-   hypothesis directly. Means patching `monitor`/`power`/`bluetooth`/`audio`
-   `Panel.qml` — more package-owned files, and a test pass per panel.
-2. **Pre-map panel surfaces** (park off-screen, as `BarPanel` does) to remove
-   the ~100ms open latency. Costs one always-mapped fullscreen surface per
-   panel.
-3. **Shrink the panel surface.** It is fullscreen only to catch outside clicks —
-   but the scrim is already fullscreen and could do that instead, taking the
-   panel surface from 1920x1080 to ~380x330 and cutting allocation cost. A
-   cheaper variant of (2).
-4. **Confirm the resize theory first** with a better card-isolation method,
-   before committing to (1).
-
-Recommended order: **4 → 1 → 3**. Verify the cause, fix the cause, then reduce
-latency. Change one variable per install and re-measure — every regression in
-this project came from stacking untested changes.
+**The scrim cut on close.** `panelScrimHoldMs` (150) outlives
+`closeFadeDuration` (130), so the fullscreen blur snaps off *after* the card
+has gone, with nothing on screen to mask the largest luminance change in the
+interaction. Untested idea: drop it to ~80ms so the cut happens while the card
+is still moving. It contradicts the documented rule in §6, so change it alone
+and look at it.
 
 ---
 
