@@ -22,16 +22,14 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 ~/xpo/custom/quickshell/revert.sh    # restore pristine QML + hypr config
 ```
 
-`install.sh` needs a sudo password, so it must be run by the user from a
-terminal (`! ~/xpo/custom/quickshell/install.sh` inside Claude Code). It keeps
-**one** pristine backup per file (`*.omarchy-original`, taken on first run
-only) and warns solely when a packaged file matches neither `orig/` nor
-`shell/` — which is the real signal that `omarchy update` shipped a new
-version.
+`install.sh` needs a sudo password, so it must be run from a terminal
+(`! ~/xpo/custom/quickshell/install.sh` inside Claude Code). It is idempotent —
+re-running when nothing has changed prints `already up to date` and exits.
 
 ```
-orig/     pristine v4.0.0.alpha files — the revert source, never edit
+orig/     pristine upstream files — the merge base and revert source, never edit
 shell/    patched copies, mirroring /usr/share/omarchy/shell/
+hooks/    the post-update hook that re-applies the patch automatically
 docs/     this file
 ```
 
@@ -39,9 +37,39 @@ docs/     this file
 
 The files being changed are **shared shell chrome**, not plugins.
 `omarchy plugin clone` cannot reach them, and `/usr/share/omarchy/` is
-package-owned, so **`omarchy update` will overwrite all three.** Re-run
-`install.sh` afterwards. The user ruled out cloning panels and ruled out
-changing panel styling, which is what put the work in shared chrome.
+package-owned, so **`omarchy update` overwrites all three** and the shell
+silently reverts to stock. This happened on the 4.0.0.alpha → 4.0.2 update.
+The user ruled out cloning panels and ruled out changing panel styling, which
+is what put the work in shared chrome.
+
+**This is now self-repairing.** `omarchy update` runs `omarchy-hook
+post-update` right after migrations, and `hooks/centered-panels` is installed
+there:
+
+```bash
+omarchy hook install post-update ~/xpo/custom/quickshell/hooks/centered-panels
+```
+
+The hook is a one-line trampoline into `install.sh` on purpose — `omarchy hook
+install` *copies* the file, so any logic living in the hook would drift from
+the repo.
+
+**Re-applying is not just copying.** An update may ship a new version of a
+patched file (4.0.2 changed `Bar.qml`: added an `omarchy.bar` IpcHandler and
+`textFormat: Text.PlainText` on the tooltip). Blindly restoring our copy would
+have discarded both without a word. So `install.sh` compares each installed
+file against `orig/`:
+
+| Installed matches | Action |
+|---|---|
+| `shell/` | already patched — skip |
+| `orig/` | upstream unchanged — copy the patch in |
+| neither | new upstream version — **three-way merge**, then re-baseline `orig/` |
+
+A merge that conflicts leaves the file exactly as upstream shipped it, reports
+it on stderr *and* via `notify-send`, and exits non-zero so the hook logs
+`Hook failed`. It never writes conflict markers into a QML file — that would
+break the entire shell, which is far worse than losing the patch.
 
 ---
 
@@ -105,11 +133,20 @@ judder, on every panel, in both directions. Measured with a bare `qml6` app:
 | `threaded` | **6.9ms** | **145Hz** |
 | `basic` | 16.0ms | 62Hz |
 
-The fix is one line in `~/.config/hypr/hyprland.conf`:
+The fix is one line in `~/.config/hypr/looknfeel.lua`:
 
+```lua
+hl.env("QSG_RENDER_LOOP", "threaded")
 ```
-env = QSG_RENDER_LOOP,threaded
-```
+
+**It must be `hl.env()` in Lua.** Writing `env = QSG_RENDER_LOOP,threaded` in
+`hyprland.conf` is silently ignored — the same legacy-syntax trap as
+`layerrule` below. `hyprctl configerrors` stays clean, the line looks right,
+and the var is simply never exported. That cost a full reboot to discover.
+(`hyprland.conf` *is* loaded — its binds work — so this is specifically the
+`env` keyword, not the file.) It lives in `looknfeel.lua` because that is
+parsed before `autostart.lua`, so the var is set before the shell launches,
+and because `revert.sh` already restores that file.
 
 In-shell, that took the entry animation from ~12 rendered frames to ~44.
 
@@ -129,22 +166,29 @@ The `height` loops in `network/Panel.qml` are unrelated, intermittent, and
 predate all of this work — they appear on shell starts going back well before
 the prototype.
 
-**Hyprland applies `env` only at compositor startup.** `hyprctl reload` does
-*not* re-export it, and `omarchy restart shell` respawns the supervisor *from
-Hyprland*, so it inherits Hyprland's environment — not your terminal's. Until
-you log out and back in, every `omarchy restart shell` (and therefore every
-`install.sh`) silently drops back to `basic` and the judder returns. To apply
-it to a running session without logging out:
+`hl.env` takes effect on `hyprctl reload` — no logout needed. Apply it with
+`hyprctl reload && omarchy restart shell`.
+
+### Verify it, don't assume it
+
+This was claimed fixed three times while still broken, because "the env var is
+in a config file" proves nothing. Two checks that prove it, both reboot-free:
 
 ```bash
-kill -TERM $(pgrep -f bin/omarchy-launch-shell); sleep 2
-env QSG_RENDER_LOOP=threaded OMARCHY_PATH=/usr/share/omarchy \
-    HYPRLAND_INSTANCE_SIGNATURE=$(ls -t /run/user/1000/hypr/ | head -1) \
-    setsid -f /usr/share/omarchy/bin/omarchy-launch-shell
+# 1. Does a process spawned by Hyprland actually get the var?
+hyprctl dispatch 'hl.dsp.exec_cmd("sh -c \"env > /tmp/q\"")'; grep QSG /tmp/q
 ```
 
-Check it took with:
-`tr '\0' '\n' < /proc/$(pgrep -x quickshell)/environ | grep QSG`
+```bash
+# 2. Did the render loop really change? This thread exists ONLY under
+#    `threaded` -- `basic` renders on the GUI thread.
+P=$(pgrep -x quickshell); cat /proc/$P/task/*/comm | grep QSGRenderThread
+```
+
+Check 2 is the strong one: it observes the running shell's actual behaviour
+rather than its configuration. Note `hyprctl dispatch` needs the Lua
+dispatcher form (`hl.dsp.exec_cmd`); the legacy `hyprctl dispatch exec cmd`
+errors out on this parser.
 
 Two dead lines nearby, both pre-existing and left alone:
 `~/.config/hypr/envs.conf` is never sourced, and `hyprland.conf:9` sources

@@ -21,23 +21,35 @@ behind it, and how it arrives.
 ./revert.sh    # restore pristine QML + hypr config
 ```
 
-The three shell files are **package-owned**: `omarchy update` overwrites them.
-Re-run `install.sh` afterwards.
+The three shell files are **package-owned**, so `omarchy update` overwrites
+them and the shell reverts to stock. That is repaired automatically by a
+post-update hook:
+
+```bash
+omarchy hook install post-update ~/xpo/custom/quickshell/hooks/centered-panels
+```
+
+`install.sh` is idempotent, and when an update ships a *new* version of a
+patched file it rebases the patch onto it with a three-way merge rather than
+clobbering upstream's changes. A conflict leaves the file stock and shouts via
+`notify-send` instead of writing broken QML.
 
 ## The one thing that will bite you
 
-Smooth animation depends on `env = QSG_RENDER_LOOP,threaded` in
-`~/.config/hypr/hyprland.conf`. Without it Qt drives animations from a 16ms
+Smooth animation depends on `hl.env("QSG_RENDER_LOOP", "threaded")` in
+`~/.config/hypr/looknfeel.lua`. Without it Qt drives animations from a 16ms
 timer — 62Hz against a 144Hz display — and every panel judders.
 
-Hyprland exports `env` only at compositor startup, so **after adding it you
-must log out and back in.** Until you do, `omarchy restart shell` (and so
-`install.sh`) respawns the shell from Hyprland's old environment and the
-judder silently returns. Verify with:
+**It must be the Lua `hl.env()` form.** `env = QSG_RENDER_LOOP,threaded` in
+`hyprland.conf` is accepted silently and does nothing.
+
+Verify it actually took — config presence proves nothing:
 
 ```bash
-tr '\0' '\n' < /proc/$(pgrep -x quickshell)/environ | grep QSG
+P=$(pgrep -x quickshell); cat /proc/$P/task/*/comm | grep QSGRenderThread
 ```
+
+That thread exists only under the threaded render loop.
 
 ## Everything else
 
