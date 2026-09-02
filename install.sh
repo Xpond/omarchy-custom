@@ -70,6 +70,30 @@ fi
 
 omarchy restart shell
 
+# Check BEHAVIOUR, not configuration. The judder that cost this project days
+# was a config line that was present, valid, accepted without error -- and
+# silently inert, because legacy `env =` is ignored by Omarchy's Lua parser.
+# Grepping the config would have "passed" the whole time. QSGRenderThread
+# exists only under QSG_RENDER_LOOP=threaded; under `basic` the scene graph
+# renders on the GUI thread and no such thread is created.
+render_ok=0
+for _ in $(seq 20); do
+  pid=$(pgrep -x quickshell | head -1)
+  if [[ -n $pid ]] && grep -qs QSGRenderThread /proc/"$pid"/task/*/comm; then
+    render_ok=1; break
+  fi
+  sleep 0.5
+done
+
+if (( ! render_ok )); then
+  printf '\n\e[31mNOT on the threaded render loop — animations will judder.\e[0m\n' >&2
+  echo 'Expected: hl.env("QSG_RENDER_LOOP", "threaded") in ~/.config/hypr/looknfeel.lua' >&2
+  echo 'The legacy `env = QSG_RENDER_LOOP,threaded` form in hyprland.conf is' >&2
+  echo 'accepted silently and does nothing. Then: hyprctl reload && omarchy restart shell' >&2
+  command -v notify-send >/dev/null &&
+    notify-send -u critical "Centered panels" "Shell is not on the threaded render loop — animations will judder"
+fi
+
 # Non-zero so the post-update hook prints "Hook failed" instead of passing
-# silently with a stock shell.
-(( ${#broken[@]} == 0 ))
+# silently with a stock or juddering shell.
+(( ${#broken[@]} == 0 && render_ok == 1 ))

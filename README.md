@@ -43,13 +43,15 @@ timer — 62Hz against a 144Hz display — and every panel judders.
 **It must be the Lua `hl.env()` form.** `env = QSG_RENDER_LOOP,threaded` in
 `hyprland.conf` is accepted silently and does nothing.
 
-Verify it actually took — config presence proves nothing:
+`install.sh` now checks this for you and shouts via `notify-send` if the
+shell comes up on the wrong render loop. To check by hand:
 
 ```bash
 P=$(pgrep -x quickshell); cat /proc/$P/task/*/comm | grep QSGRenderThread
 ```
 
-That thread exists only under the threaded render loop.
+That thread exists only under the threaded render loop — config presence
+proves nothing, which is exactly how this stayed broken for days.
 
 ## Everything else
 
