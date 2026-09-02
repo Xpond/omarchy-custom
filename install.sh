@@ -7,15 +7,22 @@
 # itself instead of silently reverting the shell to stock.
 #
 # When an update ships a NEW version of a patched file, the patch is rebased
-# onto it with a three-way merge rather than blindly overwritten -- blind
-# overwriting would discard upstream's fixes without a word. A file whose
-# merge conflicts is left exactly as upstream shipped it and reported loudly,
-# because a half-merged QML file breaks the whole shell.
+# onto it with a three-way merge rather than blindly overwritten -- that would
+# discard upstream's fixes without a word. A conflict leaves the file exactly
+# as upstream shipped it: a half-merged QML file breaks the entire shell.
 set -uo pipefail
 
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml)
+
+# Both failure paths below leave the user with a broken shell, so both must be
+# loud on screen AND on the desktop -- `omarchy update` output scrolls past.
+alert() {
+  printf '\n\e[31m%s\e[0m\n' "$1" >&2
+  printf '%s\n' "${@:2}" >&2
+  command -v notify-send >/dev/null && notify-send -u critical "Centered panels" "$1"
+}
 
 applied=()   # patch copied in
 rebased=()   # patch re-based onto a new upstream version first
@@ -35,16 +42,14 @@ for f in "${FILES[@]}"; do
   if ! cmp -s "$installed" "$base"; then
     merged=$(mktemp)
     cp "$ours" "$merged"
-    if git merge-file -q "$merged" "$base" "$installed"; then
+    git merge-file -q "$merged" "$base" "$installed"; ok=$?
+    if (( ok == 0 )); then
       cp "$merged" "$ours"      # patch, now on the new base
       cp "$installed" "$base"   # new pristine baseline
       rebased+=("$f")
-    else
-      conflicts+=("$f")
-      rm -f "$merged"
-      continue
     fi
     rm -f "$merged"
+    (( ok == 0 )) || { conflicts+=("$f"); continue; }
   fi
 
   if sudo cp "$ours" "$installed"; then applied+=("$f"); else failed+=("$f"); fi
@@ -54,18 +59,12 @@ done
 (( ${#applied[@]} )) && printf 'installed: %s\n' "${applied[*]}"
 (( ${#applied[@]} + ${#conflicts[@]} + ${#failed[@]} )) || echo "already up to date"
 
-# Anything unpatched leaves the shell stock, which is the exact failure this
-# script exists to prevent -- so say so on screen AND on the desktop, since
-# `omarchy update` output scrolls past.
 broken=("${conflicts[@]}" "${failed[@]}")
 if (( ${#broken[@]} )); then
-  printf '\n\e[31mNOT PATCHED: %s\e[0m\n' "${broken[*]}" >&2
-  (( ${#conflicts[@]} )) && {
-    echo "Conflicted against a new upstream version; left as upstream shipped it." >&2
-    echo "Rebase by hand: diff orig/ against shell/ for the file(s) above." >&2
-  }
-  command -v notify-send >/dev/null &&
-    notify-send -u critical "Centered panels" "Not patched after update: ${broken[*]}"
+  msg=("Not patched: ${broken[*]}")
+  (( ${#conflicts[@]} )) && msg+=("Conflicted against a new upstream version; left as upstream shipped it." \
+                                  "Rebase by hand: diff orig/ against shell/ for the file(s) above.")
+  alert "${msg[@]}"
 fi
 
 omarchy restart shell
@@ -85,14 +84,10 @@ for _ in $(seq 20); do
   sleep 0.5
 done
 
-if (( ! render_ok )); then
-  printf '\n\e[31mNOT on the threaded render loop — animations will judder.\e[0m\n' >&2
-  echo 'Expected: hl.env("QSG_RENDER_LOOP", "threaded") in ~/.config/hypr/looknfeel.lua' >&2
-  echo 'The legacy `env = QSG_RENDER_LOOP,threaded` form in hyprland.conf is' >&2
-  echo 'accepted silently and does nothing. Then: hyprctl reload && omarchy restart shell' >&2
-  command -v notify-send >/dev/null &&
-    notify-send -u critical "Centered panels" "Shell is not on the threaded render loop — animations will judder"
-fi
+(( render_ok )) || alert "Not on the threaded render loop — animations will judder" \
+  'Expected hl.env("QSG_RENDER_LOOP", "threaded") in ~/.config/hypr/looknfeel.lua;' \
+  'the legacy `env =` form in hyprland.conf is accepted silently and does nothing.' \
+  'Then: hyprctl reload && omarchy restart shell'
 
 # Non-zero so the post-update hook prints "Hook failed" instead of passing
 # silently with a stock or juddering shell.

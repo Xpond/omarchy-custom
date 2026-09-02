@@ -190,14 +190,15 @@ rather than its configuration. Note `hyprctl dispatch` needs the Lua
 dispatcher form (`hl.dsp.exec_cmd`); the legacy `hyprctl dispatch exec cmd`
 errors out on this parser.
 
-Two dead lines nearby, both pre-existing and left alone:
-`~/.config/hypr/envs.conf` is never sourced, and `hyprland.conf:9` sources
-`~/.local/share/omarchy/default/hypr/envs.conf`, which does not exist (Hyprland
-ignores a missing `source` silently). Neither matters: the two NVIDIA vars
-involved are set anyway by Omarchy's own `default/hypr/nvidia.lua`, which also
-picks `direct` vs `egl` rather than hardcoding one. Verify with
-`systemctl --user show-environment | grep NVD_BACKEND` before concluding a var
-is unset — this session's env comes through uwsm, not only through Hyprland.
+One dead line nearby, pre-existing and left alone: `hyprland.conf:9` sources
+`~/.local/share/omarchy/default/hypr/envs.conf`, which does not exist —
+Hyprland ignores a missing `source` in silence. Harmless: the NVIDIA vars it
+would have set are set anyway by Omarchy's `default/hypr/nvidia.lua`, which
+also picks `direct` vs `egl` rather than hardcoding one. (`~/.config/hypr/envs.conf`
+duplicated those and was never sourced either; deleted.)
+
+Check `systemctl --user show-environment` before concluding a var is unset —
+this session's env arrives through uwsm, not only through Hyprland.
 
 ### Everything else
 
