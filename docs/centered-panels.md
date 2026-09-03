@@ -18,12 +18,12 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 ## 1. How to work on this
 
 ```bash
-~/xpo/custom/quickshell/install.sh   # patch the packaged shell, restart it
-~/xpo/custom/quickshell/revert.sh    # restore pristine QML + hypr config
+~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
+~/xpo/omarchy-custom/revert.sh    # restore pristine QML + hypr config
 ```
 
 `install.sh` needs a sudo password, so it must be run from a terminal
-(`! ~/xpo/custom/quickshell/install.sh` inside Claude Code). It is idempotent —
+(`! ~/xpo/omarchy-custom/install.sh` inside Claude Code). It is idempotent —
 re-running when nothing has changed prints `already up to date` and exits.
 
 ```
@@ -47,7 +47,7 @@ post-update` right after migrations, and `hooks/centered-panels` is installed
 there:
 
 ```bash
-omarchy hook install post-update ~/xpo/custom/quickshell/hooks/centered-panels
+omarchy hook install post-update ~/xpo/omarchy-custom/hooks/centered-panels
 ```
 
 The hook is a one-line trampoline into `install.sh` on purpose — `omarchy hook
@@ -365,7 +365,7 @@ and look at it.
 
 ## 6. Tunables
 
-`shell/Ui/KeyboardPanel.qml`:
+`patches/shell/Ui/KeyboardPanel.qml`:
 
 | Knob | Value | Effect |
 |---|---|---|
@@ -378,7 +378,7 @@ and look at it.
 | `travelFraction` | `0.12` | share of the distance to the button that is travelled |
 | `maxTravel` | `Style.space(56)` | cap on that travel; also the handoff slide distance |
 
-`shell/plugins/bar/Bar.qml`:
+`patches/shell/plugins/bar/Bar.qml`:
 
 | Knob | Value | Effect |
 |---|---|---|

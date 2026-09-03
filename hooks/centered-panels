@@ -8,5 +8,5 @@
 # install.sh, which is idempotent and safe to run at any time.
 #
 # Reinstall with:
-#   omarchy hook install post-update ~/xpo/custom/quickshell/hooks/centered-panels
-exec "$HOME/xpo/custom/quickshell/install.sh"
+#   omarchy hook install post-update ~/xpo/omarchy-custom/hooks/centered-panels
+exec "$HOME/xpo/omarchy-custom/install.sh"

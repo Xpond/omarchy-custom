@@ -7,7 +7,7 @@ SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml; do
-  sudo cp "$REPO/orig/$f" "$SHELL_DIR/$f"
+  sudo cp "$REPO/patches/orig/$f" "$SHELL_DIR/$f"
   echo "restored $f"
 done
 

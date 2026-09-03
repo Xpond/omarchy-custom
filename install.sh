@@ -31,8 +31,8 @@ failed=()    # copy itself failed (e.g. no sudo)
 
 for f in "${FILES[@]}"; do
   installed="$SHELL_DIR/$f"
-  ours="$REPO/shell/$f"
-  base="$REPO/orig/$f"
+  ours="$REPO/patches/shell/$f"
+  base="$REPO/patches/orig/$f"
 
   # Already patched — nothing to do. This is the common case on a re-run.
   cmp -s "$installed" "$ours" && continue
