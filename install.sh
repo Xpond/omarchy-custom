@@ -33,13 +33,18 @@ for f in "${FILES[@]}"; do
   installed="$SHELL_DIR/$f"
   ours="$REPO/patches/shell/$f"
   base="$REPO/patches/orig/$f"
+  prev="$REPO/.installed/$f"   # what this script last wrote to $installed
 
   # Already patched — nothing to do. This is the common case on a re-run.
   cmp -s "$installed" "$ours" && continue
 
-  # Installed differs from our pristine baseline, so upstream shipped a new
-  # version of this file. Rebase rather than clobber.
-  if ! cmp -s "$installed" "$base"; then
+  # After editing our own patch the installed file is the PREVIOUS patch, which
+  # matches neither `ours` nor `base`. Comparing against base alone read that as
+  # a new upstream and rebased our edit onto our own older patch -- which
+  # conflicts once an edit lands in a hunk the patch already rewrote, and whose
+  # success path overwrote orig/, the revert source. So rebase only when the
+  # installed file matches neither what we last wrote nor the baseline.
+  if ! cmp -s "$installed" "$prev" && ! cmp -s "$installed" "$base"; then
     merged=$(mktemp)
     cp "$ours" "$merged"
     git merge-file -q "$merged" "$base" "$installed"; ok=$?
@@ -52,7 +57,12 @@ for f in "${FILES[@]}"; do
     (( ok == 0 )) || { conflicts+=("$f"); continue; }
   fi
 
-  if sudo cp "$ours" "$installed"; then applied+=("$f"); else failed+=("$f"); fi
+  if sudo cp "$ours" "$installed"; then
+    applied+=("$f")
+    mkdir -p "$(dirname "$prev")" && cp "$ours" "$prev"
+  else
+    failed+=("$f")
+  fi
 done
 
 (( ${#rebased[@]} )) && printf 'rebased onto new upstream: %s\n' "${rebased[*]}"
