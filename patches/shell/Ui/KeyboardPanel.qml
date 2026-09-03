@@ -280,6 +280,11 @@ PanelWindow {
   // it. Same direction as the full journey, a fraction of the distance and
   // capped, so the card enters from the right side without the visible trip.
   readonly property point offsetToAnchor: {
+    // A centered card has no owning corner to come from: aiming it at the bar
+    // button means it flies in from whichever edge that widget sits on, which
+    // reads as wrong when the card lands dead center. Centered panels emerge
+    // in place on scale and opacity alone.
+    if (centerOnScreen) return Qt.point(0, 0)
     var dx = anchorCenter.x - (cardOrigin.x + contentWidth / 2)
     var dy = anchorCenter.y - (cardOrigin.y + contentHeight / 2)
     var length = Math.sqrt(dx * dx + dy * dy)

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "xpo.wheel",
+  "name": "Wheel",
+  "version": "0.1.0",
+  "author": "xpo",
+  "description": "Radial launcher for the shell panels",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": { "overlay": "Wheel.qml" }
+}

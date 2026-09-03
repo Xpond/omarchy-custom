@@ -1,0 +1,21 @@
+#!/bin/bash
+# SUPER+W. Closes the shell surface that is on screen -- the wheel, or whatever
+# the wheel opened -- and otherwise does what SUPER+W has always done.
+#
+# Fallback by default: any failure to reach the shell (restarting, plugin not
+# loaded, IPC timeout) must still close the window, or SUPER+W would be dead
+# exactly when the shell is unhealthy. The timeout is short for the same
+# reason -- this runs on every window close, so it can't be allowed to hang.
+# Not `-q`: quiet mode suppresses stdout, so the answer never comes back and
+# every press falls through to killactive -- including with the wheel up, which
+# closes the window behind the scrim. Without it a failure still prints nothing
+# to stdout (the message goes to stderr), so the fallback below still holds.
+if [[ $(OMARCHY_SHELL_IPC_TIMEOUT=0.5s omarchy-shell shell call xpo.wheel closeAll '' 2>/dev/null) == "closed" ]]; then
+  exit 0
+fi
+
+# Omarchy 4's Hyprland takes Lua dispatchers: hyprctl wraps the argument as
+# hl.dispatch(<arg>), so the legacy `killactive` string is rejected at runtime
+# with a nonzero exit and the window simply never closes. Same trap as `env =`
+# and `layerrule` -- accepted by the CLI, inert in practice.
+exec hyprctl dispatch 'hl.dsp.window.close()'
