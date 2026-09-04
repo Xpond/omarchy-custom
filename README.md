@@ -26,8 +26,8 @@ the wheel and anything it opened, falling back to close-window.
 See [`docs/wheel.md`](docs/wheel.md).
 
 **Centered panels** (`patches/shell/`) — the bar's panels open centered over a
-blurred desktop instead of tucked against their bar widget, with `q`/`Escape`
-to close and `Ctrl+Left/Right` to move between them.
+blurred desktop instead of tucked against their bar widget, with `Escape` to
+close and `Ctrl+Left/Right` to move between them.
 See [`docs/centered-panels.md`](docs/centered-panels.md).
 
 ## Use

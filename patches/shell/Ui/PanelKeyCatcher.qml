@@ -48,11 +48,7 @@ Item {
   Keys.onPressed: function(event) {
     if (blocked) return
 
-    // `q` closes too, matching the wheel and every other shell surface. Safe
-    // because `blocked` is set while an inline editor holds focus, so a
-    // passphrase field still gets its own letters.
-    if (event.key === Qt.Key_Escape
-        || (event.key === Qt.Key_Q && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)))) {
+    if (event.key === Qt.Key_Escape) {
       closeRequested(); event.accepted = true; return
     }
     if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {

@@ -242,10 +242,6 @@ Item {
           if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { root.moveResult(-1); event.accepted = true; return }
         } else {
           switch (event.key) {
-          // `q` closes, matching every other shell surface. It costs the
-          // letter as a query opener, which is why it only applies before
-          // anything has been typed.
-          case Qt.Key_Q:        root.dismiss(); event.accepted = true; return
           // Arrows alone reach all eight: up/down jump to the top and bottom
           // slice, left/right pick the side slice first and then step around
           // the ring, so a diagonal is a cardinal plus one step.

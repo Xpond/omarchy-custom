@@ -19,7 +19,6 @@ separate `SUPER+CTRL` shortcuts with one key and a direction.
 | `↑` `↓` `←` `→` | `↑` Audio · `↓` Menu · `←` Display · `→` System, then `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice |
 | type anything | search all 271 menu actions |
-| `q` | close (only on an empty query) |
 | `Esc` | clear the query, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
@@ -108,6 +107,4 @@ therefore appear in search on machines they don't apply to.
 ## Known limits
 
 - Opens on the primary monitor only, same as the emoji overlay.
-- `q` closes on an empty query, so a query cannot *start* with `q`
-  ("qr" → type `code` or `capture qr` instead).
 - The 8 ring slices are hard-coded in `Wheel.qml`; there is no config file yet.
