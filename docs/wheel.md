@@ -26,6 +26,28 @@ window, and every theme and font. It replaces reaching for eight separate
 Mouse works too: the whole screen is a compass around center, so a flick in
 any direction selects that slice. Release of `SUPER+A` commits it.
 
+## The comet
+
+An accent arc rides the dial under the selected disc. It is drawn from two
+followers chasing one target (`arcTarget`) at different speeds -- `arcHead`
+over 90ms, `arcTail` over 300ms -- so the gap between them is a readout of how
+fast the ring is being turned, with no velocity tracking or timers anywhere.
+Step slowly and both settle on the selection, leaving a short arc bracketing
+the disc. Hold `←`/`→` at the 40Hz key repeat and the tail falls several
+slices behind, stretching the arc into a streak that runs around the ring and
+retracts when you let go. `select()` adds the shortest delta to `arcTarget`
+rather than assigning it, which keeps the target unwrapped so a lap past north
+runs forward instead of unwinding backwards; the drag is clamped at 300° since
+an arc past a full turn is just the circle again.
+
+The dial's stroke runs through every disc's **center**, so slice labels sit
+outside the ring on their own spokes rather than hung under their discs -- a
+label below the east or west disc lands exactly on the arc's path. The reach
+is measured to the label box's nearest edge (`|cos|·width + |sin|·height`) so
+every label clears its disc by `labelGap` whatever its width and angle, and it
+is measured from the disc's *grown* radius so selecting a slice does not close
+the gap as the disc scales up.
+
 ## Why a plugin and not a patch
 
 Third-party plugins live in `~/.config/omarchy/plugins/<id>/` and are

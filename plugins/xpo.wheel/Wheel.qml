@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick.Effects
+import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 import "MenuIndex.js" as MenuIndex
@@ -64,6 +65,14 @@ Item {
   readonly property int ringRadius: Style.space(240)
   readonly property int itemSize: Style.space(76)
   readonly property int deadzone: Style.space(54)
+  // How much a disc grows when it is the selected one.
+  readonly property real selectedScale: 1.08
+  // Disc edge to nearest label edge, at the disc's grown size.
+  readonly property int labelGap: Style.space(18)
+  // The dial's layer has to hold the labels too, and they sit outside the ring
+  // now -- at itemSize * 1.5 the east and west ones came within 7px of being
+  // clipped by it.
+  readonly property real ringBox: (root.ringRadius + root.itemSize * 2) * 2
   // The field lives in the ring's hole, so its width is the hole's: that is
   // the room the wheel makes for it, and deriving it means the field can never
   // reach under the east and west slices when either size is retuned.
@@ -75,6 +84,27 @@ Item {
   // Shared by the pill and by the results card, which is placed off the
   // surface's center rather than off the pill itself.
   readonly property int searchHeight: Style.spacing.controlHeight + Style.spacing.controlPaddingY * 2
+
+  // Where the arc is headed on the dial, and the two followers chasing it. The
+  // head nearly keeps up and the tail drags well behind, so the gap between
+  // them reads out how fast the ring is being turned: nothing while stepping,
+  // a long streak while an arrow is held down. Unwrapped rather than kept in
+  // 0..360, so a lap past north keeps running forward.
+  property real arcTarget: -90
+  property real arcHead: root.arcTarget
+  Behavior on arcHead { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+  property real arcTail: root.arcTarget
+  Behavior on arcTail { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+  // Half the arc at rest. The discs are painted over the dial, so anything no
+  // wider than one hides behind it; half a slice's share of the ring, less a
+  // hair, lights the dial on either side of the selected disc instead.
+  readonly property real arcSpread: 360 / root.slices.length / 2 * 0.85
+  // Clamped: a held arrow drags the tail more than a lap behind, and an arc
+  // past a full turn is just the circle again -- it stops reading as motion.
+  // Clamping from the head keeps the point and loses the far end of the tail.
+  readonly property real arcDrag: Math.max(-300, Math.min(300, root.arcHead - root.arcTail))
+  readonly property real arcFrom: Math.min(root.arcHead, root.arcHead - root.arcDrag) - root.arcSpread
+  readonly property real arcSpan: Math.abs(root.arcDrag) + root.arcSpread * 2
 
   // One palette for every floating piece of the wheel -- discs, pill, card --
   // so they can't drift apart. Short of opaque so the blur still reads through.
@@ -162,7 +192,15 @@ Item {
     return "held"
   }
 
-  function select(i) { root.armed = true; root.selected = i }
+  function select(i) {
+    root.armed = true
+    root.selected = i
+    if (i < 0) return
+    // The short way round from wherever the arc is already pointed, added on
+    // rather than assigned, which is what keeps the target unwrapped.
+    var slice = i * 45 - 90
+    root.arcTarget += ((slice - root.arcTarget) % 360 + 540) % 360 - 180
+  }
 
   function activate(i) {
     if (i < 0 || i >= root.slices.length) return
@@ -247,6 +285,19 @@ Item {
   FileView {
     path: Quickshell.env("HOME") + "/.config/omarchy/extensions/omarchy-menu.jsonc"
     onLoaded: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.parse(text()))
+  }
+
+  component Track: ShapePath {
+    fillColor: "transparent"
+    capStyle: ShapePath.RoundCap
+    PathAngleArc {
+      centerX: root.ringBox / 2
+      centerY: root.ringBox / 2
+      radiusX: root.ringRadius
+      radiusY: root.ringRadius
+      startAngle: root.arcFrom
+      sweepAngle: root.arcSpan
+    }
   }
 
   PanelWindow {
@@ -340,7 +391,7 @@ Item {
       // re-render when its contents or geometry change.
       Item {
         anchors.centerIn: parent
-        width: (root.ringRadius + root.itemSize) * 2
+        width: root.ringBox
         height: width
         layer.enabled: true
         layer.effect: MultiEffect {
@@ -376,6 +427,21 @@ Item {
             border.color: Util.alpha(Color.menu.text, 0.12)
           }
 
+          // The comet. It rides the dial's own stroke rather than sitting
+          // outside it, so what moves is the ring lighting up along its
+          // length -- the wheel turning, not a marker sliding over it. The
+          // under-glow goes down first, so the crisp arc sits in its own light.
+          Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            // Nothing to point at until something is selected.
+            opacity: root.selected >= 0 ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+
+            Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(Color.accent, 0.16) }
+            Track { strokeWidth: Style.space(3); strokeColor: Color.accent }
+          }
+
           Repeater {
             model: root.slices
             delegate: Item {
@@ -405,7 +471,7 @@ Item {
                   : Border.flat(root.surfaceEdge, Style.spacing.hairline)
                 // Only the disc grows. Scaling the label with it would drift the
                 // whole ring of text every time selection moved.
-                scale: active ? 1.08 : 1
+                scale: active ? root.selectedScale : 1
 
                 Behavior on color { ColorAnimation { duration: 90 } }
                 Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -421,12 +487,24 @@ Item {
 
               // Outside the disc rather than in it: a circle's usable width
               // collapses away from its center, and "Bluetooth" does not fit
-              // under an icon in there. At 45 degrees apart the labels of
-              // neighbouring slices are nowhere near each other.
+              // under an icon in there. Pushed out along its own spoke rather
+              // than hung straight down, because the dial's stroke runs
+              // through every disc's center -- a label below the east or west
+              // disc sits exactly on the arc's path and gets washed out as it
+              // passes. Radially there is nothing for it to collide with, and
+              // the eight read as one radiating set. At 45 degrees apart
+              // neighbouring labels are nowhere near each other.
               Text {
-                anchors.top: parent.bottom
-                anchors.topMargin: Style.spacing.sm
-                anchors.horizontalCenter: parent.horizontalCenter
+                // Measured to the box's nearest edge rather than its center,
+                // so every label clears its disc by the same margin whatever
+                // its width and whatever angle it sits at -- to the center,
+                // a long label on a diagonal has its near corner back on top
+                // of the disc.
+                readonly property real reach: root.itemSize / 2 * root.selectedScale + root.labelGap
+                  + (Math.abs(Math.cos(parent.angle)) * width
+                     + Math.abs(Math.sin(parent.angle)) * height) / 2
+                x: parent.width / 2 + reach * Math.cos(parent.angle) - width / 2
+                y: parent.height / 2 + reach * Math.sin(parent.angle) - height / 2
                 text: modelData.label
                 color: active ? Color.accent : Color.menu.text
                 // Labels name the icon rather than compete with it, so they sit
