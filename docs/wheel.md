@@ -2,10 +2,14 @@
 
 A radial control center for Omarchy, on `SUPER+A`.
 
-Eight panels sit on a ring, reachable by direction; typing turns the hub into
-a search over every entry in the Omarchy menu, every installed app, every open
-window, and every theme and font. It replaces reaching for eight separate
-`SUPER+CTRL` shortcuts with one key and a direction.
+Your bar's panels sit on a ring, reachable by direction; typing turns the hub
+into a search over every entry in the Omarchy menu, every installed app, every
+open window, and every theme and font. It replaces reaching for a handful of
+separate `SUPER+CTRL` shortcuts with one key and a direction.
+
+The ring is for things that have a widget. Everything else in the menu —
+Install, Remove, Update and the rest — is one search away instead of one more
+disc, because a ring you have to read is slower than a word you can type.
 
     plugins/xpo.wheel/
       manifest.json   kind: "overlay", keepLoaded
@@ -17,10 +21,11 @@ window, and every theme and font. It replaces reaching for eight separate
 | | |
 |---|---|
 | `SUPER+A` | open (tap — do not hold, see below) |
-| `↑` `↓` `←` `→` | `↑` Audio · `↓` Menu · `←` Display · `→` System, then `←`/`→` step around the ring |
-| `Enter` | fire the highlighted slice |
-| type anything | search menu actions, apps, windows, themes and fonts |
-| `Esc` | clear the query, then close |
+| `↑` `↓` `←` `→` | jump to the slice at that compass point, then `←`/`→` step around the ring |
+| `Enter` | fire the highlighted slice, or open it if it is a submenu |
+| type anything | search menu entries, apps, windows, themes and fonts |
+| `Backspace` | delete a character, then go up one level |
+| `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
 Mouse works too: the whole screen is a compass around center, so a flick in
@@ -154,8 +159,48 @@ behaviour.
 trailing commas, and merges the user's over the defaults by id. Ids are dotted
 (`trigger.capture.qr`), so an entry's breadcrumb is just its ancestors' labels.
 
-Entries without an `action` are submenus and are skipped; their labels still
-appear as breadcrumbs. That yields 271 searchable rows from 320 entries.
+**Every entry in the menu is a row.** Entries with an `action` run it. Entries
+without one are submenus, and they are rows too — searching `install` has to
+find Install, not only the things filed under it; picking one turns the ring
+into its children, `Backspace` goes back up, and the hub prints where you are.
+That is the only reason the ring drills at all; the default ring has no
+submenus on it.
+
+The exception is a `provider`, whose rows the menu generates at runtime — the
+app list, the installed fonts. The wheel cannot render those, so a provider row
+hands the whole route to `omarchy-menu summon <id>` rather than being dropped.
+That also covers any provider a later Omarchy adds that `MenuIndex.js` has
+never heard of.
+
+That invariant is checked rather than asserted. `check.js` runs the real index
+against this machine's real menu files:
+
+    node plugins/xpo.wheel/check.js
+
+- every entry whose `when` passes, and that is not a submenu emptied by its
+  children's, appears in `menuRows()`
+- every row has an action or a node
+- no node opens onto an empty ring
+- `Wheel.qml` calls only what `MenuIndex.js` defines
+- the shipped bar and this machine's bar both give an even ring
+
+Run it after touching `MenuIndex.js`, and against a new Omarchy release — the
+menu file is upstream's, and a new entry shape is exactly what would slip
+through. As of Omarchy 4.0.2: 320 entries in, 241 rows out, 0 unreachable. The
+79 absent are rows whose `when` failed on this machine.
+
+`when:` is evaluated. Every condition in both menu files goes out as **one**
+bash script — each line echoes its own id when its condition holds — rather
+than a subprocess per entry. It runs once at startup, in the background, and
+takes about 1.2s for the 144 conditions in the stock menu; pressing `SUPER+A`
+is not the moment to spend that, and installing a package is rare enough that
+one stale reading until the next shell restart is the right trade. A `when`
+that fails hides the row, and a submenu whose children all failed is hidden
+too, so a slice never drills into an empty ring. On this machine that is 239
+rows out of 320 — the other 81 are for hardware and packages that aren't here.
+
+`checked:` is **not** evaluated. It only appends a ✓, and it would have to
+re-run on every open to be true.
 
 Applications come from `shell.appLibrary` (`services/AppLibrary.qml`), which
 wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
@@ -173,11 +218,12 @@ second overlay on top of the first.
 
 The live half of the index — apps, windows, themes, fonts — is rebuilt when the
 wheel opens. That is the only moment any of it has to be correct, and it means
-they are all as fresh as the keystroke that asked for them. The menu half is
-not rebuilt: `MenuIndex.menuRows()` runs once per file load, because flattening
-271 entries costs 1.6ms against 0.4ms for everything else together, and it
-returns the same answer every time. Opening the wheel costs 0.5ms of index
-work; a keystroke costs 0.06ms to search all 352 rows.
+they are all as fresh as the keystroke that asked for them. The menu half is a
+binding rather than a per-open rebuild: flattening the menu costs several times
+what everything else costs together, and it only changes when the menu files
+load or when the conditions come back. When they do come back — after the wheel
+is already on screen — the ring re-reads them on its own, and `onStaticRowsChanged`
+tells the index to rebuild, since that half is built by hand.
 
 Every query term must appear somewhere in the row, so terms narrow. Rows then
 sort on four keys: **rank** (label-prefix, then label-substring, then a hit
@@ -199,9 +245,66 @@ pulled. `Hyprland.activeToplevel` does track focus, so the wheel accumulates
 the order from that instead, and falls back to the cached history for windows
 it has not yet seen focused (everything, for a moment after a shell restart).
 
-`when:` conditions are **not** evaluated — they need a bash round trip per
-entry, which the shell's own menu batches at startup. Hardware-specific rows
-therefore appear in search on machines they don't apply to.
+## The ring
+
+By default the ring is the panels your bar carries, in a fixed order, plus the
+clipboard overlay — which is not a bar widget, so nothing in the bar vouches
+for it. Adding a widget to the bar adds it to the wheel; the wheel is not a
+second list to keep in sync with the first. A machine that has never edited its
+bar has no user config, so the layout Omarchy ships
+(`$OMARCHY_PATH/config/omarchy/shell.json`) is read instead — otherwise the
+ring would offer panels that machine has no widget for.
+
+To choose the ring yourself, write `~/.config/omarchy/wheel.json`:
+
+```json
+{
+  "slices": [
+    "omarchy.audio",
+    "omarchy.network",
+    "omarchy.clipboard",
+    "system",
+    "trigger.capture",
+    "style"
+  ]
+}
+```
+
+Each id is either a panel — `omarchy.audio`, `network`, `bluetooth`, `monitor`,
+`clock`, `tailscale`, `agents`, `dropbox`, `power`, `clipboard` — or a menu id from
+`omarchy-menu.jsonc`. A menu id that has an action runs it; one that is a
+submenu drills the ring into it. Ids that name nothing are dropped. The file is
+watched, so the ring changes as you save; delete it to go back to the bar's
+widgets.
+
+Every icon in that catalogue is one the widget itself already draws. Tailscale
+and Dropbox have no Nerd Font glyph — Omarchy renders each as a QML shape of
+its own — so those two carry an `iconFile` and the wheel loads that component
+off `omarchyPath`. There is no codepoint that stands in for a product's mark,
+and picking one that looks close is how you ship a logo the product doesn't
+have.
+
+**Keep the count even.** East and west are half a turn apart, so half a turn
+has to be a whole number of steps, which only happens when the count is even.
+An even ring is rotated so two slices land at 3 and 9 o'clock, flanking the
+field; an odd one is still evenly spaced but anchors north instead, and nothing
+sits beside the field. Eight got this for free at 45° apart and never had to
+say so.
+
+The catalogue is sized so the default lands even on a stock machine: the bar
+Omarchy ships carries seven of these plus the clipboard overlay. Changing
+`PANELS` means re-checking that.
+
+The ring sizes itself to what it holds. It keeps a constant arc distance per
+slice and grows its radius to pay for it, so a disc and its label have the same
+room at fourteen slices as at eight. Growth stops before the labels would run
+off the short edge of the screen, and only then do the discs shrink to fit the
+chord between their neighbours.
+
+Slices are evenly spaced; the only choice is where the first one goes, which is
+`sliceOrigin` — `90 % step` on an even count so a slice lands on east and one
+on west, `0` on an odd one so the ring at least stays symmetric about the
+vertical.
 
 ## Known limits
 
@@ -210,4 +313,6 @@ therefore appear in search on machines they don't apply to.
   inside it: a terminal holding a Claude Code session is titled after the
   session's topic, so `claude` will not find it. Searching the app id
   (`kitty`) lists every window of that app, most recent first.
-- The 8 ring slices are hard-coded in `Wheel.qml`; there is no config file yet.
+- `when` answers are read once per shell start, so a package installed since
+  then shows the stale row until the next restart.
+- An odd-sized ring has nothing at 3 and 9 o'clock. Add or drop a slice.

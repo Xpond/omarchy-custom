@@ -33,7 +33,27 @@ Item {
 
   property string query: ""
   property var menuItems: ({})
-  readonly property var menuRows: MenuIndex.menuRows(root.menuItems, root.slices)
+  // Where the ring is pointed: [] is home, ["install"] the Install ring.
+  property var path: []
+  readonly property string crumb: MenuIndex.crumb(root.menuItems, root.path)
+  // Which `when` conditions hold, in one subprocess. Flagged not-ready until
+  // the first run lands, which keeps the menu whole meanwhile.
+  property var conditions: MenuIndex.NO_CONDITIONS
+  // The bar's widgets, the user's file winning over the one Omarchy ships.
+  // Null only if neither could be read, which offers everything rather than
+  // nothing.
+  property var userBarIds: null
+  property var stockBarIds: null
+  readonly property var barIds: root.userBarIds || root.stockBarIds
+  readonly property var panels: MenuIndex.panels(root.barIds)
+  // Ids, not slices: what each name resolves to depends on the menu and on
+  // which conditions hold.
+  property var ringIds: null
+  readonly property var ring: root.ringIds
+    ? MenuIndex.ringOf(root.menuItems, root.ringIds, root.conditions)
+    : root.panels
+  readonly property var staticRows: MenuIndex.panelRows(root.panels)
+    .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   property var themes: []
   property var fonts: []
   // Window addresses, most recently focused first. Hyprland has its own focus
@@ -49,21 +69,48 @@ Item {
   property int resultIndex: 0
   readonly property bool searching: root.query.length > 0
 
-  // Clockwise from north. `plugin` routes through the shell and lands in the
-  // centered panels; `exec` covers the targets that aren't shell plugins.
-  readonly property var slices: [
-    { icon: "󰕾", label: "Audio",     plugin: "omarchy.audio" },
-    { icon: "󰂯", label: "Bluetooth", plugin: "omarchy.bluetooth" },
-    { icon: "", label: "System",    exec: ["omarchy-menu", "toggle", "system"] },
-    { icon: "", label: "Clipboard", plugin: "omarchy.clipboard" },
-    { icon: "󰍜", label: "Menu",      exec: ["omarchy-menu", "toggle", "root"] },
-    { icon: "󰃭", label: "Calendar",  plugin: "omarchy.clock" },
-    { icon: "󰍹", label: "Display",   plugin: "omarchy.monitor" },
-    { icon: "󰖩", label: "Network",   plugin: "omarchy.network" }
-  ]
+  // Clockwise from north. The ring is the panels -- the things with a widget
+  // worth a disc -- and the rest of the menu is one search away instead.
+  // `wheel.json` replaces the list with whatever the user wants on it. A slice
+  // carrying a `node` drills into that node's children rather than firing.
+  readonly property var slices: MenuIndex.ringSlices(root.menuItems, root.path,
+                                                     root.conditions, root.ring)
 
-  readonly property int ringRadius: Style.space(240)
-  readonly property int itemSize: Style.space(76)
+  // The ring sizes itself to what it holds: a constant arc per slice, paid for
+  // by growing the radius, so a disc and its label have the same room at
+  // fourteen slices as at eight.
+  readonly property int sliceCount: root.slices.length
+  readonly property real sliceStep: 360 / Math.max(1, root.sliceCount)
+
+  // Slices are evenly spaced; the only choice is where the first one goes. An
+  // even count is rotated so two of them land at 3 and 9 o'clock, flanking the
+  // field -- which is what eight slices did for free at 45 degrees apart. An
+  // odd count cannot have both: east and west are half a turn apart, and half
+  // a turn is a whole number of steps only when the count is even. Those
+  // anchor north, which at least keeps the ring symmetric about the vertical.
+  readonly property real sliceOrigin: root.sliceCount % 2 === 0 ? 90 % root.sliceStep : 0
+  function sliceAngle(i) { return root.sliceOrigin + i * root.sliceStep }
+  function nearestSlice(deg) {
+    // A wheel.json naming nothing that resolves leaves an empty ring, and the
+    // modulo below would hand back NaN as a selection.
+    if (!root.sliceCount) return -1
+    var i = Math.round((deg - root.sliceOrigin) / root.sliceStep)
+    return ((i % root.sliceCount) + root.sliceCount) % root.sliceCount
+  }
+
+  readonly property int baseItem: Style.space(76)
+  // The grown disc plus air: the arc each slice is entitled to.
+  readonly property real slicePitch: root.baseItem * root.selectedScale + Style.space(28)
+  // Growth stops before the labels would run off the short edge of the screen.
+  readonly property int maxRadius: Math.max(Style.space(160),
+    Math.min(surface.width, surface.height) / 2 - root.baseItem * 1.9)
+  readonly property int ringRadius: Math.min(root.maxRadius,
+    Math.max(Style.space(240), root.slicePitch * root.sliceCount / (2 * Math.PI)))
+  // Only bites once the radius has hit its cap: the chord between neighbouring
+  // centres, less a hairline of air.
+  readonly property int itemSize: Math.max(Style.space(36),
+    Math.min(root.baseItem,
+             2 * root.ringRadius * Math.sin(Math.PI / Math.max(2, root.sliceCount)) - Style.space(14)))
   readonly property int deadzone: Style.space(54)
   // How much a disc grows when it is the selected one.
   readonly property real selectedScale: 1.08
@@ -98,7 +145,7 @@ Item {
   // Half the arc at rest. The discs are painted over the dial, so anything no
   // wider than one hides behind it; half a slice's share of the ring, less a
   // hair, lights the dial on either side of the selected disc instead.
-  readonly property real arcSpread: 360 / root.slices.length / 2 * 0.85
+  readonly property real arcSpread: root.sliceStep / 2 * 0.85
   // Clamped: a held arrow drags the tail more than a lap behind, and an arc
   // past a full turn is just the circle again -- it stops reading as motion.
   // Clamping from the head keeps the point and loses the far end of the tail.
@@ -117,7 +164,7 @@ Item {
     repeat: true
     property int stepsLeft: 0
     onTriggered: {
-      root.arcTarget += 45
+      root.arcTarget += root.sliceStep
       if (--spin.stepsLeft <= 0) spin.stop()
     }
   }
@@ -148,7 +195,7 @@ Item {
   // The menu half is flattened once per file load instead: doing that on every
   // open costs three times what everything else costs together.
   function rebuildIndex() {
-    root.index = root.menuRows.concat(MenuIndex.liveRows({
+    root.index = root.staticRows.concat(MenuIndex.liveRows({
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
       focusOrder: root.focusOrder,
@@ -166,12 +213,14 @@ Item {
     root.armed = false
     root.originX = -1
     root.query = ""
+    // Home: where the wheel opens must not depend on what was done last time.
+    root.path = []
     // Only a press that actually opened the wheel earns the tap-to-hold grace;
     // a press onto an already-open wheel is the second tap, which closes it.
     root.justOpened = !wasOpen
     root.opened = true
     root.rebuildIndex()
-    spin.stepsLeft = root.slices.length
+    spin.stepsLeft = root.sliceCount
     spin.restart()
     Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
   }
@@ -211,12 +260,15 @@ Item {
     var acted = root.opened
     if (root.opened) root.dismiss()
     if (!root.shell) return acted ? "closed" : "none"
-    for (var i = 0; i < root.slices.length; i++) {
-      var id = root.slices[i].plugin
+    // The catalogue, not the ring: a panel reached from search still has to
+    // be closable.
+    var catalogue = MenuIndex.panels(null)
+    for (var i = 0; i < catalogue.length; i++) {
+      var id = catalogue[i].plugin
       if (id && root.shell.isPluginOpen(id)) { root.shell.hide(id); acted = true }
     }
-    // The exec slices route through omarchy-menu, which is a shell plugin of
-    // its own -- closing the wheel's menu means closing that too.
+    // The bar's own menu widget is a shell plugin too, and a wheel entry can
+    // still have summoned a picker that lives inside it.
     if (root.shell.isPluginOpen("omarchy.menu")) { root.shell.hide("omarchy.menu"); acted = true }
     return acted ? "closed" : "none"
   }
@@ -228,7 +280,7 @@ Item {
     if (!root.opened) return "closed"
     if (!root.searching && root.armed && root.selected >= 0) {
       var label = root.slices[root.selected].label
-      root.activate(root.selected)
+      root.run(root.slices[root.selected])
       return "fired:" + label
     }
     if (!root.justOpened) { root.dismiss(); return "dismissed" }
@@ -243,34 +295,48 @@ Item {
     if (i < 0) return
     // The short way round from wherever the arc is already pointed, added on
     // rather than assigned, which is what keeps the target unwrapped.
-    var slice = i * 45 - 90
+    var slice = root.sliceAngle(i) - 90
     root.arcTarget += ((slice - root.arcTarget) % 360 + 540) % 360 - 180
   }
 
-  function activate(i) {
-    if (i < 0 || i >= root.slices.length) return
-    var s = root.slices[i]
+  // Point the ring at a submenu: nothing is dismissed and nothing is spawned.
+  function enter(node) {
+    // "" is home, and "".split(".") is [""] rather than [] -- which would
+    // point the ring at a node whose id is the empty string, i.e. the menu's
+    // own top level, instead of at the slices the user chose.
+    root.path = node ? String(node).split(".") : []
+    root.query = ""
+    root.selected = -1
+    root.armed = false
+    // The grace is spent: releasing the keybind must not take the new ring away.
+    root.justOpened = false
+    spin.stepsLeft = root.sliceCount
+    spin.restart()
+  }
+
+  // One level up. At home the caller decides: Escape closes, Backspace doesn't.
+  function up() {
+    if (!root.path.length) return false
+    root.enter(root.path.slice(0, -1).join("."))
+    return true
+  }
+
+  // Ring slices and search results carry the same fields, so which of the two
+  // was picked stops mattering here.
+  function run(e) {
+    if (!e) return
+    if (e.node) { root.enter(e.node); return }
     root.dismiss(true)
     // Let this layer surface unmap and hand the keyboard back before the
     // target grabs it, or the panel opens without focus.
     Qt.callLater(function () {
-      if (s.plugin && root.shell) root.shell.toggle(s.plugin, "{}")
-      else if (s.exec) Quickshell.execDetached(s.exec)
-    })
-  }
-
-  function runResult(i) {
-    var r = root.results[i]
-    if (!r) return
-    if (r.slice >= 0) { root.activate(r.slice); return }
-    root.dismiss(true)
-    Qt.callLater(function () {
+      if (e.plugin && root.shell) root.shell.toggle(e.plugin, "{}")
       // Omarchy 4 configures Hyprland in Lua, and its dispatcher rejects the
       // legacy string form -- which is what both Quickshell's own activate()
       // and `hyprctl dispatch focuswindow` send, silently doing nothing.
-      if (r.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + r.address + "\" })")
-      else if (r.appId) root.appLibrary.launch(r.appId, r.label)
-      else Util.execDetached(r.action)
+      else if (e.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + e.address + "\" })")
+      else if (e.appId) root.appLibrary.launch(e.appId, e.label)
+      else if (e.action) Util.execDetached(e.action)
     })
   }
 
@@ -287,11 +353,11 @@ Item {
     var dy = py - surface.height / 2
     if (Math.sqrt(dx * dx + dy * dy) < root.deadzone) return -1
     var deg = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360
-    return Math.floor(((deg + 22.5) % 360) / 45)
+    return root.nearestSlice(deg)
   }
 
   function rotate(step) {
-    var n = root.slices.length
+    var n = root.sliceCount
     root.select(root.selected < 0 ? (step > 0 ? 0 : n - 1) : (root.selected + step + n) % n)
   }
 
@@ -330,6 +396,74 @@ Item {
   FileView {
     path: Quickshell.env("HOME") + "/.config/omarchy/extensions/omarchy-menu.jsonc"
     onLoaded: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.parse(text()))
+  }
+
+  // Watched, so a widget added to the bar turns up without a shell restart.
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
+    watchChanges: true
+    onFileChanged: reload()
+    onLoaded: root.userBarIds = MenuIndex.barWidgets(text())
+    onLoadFailed: root.userBarIds = null
+  }
+
+  // What Omarchy ships. A machine that has never edited its bar has no user
+  // config at all, and the whole catalogue would put panels on the ring that
+  // this machine has no widget for.
+  FileView {
+    path: root.omarchyPath + "/config/omarchy/shell.json"
+    onLoaded: root.stockBarIds = MenuIndex.barWidgets(text())
+  }
+
+  // The ring, if the user has said what they want on it. Absent by default.
+  FileView {
+    path: Quickshell.env("HOME") + "/.config/omarchy/wheel.json"
+    watchChanges: true
+    onFileChanged: reload()
+    onLoaded: root.ringIds = MenuIndex.ringIds(text())
+    // Deleting the file is how you go back to the default, and only success
+    // has a signal -- without this the ring keeps a since-deleted list.
+    onLoadFailed: root.ringIds = null
+  }
+
+  // 144 shell conditions in one bash process rather than 144 processes, and
+  // once at startup rather than per open -- installing a package is rare, and
+  // pressing SUPER+A is not the moment to spend 1.2s asking about it. The
+  // alternative is a menu that lies about what this machine can do.
+  Process {
+    id: conditionScan
+    stdout: StdioCollector { onStreamFinished: root.conditions = MenuIndex.parseConditions(text, root.menuItems) }
+  }
+
+  // Started by hand rather than by binding `running`. `running` and `command`
+  // would be two bindings firing off the same change, and a run that got away
+  // before the command was rebuilt read an empty script -- whose empty output
+  // is indistinguishable from every condition failing, which hid every
+  // conditional row in the menu.
+  onMenuItemsChanged: {
+    if (!root.menuItems || !Object.keys(root.menuItems).length) return
+    conditionScan.command = ["bash", "-c", MenuIndex.conditionScript(root.menuItems)]
+    conditionScan.running = true
+  }
+
+  // The ring binds to `conditions`; the index is built by hand, so it has to
+  // be told when the answers land late.
+  onStaticRowsChanged: if (root.opened) root.rebuildIndex()
+
+  // A widget's own icon component, for the two marks that have no glyph at all.
+  // Loaded by URL off `omarchyPath` rather than imported: an import path has to
+  // be a literal, and this one belongs to another plugin whose location is only
+  // known at runtime.
+  component PanelIcon: Loader {
+    property string file
+    property real size
+    property color tint
+    active: !!file
+    source: file ? root.omarchyPath + "/shell/plugins/panels/" + file : ""
+    onLoaded: {
+      item.iconSize = Qt.binding(function () { return size })
+      item.color = Qt.binding(function () { return tint })
+    }
   }
 
   component Track: ShapePath {
@@ -377,7 +511,7 @@ Item {
       onClicked: function (mouse) {
         if (mouse.button === Qt.RightButton || root.searching) { root.dismiss(); return }
         var i = root.sliceAt(mouse.x, mouse.y)
-        i >= 0 ? root.activate(i) : root.dismiss()
+        i >= 0 ? root.run(root.slices[i]) : root.dismiss()
       }
     }
 
@@ -387,16 +521,19 @@ Item {
       focus: true
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function (event) {
+        // One step at a time: the query, then the menu tree, then the screen.
         if (event.key === Qt.Key_Escape) {
-          root.searching ? root.query = "" : root.dismiss()
+          if (root.searching) root.query = ""
+          else if (!root.up()) root.dismiss()
           event.accepted = true; return
         }
         if (event.key === Qt.Key_Backspace) {
-          root.query = root.query.slice(0, -1)
+          if (root.searching) root.query = root.query.slice(0, -1)
+          else root.up()
           event.accepted = true; return
         }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-          root.searching ? root.runResult(root.resultIndex) : root.activate(root.selected)
+          root.run(root.searching ? root.results[root.resultIndex] : root.slices[root.selected])
           event.accepted = true; return
         }
         if (root.searching) {
@@ -404,13 +541,15 @@ Item {
           if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { root.moveResult(-1); event.accepted = true; return }
         } else {
           switch (event.key) {
-          // Arrows alone reach all eight: up/down jump to the top and bottom
-          // slice, left/right pick the side slice first and then step around
-          // the ring, so a diagonal is a cardinal plus one step.
-          case Qt.Key_Up:       root.select(0); event.accepted = true; return
-          case Qt.Key_Down:     root.select(4); event.accepted = true; return
-          case Qt.Key_Right:    root.selected < 0 ? root.select(2) : root.rotate(1); event.accepted = true; return
-          case Qt.Key_Left:     root.selected < 0 ? root.select(6) : root.rotate(-1); event.accepted = true; return
+          // Arrows alone reach the whole ring: up/down jump to the top and
+          // bottom slice, left/right pick the side slice first and then step
+          // around, so anything off a cardinal is a cardinal plus a few steps.
+          // Found by bearing rather than fixed at 0/4/2/6 -- the ring is nine
+          // slices by default and any count once it is configured.
+          case Qt.Key_Up:       root.select(root.nearestSlice(0)); event.accepted = true; return
+          case Qt.Key_Down:     root.select(root.nearestSlice(180)); event.accepted = true; return
+          case Qt.Key_Right:    root.selected < 0 ? root.select(root.nearestSlice(90)) : root.rotate(1); event.accepted = true; return
+          case Qt.Key_Left:     root.selected < 0 ? root.select(root.nearestSlice(270)) : root.rotate(-1); event.accepted = true; return
           case Qt.Key_Tab:      root.rotate(1); event.accepted = true; return
           case Qt.Key_Backtab:  root.rotate(-1); event.accepted = true; return
           }
@@ -498,11 +637,16 @@ Item {
           Repeater {
             model: root.slices
             delegate: Item {
+              id: slice
               required property int index
               required property var modelData
               readonly property bool active: root.selected === index
+              // Tied to the disc rather than fixed: once the ring is full
+              // enough that the discs have to shrink, a fixed icon would be the
+              // thing that overflows them.
+              readonly property real glyphSize: Style.font.displayLarge * root.itemSize / root.baseItem
 
-              readonly property real angle: (index * 45 - 90) * Math.PI / 180
+              readonly property real angle: (root.sliceAngle(index) - 90) * Math.PI / 180
               x: ring.width / 2 + root.ringRadius * Math.cos(angle) - width / 2
               y: ring.height / 2 + root.ringRadius * Math.sin(angle) - height / 2
               width: root.itemSize
@@ -531,10 +675,19 @@ Item {
 
                 Text {
                   anchors.centerIn: parent
+                  visible: !modelData.iconFile
                   text: modelData.icon
                   color: active ? Color.accent : Color.menu.text
                   font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.displayLarge
+                  font.pixelSize: slice.glyphSize
+                }
+                // Tailscale's and Dropbox's marks are shapes Omarchy draws
+                // itself, so there is no codepoint to set here.
+                PanelIcon {
+                  anchors.centerIn: parent
+                  file: modelData.iconFile || ""
+                  size: slice.glyphSize
+                  tint: slice.active ? Color.accent : Color.menu.text
                 }
               }
 
@@ -545,8 +698,9 @@ Item {
               // through every disc's center -- a label below the east or west
               // disc sits exactly on the arc's path and gets washed out as it
               // passes. Radially there is nothing for it to collide with, and
-              // the eight read as one radiating set. At 45 degrees apart
-              // neighbouring labels are nowhere near each other.
+              // they read as one radiating set. Keeping the arc per slice
+              // constant as the ring grows is what keeps neighbouring labels
+              // off each other at any count.
               Text {
                 // Measured to the box's nearest edge rather than its center,
                 // so every label clears its disc by the same margin whatever
@@ -572,6 +726,23 @@ Item {
               }
             }
           }
+        }
+
+        // A drilled ring is otherwise anonymous -- twelve discs that could be
+        // Install's or Remove's. The chevron points at the way out: backspace.
+        Text {
+          anchors.horizontalCenter: parent.horizontalCenter
+          anchors.bottom: parent.verticalCenter
+          anchors.bottomMargin: root.searchHeight / 2 + Style.spacing.panelGap
+          width: root.searchWidth
+          horizontalAlignment: Text.AlignHCenter
+          elide: Text.ElideLeft
+          text: "‹  " + root.crumb
+          color: Color.menu.text
+          opacity: root.path.length && !root.searching ? 0.7 : 0
+          Behavior on opacity { NumberAnimation { duration: root.fadeDuration } }
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.caption
         }
 
         // Dead center, fixed size, anchored to nothing that changes: the field
@@ -665,6 +836,7 @@ Item {
           Repeater {
             model: root.results
             delegate: BorderSurface {
+              id: resultCard
               required property int index
               required property var modelData
               readonly property bool active: root.resultIndex === index
@@ -687,7 +859,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 onEntered: root.resultIndex = index
-                onClicked: root.runResult(index)
+                onClicked: root.run(root.results[index])
               }
 
               Row {
@@ -704,16 +876,24 @@ Item {
                 // a terminal's is a whole command line -- so without a budget
                 // one row draws straight through the edge of the card.
                 readonly property real textBudget:
-                  Math.max(0, width - Style.font.iconLarge - spacing * 2)
+                  Math.max(0, width - Style.font.iconLarge - spacing * 2 - chevron.width)
 
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: !modelData.appIcon
+                  visible: !modelData.appIcon && !modelData.iconFile
                   width: Style.font.iconLarge
                   text: modelData.icon
                   color: active ? Color.accent : Color.menu.text
                   font.family: Style.font.menuFamily
                   font.pixelSize: Style.font.iconLarge
+                }
+                // The same marks the ring loads, at row size.
+                PanelIcon {
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.font.iconLarge
+                  file: modelData.iconFile || ""
+                  size: Style.font.iconLarge
+                  tint: resultCard.active ? Color.accent : Color.menu.text
                 }
                 // Apps and windows name an icon file rather than carrying a
                 // glyph. Only one of the two is ever visible, and a Row skips
@@ -753,6 +933,19 @@ Item {
                   elide: Text.ElideRight
                   font.family: Style.font.menuFamily
                   font.pixelSize: Style.font.caption
+                }
+                // A category is not a command: picking it turns the ring into
+                // its contents. The chevron is what says so before Return.
+                Text {
+                  id: chevron
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: modelData.node ? implicitWidth + parent.spacing : 0
+                  visible: !!modelData.node
+                  text: "\u203a"
+                  color: active ? Color.accent : Color.menu.text
+                  opacity: 0.5
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.body
                 }
               }
             }

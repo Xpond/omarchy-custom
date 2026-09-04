@@ -20,10 +20,12 @@ a merge on every upstream release.
 ## What's here
 
 **The wheel** (`plugins/xpo.wheel/`) — a radial control center on `SUPER+A`.
-Eight panels on a ring reachable by direction, and a search field in the hub
-that covers the Omarchy menu, installed apps, open windows, themes and fonts.
+Your bar's panels on a ring reachable by direction, and a search field in the
+hub that covers the Omarchy menu, installed apps, open windows, themes and
+fonts. Pick the ring yourself in `~/.config/omarchy/wheel.json`.
 `SUPER+W` closes the wheel and anything it opened, falling back to
 close-window.
+`node plugins/xpo.wheel/check.js` verifies every menu entry is reachable.
 See [`docs/wheel.md`](docs/wheel.md).
 
 **Centered panels** (`patches/shell/`) — the bar's panels open centered over a

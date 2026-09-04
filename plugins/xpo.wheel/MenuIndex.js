@@ -38,6 +38,16 @@ function trailOf(items, id) {
 // well under labels of the same length come back in this order.
 var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4 }
 
+// The breadcrumb of an open ring, current node included.
+function crumb(items, path) {
+  var out = []
+  for (var i = 0; i < path.length; i++) {
+    var e = items[path.slice(0, i + 1).join(".")]
+    out.push((e && e.label) || path[i])
+  }
+  return out.join(" \u203a ")
+}
+
 // One name per line, blanks dropped -- the shape every `omarchy <x> list` has.
 function lines(raw) {
   var out = []
@@ -69,36 +79,214 @@ function styleRows(out, names, icon, trail, command) {
     var name = String(names[i])
     out.push({
       icon: icon, label: name, trail: trail, kind: KIND.style,
-      action: command + quote(name), slice: -1,
+      action: command + quote(name),
       keywords: (name + " " + trail).toLowerCase()
     })
   }
 }
 
-// The half of the index that only changes when the menu files load: the
-// wheel's own slices and every menu entry carrying an action. Entries without
-// one are submenus -- they hold nothing to run, and their labels already
-// appear as breadcrumbs. Kept apart from the live half because flattening 271
-// entries costs three times what everything else does, and it is the same
-// answer every time.
-function menuRows(items, slices) {
-  var out = []
-  for (var i = 0; i < slices.length; i++) {
-    out.push({ icon: slices[i].icon, label: slices[i].label, trail: "Wheel",
-               slice: i, kind: KIND.slice,
-               keywords: String(slices[i].label).toLowerCase() })
+// The shell plugins the wheel opens, in ring order. Every icon here is one the
+// widget itself already draws -- a glyph where it has one, otherwise its own
+// `iconFile` component, which is the only honest answer for Tailscale's and
+// Dropbox's marks. Nothing is chosen by eye: a plausible-looking codepoint is
+// how you end up drawing a mark that is not the product's.
+var PANELS = [
+  { plugin: "omarchy.audio", icon: "󰕾", label: "Audio" },
+  { plugin: "omarchy.network", icon: "󰖩", label: "Network" },
+  { plugin: "omarchy.bluetooth", icon: "󰂯", label: "Bluetooth" },
+  { plugin: "omarchy.monitor", icon: "󰍹", label: "Display" },
+  { plugin: "omarchy.clock", icon: "󰃭", label: "Calendar" },
+  { plugin: "omarchy.tailscale", icon: "", iconFile: "tailscale/TailscaleIcon.qml", label: "Tailscale" },
+  { plugin: "omarchy.agents", icon: "󱚣", label: "Agents" },
+  { plugin: "omarchy.dropbox", icon: "", iconFile: "dropbox/DropboxIcon.qml", label: "Dropbox" },
+  { plugin: "omarchy.power", icon: "󰂄", label: "Power" }
+]
+
+// Overlays rather than bar widgets, so nothing in the bar layout vouches for
+// them. They are on the ring unconditionally.
+var OVERLAYS = [
+  { plugin: "omarchy.clipboard", icon: "", label: "Clipboard" }
+]
+
+// The ring the user asked for, as a list of ids. Null when there is no config
+// or it names no ring, which falls the wheel back to the bar's widgets.
+function ringIds(raw) {
+  var cfg = parse(raw)
+  return (cfg.slices && cfg.slices.length) ? cfg.slices : null
+}
+
+// Every widget id the bar carries, whichever section it sits in. Null when the
+// file names no layout, which lets the caller fall back to another one.
+function barWidgets(raw) {
+  var cfg = parse(raw)
+  var layout = (cfg.bar && cfg.bar.layout) || null
+  if (!layout) return null
+  var ids = {}
+  for (var section in layout) {
+    var row = layout[section]
+    if (!row || !row.length) continue
+    for (var i = 0; i < row.length; i++) if (row[i] && row[i].id) ids[row[i].id] = true
   }
+  return ids
+}
+
+// The default ring: a widget earns a slice by being in the bar, which is a
+// list the user already curates, so adding a widget to the bar adds it to the
+// wheel. Order comes from PANELS rather than from the bar, so a slice does not
+// move when the bar is rearranged. Overridden entirely by wheel.json.
+function panels(barIds) {
+  var out = []
+  for (var i = 0; i < PANELS.length; i++)
+    if (!barIds || barIds[PANELS[i].plugin]) out.push(PANELS[i])
+  return out.concat(OVERLAYS)
+}
+
+// `when` says whether a row exists on this machine. 144 of them in the stock
+// menu, so they go out as one script rather than 144 subprocesses: a line
+// prints its id when its condition holds, and silence is a failure. Bash, not
+// sh -- they use [[ ]] and compgen.
+function conditionScript(items) {
+  var out = []
+  for (var id in items)
+    if (items[id].when)
+      out.push("if " + items[id].when + " >/dev/null 2>&1; then echo " + id + "; fi")
+  return out.join("\n")
+}
+
+var NO_CONDITIONS = { when: {}, full: {}, ready: false }
+
+// No output at all means the script never ran, not that every condition failed:
+// on any machine some of these are negations that hold. Answering "nothing
+// passed" would hide every conditional row in the menu, so an empty read stays
+// not-ready and the menu stays whole.
+function parseConditions(raw, items) {
+  var ls = lines(raw)
+  if (!ls.length) return NO_CONDITIONS
+  var cond = { when: {}, ready: true }
+  for (var i = 0; i < ls.length; i++) cond.when[ls[i]] = true
+  cond.full = populated(items, cond)
+  return cond
+}
+
+// Before the first evaluation lands nothing is known, and hiding everything
+// conditional would gut the menu -- so unknown means visible.
+function passes(e, id, cond) {
+  return !e.when || !cond.ready || cond.when[id] === true
+}
+
+// The submenus that still have something under them. Trigger > Hardware is six
+// rows on a laptop and none on a desktop, and drilling into an empty ring is
+// worse than never being offered. Walked up from each surviving leaf, stopping
+// at the first ancestor that failed, so a hidden branch does not vouch for its
+// parent.
+function populated(items, cond) {
+  var out = {}
   for (var id in items) {
     var e = items[id]
-    if (!e || !e.action) continue
+    if (!e || (!e.action && !e.provider) || !passes(e, id, cond)) continue
+    var parts = id.split(".")
+    for (var i = parts.length - 1; i >= 1; i--) {
+      var pid = parts.slice(0, i).join(".")
+      var parent = items[pid]
+      if (parent && !passes(parent, pid, cond)) break
+      out[pid] = true
+    }
+  }
+  return out
+}
+
+// Survived its own `when`, and if a submenu, something survived under it.
+function shows(items, id, e, cond) {
+  if (!passes(e, id, cond)) return false
+  return e.action || e.provider || !cond.ready || cond.full[id] === true
+}
+
+// A menu entry as a ring slice or a search row. An action runs; a submenu
+// carries the id the ring drills into.
+//
+// Except a provider, whose rows the menu generates at runtime -- the app list,
+// the installed fonts -- and which the wheel has no way to render. Those hand
+// the whole route back to Omarchy's own menu rather than being dropped, so
+// every menu stays one search away, including any provider a later Omarchy
+// adds that this file has never heard of.
+function entryOf(id, e) {
+  // `id` rides along so check.js can observe what the index emitted rather
+  // than re-derive it and agree with itself.
+  var s = { id: id, icon: e.icon || "󰍜", label: e.label || id }
+  if (e.action) s.action = e.action
+  else if (e.provider) s.action = "omarchy-menu summon " + id
+  else s.node = id
+  return s
+}
+
+// The direct children of a node, in file order -- which is the order the
+// Omarchy menu itself lists them in. `parent` is "" for the root.
+function childrenOf(items, parent, cond) {
+  var prefix = parent ? parent + "." : ""
+  var depth = parent ? parent.split(".").length + 1 : 1
+  var out = []
+  for (var id in items) {
+    if (id.indexOf(prefix) !== 0 || id.split(".").length !== depth) continue
+    var e = items[id]
+    if (!shows(items, id, e, cond)) continue
+    out.push(entryOf(id, e))
+  }
+  return out
+}
+
+// Ids to slices. A panel id names one of PANELS or OVERLAYS; anything else is a
+// menu id. An id that names nothing is dropped, not drawn as a blank disc.
+function ringOf(items, ids, cond) {
+  var byPlugin = {}
+  var catalogue = panels(null)
+  for (var i = 0; i < catalogue.length; i++) byPlugin[catalogue[i].plugin] = catalogue[i]
+  var out = []
+  for (var j = 0; j < ids.length; j++) {
+    var id = String(ids[j])
+    if (byPlugin[id]) { out.push(byPlugin[id]); continue }
+    var e = items[id]
+    if (e && shows(items, id, e, cond)) out.push(entryOf(id, e))
+  }
+  return out
+}
+
+// What the ring shows: the chosen slices at the root, a node's children below.
+function ringSlices(items, path, cond, ring) {
+  return path.length ? childrenOf(items, path.join("."), cond) : ring
+}
+
+// Panels carry their target directly rather than a ring index: the ring's
+// contents depend on how deep you have drilled, so an index means nothing by
+// the time a result is picked.
+function panelRows(panels) {
+  var out = []
+  for (var i = 0; i < panels.length; i++) {
+    var p = panels[i]
+    out.push({ icon: p.icon, iconFile: p.iconFile, label: p.label, trail: "Panel",
+               kind: KIND.slice, plugin: p.plugin,
+               keywords: String(p.label).toLowerCase() })
+  }
+  return out
+}
+
+// Every menu entry, leaves and submenus alike: a submenu holds nothing to run,
+// but searching "install" has to find Install, not only what is filed under it.
+// Kept apart from the live half because flattening 320 entries costs three
+// times what everything else does, and it only changes when the menu files load
+// or the conditions come back -- not on every open.
+function menuRows(items, cond) {
+  var out = []
+  for (var id in items) {
+    var e = items[id]
+    if (!e || !shows(items, id, e, cond)) continue
     var trail = trailOf(items, id)
-    out.push({
-      icon: e.icon || "", label: e.label || id, trail: trail.join(" › "),
-      action: e.action, slice: -1, kind: KIND.menu,
-      keywords: [e.label, trail.join(" "), String(id).replace(/[.]/g, " "),
-                 (e.aliases || []).join(" "), e.description || ""]
-                .join(" ").toLowerCase()
-    })
+    var row = entryOf(id, e)
+    row.trail = trail.join(" › ")
+    row.kind = KIND.menu
+    row.keywords = [e.label, trail.join(" "), String(id).replace(/[.]/g, " "),
+                    (e.aliases || []).join(" "), e.description || ""]
+                   .join(" ").toLowerCase()
+    out.push(row)
   }
   return out
 }
@@ -121,7 +309,7 @@ function liveRows(sources) {
     iconByAppId[String(a.id).toLowerCase()] = appIcon
     out.push({
       icon: "", appIcon: appIcon, label: name, trail: "App",
-      appId: String(a.id), slice: -1, kind: KIND.app,
+      appId: String(a.id), kind: KIND.app,
       keywords: [name, a.genericName || "", a.comment || "",
                  a.keywords && a.keywords.join ? a.keywords.join(" ") : "",
                  String(a.id).replace(/[._]/g, " ")]
@@ -144,7 +332,7 @@ function liveRows(sources) {
     if (!title) continue
     out.push({
       icon: "󰖯", appIcon: iconByAppId[appId.toLowerCase()] || "", label: title,
-      trail: appId || "Window", address: "0x" + t.address, slice: -1,
+      trail: appId || "Window", address: "0x" + t.address,
       kind: KIND.window,
       recency: recencyOf(sources.focusOrder, t.address, ipc.focusHistoryID),
       keywords: (title + " " + appId).toLowerCase()
