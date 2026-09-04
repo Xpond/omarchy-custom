@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
+import QtQuick.Effects
 import qs.Commons
 import qs.Ui
 import "MenuIndex.js" as MenuIndex
@@ -52,8 +53,8 @@ Item {
   readonly property var slices: [
     { icon: "󰕾", label: "Audio",     plugin: "omarchy.audio" },
     { icon: "󰂯", label: "Bluetooth", plugin: "omarchy.bluetooth" },
-    { icon: "",  label: "System",    exec: ["omarchy-menu", "toggle", "system"] },
-    { icon: "",  label: "Clipboard", plugin: "omarchy.clipboard" },
+    { icon: "", label: "System",    exec: ["omarchy-menu", "toggle", "system"] },
+    { icon: "", label: "Clipboard", plugin: "omarchy.clipboard" },
     { icon: "󰍜", label: "Menu",      exec: ["omarchy-menu", "toggle", "root"] },
     { icon: "󰃭", label: "Calendar",  plugin: "omarchy.clock" },
     { icon: "󰍹", label: "Display",   plugin: "omarchy.monitor" },
@@ -71,6 +72,17 @@ Item {
   // and west slices if either size is retuned.
   readonly property int searchWidth: Math.min(Style.space(280),
     (root.ringRadius - root.itemSize / 2) * 2 - Style.space(48))
+  // Shared by the pill and by the results card, which is placed off the
+  // surface's center rather than off the pill itself.
+  readonly property int searchHeight: Style.spacing.controlHeight + Style.spacing.controlPaddingY * 2
+
+  // One palette for every floating piece of the wheel -- discs, pill, card --
+  // so they can't drift apart. Short of opaque so the blur still reads through.
+  readonly property color surfaceFill: Util.alpha(Color.menu.background, 0.85)
+  readonly property color surfaceEdge: Util.alpha(Color.menu.text, 0.16)
+  // The accent is the theme's one loud color, so selection spends it.
+  readonly property color selectedFill: Qt.tint(Util.alpha(Color.menu.background, 0.9),
+                                                Util.alpha(Color.accent, 0.22))
   // The pointer-enter that arrives when the surface maps is a synthetic move,
   // so the first sample is kept as an origin and the wheel only arms once the
   // pointer has travelled past this from it.
@@ -322,181 +334,282 @@ Item {
       Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
       Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
 
-      // Ring and results are the two modes, and they swap in the same place:
-      // the ring while the query is empty, the list the moment anything is
-      // typed. Both are positioned off the field rather than stacked with it,
-      // so the swap cannot move the field.
+      // Ring and pill drawn once into a texture, so one effect pass shadows
+      // the whole dial. Not a separate MultiEffect fed by `source`: that form
+      // needs the source hidden, and a hidden layer does not reliably
+      // re-render when its contents or geometry change.
       Item {
-        id: ring
         anchors.centerIn: parent
-        visible: !root.searching
         width: (root.ringRadius + root.itemSize) * 2
         height: width
+        layer.enabled: true
+        layer.effect: MultiEffect {
+          // The shadow reaches past the layer's bounds, and without this the
+          // effect draws only inside them and clips its own falloff.
+          autoPaddingEnabled: true
+          shadowEnabled: true
+          shadowColor: "#000000"
+          shadowBlur: 1.0
+          blurMax: 32
+          shadowOpacity: 0.5
+          shadowVerticalOffset: Style.space(5)
+        }
 
-        Repeater {
-          model: root.slices
-          delegate: CursorSurface {
-            required property int index
-            required property var modelData
+        // Ring and results are the two modes, and they swap in the same
+        // place: the ring while the query is empty, the list the moment
+        // anything is typed. Both are placed off dead center, which is where
+        // the field is, so the swap cannot move the field.
+        Item {
+          id: ring
+          anchors.fill: parent
+          visible: !root.searching
 
-            readonly property real angle: (index * 45 - 90) * Math.PI / 180
-            x: ring.width / 2 + root.ringRadius * Math.cos(angle) - width / 2
-            y: ring.height / 2 + root.ringRadius * Math.sin(angle) - height / 2
-            width: root.itemSize
-            height: root.itemSize
-            radius: Style.cornerRadius
-            hasCursor: root.selected === index
-            foreground: Color.menu.text
-            bordered: true
+          // The dial the discs sit on. Without a stroke through their centers
+          // the eight read as scattered chips rather than one object.
+          Rectangle {
+            anchors.centerIn: parent
+            width: root.ringRadius * 2
+            height: width
+            radius: width / 2
+            color: "transparent"
+            border.width: Style.spacing.hairline
+            border.color: Util.alpha(Color.menu.text, 0.12)
+          }
 
-            Column {
-              anchors.centerIn: parent
-              spacing: Style.spacing.sm
-              Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: modelData.icon
-                color: root.selected === index ? Color.menu.selectedText : Color.menu.text
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.display
+          Repeater {
+            model: root.slices
+            delegate: Item {
+              required property int index
+              required property var modelData
+              readonly property bool active: root.selected === index
+
+              readonly property real angle: (index * 45 - 90) * Math.PI / 180
+              x: ring.width / 2 + root.ringRadius * Math.cos(angle) - width / 2
+              y: ring.height / 2 + root.ringRadius * Math.sin(angle) - height / 2
+              width: root.itemSize
+              height: root.itemSize
+
+              BorderSurface {
+                anchors.fill: parent
+                // A dial of discs reads as one mechanism; the same eight as
+                // rounded squares read as a grid arranged in a circle.
+                radius: width / 2
+                // A surface, not an outline: only a fill separates a slice
+                // from the blurred desktop behind it.
+                color: active
+                  ? root.selectedFill
+                  : root.surfaceFill
+                // A full-weight accent ring against everyone else's hairline.
+                borderSpec: active
+                  ? Border.flat(Color.accent, Style.space(2))
+                  : Border.flat(root.surfaceEdge, Style.spacing.hairline)
+                // Only the disc grows. Scaling the label with it would drift the
+                // whole ring of text every time selection moved.
+                scale: active ? 1.08 : 1
+
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+
+                Text {
+                  anchors.centerIn: parent
+                  text: modelData.icon
+                  color: active ? Color.accent : Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.displayLarge
+                }
               }
+
+              // Outside the disc rather than in it: a circle's usable width
+              // collapses away from its center, and "Bluetooth" does not fit
+              // under an icon in there. At 45 degrees apart the labels of
+              // neighbouring slices are nowhere near each other.
               Text {
+                anchors.top: parent.bottom
+                anchors.topMargin: Style.spacing.sm
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: modelData.label
-                color: root.selected === index ? Color.menu.selectedText : Color.menu.text
+                color: active ? Color.accent : Color.menu.text
+                // Labels name the icon rather than compete with it, so they sit
+                // back until the slice is the one selected.
+                opacity: active ? 1 : 0.6
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.caption
               }
             }
           }
         }
-      }
 
-      // Dead center, fixed size, anchored to nothing that changes: the field
-      // is the one thing that must not move between the two modes.
-      BorderSurface {
-        id: searchBox
-        anchors.centerIn: parent
-        width: root.searchWidth
-        height: Style.spacing.controlHeight + Style.spacing.controlPaddingY * 2
-        // A pill on the same 1px control border the slices use. The panel
-        // border spec is 2px and reads as heavier chrome than the ring it sits
-        // inside, which made the field look bolted on rather than part of it.
-        radius: height / 2
-        color: "transparent"
-        borderSpec: Border.controlSpec(root.searching ? "focus" : "normal", Color.menu.text, Color.accent)
-
-        Text {
+        // Dead center, fixed size, anchored to nothing that changes: the field
+        // is the one thing that must not move between the two modes.
+        BorderSurface {
           anchors.centerIn: parent
-          width: parent.width - Style.spacing.rowPaddingX * 2
-          horizontalAlignment: Text.AlignHCenter
-          elide: Text.ElideRight
-          text: root.searching ? root.query + "▏" : "Search"
-          color: Color.menu.text
-          opacity: root.searching ? 1 : 0.45
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.subtitle
+          width: root.searchWidth
+          height: root.searchHeight
+          radius: height / 2
+          // Filled and edged like the discs: the hub is part of the wheel, and
+          // an unfilled pill over blurred desktop reads as a gap in it.
+          color: root.surfaceFill
+          borderSpec: Border.flat(root.searching ? Color.accent : root.surfaceEdge,
+                                  Style.spacing.hairline)
+
+          Text {
+            anchors.centerIn: parent
+            width: parent.width - Style.spacing.rowPaddingX * 2
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            text: root.searching ? root.query + "▏" : "Search"
+            color: Color.menu.text
+            opacity: root.searching ? 1 : 0.45
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.subtitle
+          }
         }
       }
 
-      Column {
-        anchors.top: searchBox.bottom
-        anchors.topMargin: Style.spacing.panelGap
+      // Results get the same card the Omarchy menu gives its own list, so the
+      // wheel's search mode looks like the rest of the shell rather than rows
+      // laid straight onto the desktop.
+      BorderSurface {
+        // Off the surface's center rather than the pill's edge: the pill is
+        // inside the dial's layer, and anchors don't cross between parents.
+        // Dead center is where the pill sits by construction.
+        anchors.top: parent.verticalCenter
+        anchors.topMargin: root.searchHeight / 2 + Style.spacing.panelGap
         anchors.horizontalCenter: parent.horizontalCenter
         visible: root.searching
-        spacing: Style.spacing.hairline
-
-        Text {
-          anchors.horizontalCenter: parent.horizontalCenter
-          visible: root.results.length === 0
-          text: "No match"
-          color: Color.menu.text
-          opacity: 0.5
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.body
+        width: resultList.width + Style.spacing.popupPadding * 2
+        height: resultList.height + Style.spacing.popupPadding * 2
+        radius: Style.cornerRadius
+        // The same fill and hairline the discs wear. The Omarchy menu's own
+        // 2px full-strength border is louder than anything on the ring, and
+        // wearing it made search mode look like a different surface.
+        color: root.surfaceFill
+        borderSpec: Border.flat(root.surfaceEdge, Style.spacing.hairline)
+        // The card resizes with every query, so its shadow has to come from
+        // the card itself or it draws at a stale size. Layering does not block
+        // the rows' mouse input -- it only changes how they are painted.
+        layer.enabled: true
+        layer.effect: MultiEffect {
+          autoPaddingEnabled: true
+          shadowEnabled: true
+          shadowColor: "#000000"
+          shadowBlur: 1.0
+          // Tighter than the dial's. The discs are small enough to carry a
+          // wide falloff; on a card this size the same one hangs off the
+          // bottom edge as a skirt rather than reading as depth.
+          blurMax: 16
+          shadowOpacity: 0.4
+          shadowVerticalOffset: Style.space(3)
         }
 
-        Repeater {
-          model: root.results
-          delegate: CursorSurface {
-            required property int index
-            required property var modelData
+        Column {
+          id: resultList
+          anchors.centerIn: parent
+          width: root.searchWidth
+          spacing: Style.spacing.hairline
 
-            width: root.searchWidth
-            height: Style.spacing.popupRowHeight + Style.spacing.controlPaddingY * 2
-            radius: Style.cornerRadius
-            hasCursor: root.resultIndex === index
-            foreground: Color.menu.text
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.results.length === 0
+            text: "No match"
+            color: Color.menu.text
+            opacity: 0.5
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.body
+          }
 
-            MouseArea {
-              anchors.fill: parent
-              hoverEnabled: true
-              onEntered: root.resultIndex = index
-              onClicked: root.runResult(index)
-            }
+          Repeater {
+            model: root.results
+            delegate: BorderSurface {
+              required property int index
+              required property var modelData
+              readonly property bool active: root.resultIndex === index
 
-            Row {
-              id: resultRow
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.left: parent.left
-              anchors.leftMargin: Style.spacing.rowPaddingX
-              anchors.right: parent.right
-              anchors.rightMargin: Style.spacing.rowPaddingX
-              spacing: Style.spacing.controlGap
+              width: root.searchWidth
+              height: Style.spacing.popupRowHeight + Style.spacing.controlPaddingY * 2
+              radius: Style.cornerRadius
+              // The same accent tint and ring a selected disc wears, so the
+              // two modes highlight the current thing the same way.
+              color: active
+                ? root.selectedFill
+                : "transparent"
+              borderSpec: active
+                ? Border.flat(Color.accent, Style.spacing.hairline)
+                : Border.none()
 
-              // What the label and the breadcrumb share, once the icon and
-              // the two gaps are paid for. A window title is arbitrary text --
-              // a terminal's is a whole command line -- so without a budget
-              // one row draws straight through the edge of the card.
-              readonly property real textBudget:
-                Math.max(0, width - Style.font.iconLarge - spacing * 2)
+              Behavior on color { ColorAnimation { duration: 90 } }
 
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                visible: !modelData.appIcon
-                width: Style.font.iconLarge
-                text: modelData.icon
-                color: root.resultIndex === index ? Color.menu.selectedText : Color.menu.text
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.iconLarge
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onEntered: root.resultIndex = index
+                onClicked: root.runResult(index)
               }
-              // Apps and windows name an icon file rather than carrying a
-              // glyph. Only one of the two is ever visible, and a Row skips
-              // what isn't.
-              Image {
+
+              Row {
+                id: resultRow
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !!modelData.appIcon
-                width: Style.font.iconLarge
-                height: Style.font.iconLarge
-                source: modelData.appIcon ? root.appLibrary.iconSource(modelData.appIcon) : ""
-                sourceSize.width: Style.font.iconLarge
-                sourceSize.height: Style.font.iconLarge
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-              }
-              Text {
-                id: labelText
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
-                elide: Text.ElideRight
-                text: modelData.label
-                color: root.resultIndex === index ? Color.menu.selectedText : Color.menu.text
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.body
-              }
-              Text {
-                id: trailText
-                anchors.verticalCenter: parent.verticalCenter
-                // Whatever the label leaves, but never squeezed below a share
-                // of its own -- a breadcrumb that elides to nothing is noise.
-                width: Math.min(implicitWidth,
-                                Math.max(resultRow.textBudget * 0.4,
-                                         resultRow.textBudget - labelText.implicitWidth))
-                text: modelData.trail
-                color: Color.menu.text
-                opacity: 0.45
-                elide: Text.ElideRight
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.caption
+                anchors.left: parent.left
+                anchors.leftMargin: Style.spacing.rowPaddingX
+                anchors.right: parent.right
+                anchors.rightMargin: Style.spacing.rowPaddingX
+                spacing: Style.spacing.controlGap
+
+                // What the label and the breadcrumb share, once the icon and
+                // the two gaps are paid for. A window title is arbitrary text --
+                // a terminal's is a whole command line -- so without a budget
+                // one row draws straight through the edge of the card.
+                readonly property real textBudget:
+                  Math.max(0, width - Style.font.iconLarge - spacing * 2)
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: !modelData.appIcon
+                  width: Style.font.iconLarge
+                  text: modelData.icon
+                  color: active ? Color.accent : Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.iconLarge
+                }
+                // Apps and windows name an icon file rather than carrying a
+                // glyph. Only one of the two is ever visible, and a Row skips
+                // what isn't.
+                Image {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: !!modelData.appIcon
+                  width: Style.font.iconLarge
+                  height: Style.font.iconLarge
+                  source: modelData.appIcon ? root.appLibrary.iconSource(modelData.appIcon) : ""
+                  sourceSize.width: Style.font.iconLarge
+                  sourceSize.height: Style.font.iconLarge
+                  fillMode: Image.PreserveAspectFit
+                  asynchronous: true
+                }
+                Text {
+                  id: labelText
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
+                  elide: Text.ElideRight
+                  text: modelData.label
+                  color: active ? Color.accent : Color.menu.text
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.body
+                }
+                Text {
+                  id: trailText
+                  anchors.verticalCenter: parent.verticalCenter
+                  // Whatever the label leaves, but never squeezed below a share
+                  // of its own -- a breadcrumb that elides to nothing is noise.
+                  width: Math.min(implicitWidth,
+                                  Math.max(resultRow.textBudget * 0.4,
+                                           resultRow.textBudget - labelText.implicitWidth))
+                  text: modelData.trail
+                  color: Color.menu.text
+                  opacity: 0.45
+                  elide: Text.ElideRight
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.caption
+                }
               }
             }
           }
