@@ -117,7 +117,8 @@ Item {
   // so the first sample is kept as an origin and the wheel only arms once the
   // pointer has travelled past this from it.
   readonly property int moveThreshold: Style.space(8)
-  // Shared by the fade and by the timer that waits for it.
+  // One tempo for every transition the wheel makes as a whole: the open and
+  // close fade, the timer that waits on it, and the ring-to-results swap.
   readonly property int fadeDuration: 130
   property real originX: -1
   property real originY: -1
@@ -438,7 +439,14 @@ Item {
         Item {
           id: ring
           anchors.fill: parent
-          visible: !root.searching
+          // Traded for the card rather than switched off: the ring draws back
+          // as the list comes forward. `visible` still follows the fade so a
+          // ring at zero opacity stops being composited at all.
+          opacity: root.searching ? 0 : 1
+          scale: root.searching ? 0.94 : 1
+          visible: opacity > 0
+          Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
+          Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
 
           // The dial the discs sit on. Without a stroke through their centers
           // the eight read as scattered chips rather than one object.
@@ -583,7 +591,16 @@ Item {
         anchors.top: parent.verticalCenter
         anchors.topMargin: root.searchHeight / 2 + Style.spacing.panelGap
         anchors.horizontalCenter: parent.horizontalCenter
-        visible: root.searching
+        // Grown from its top edge, which is pinned just under the pill, so the
+        // card reads as unrolling out of the field rather than swelling from
+        // its own middle. Rows carry MouseAreas, so a faded card must go
+        // properly invisible or it keeps catching clicks over the ring.
+        transformOrigin: Item.Top
+        opacity: root.searching ? 1 : 0
+        scale: root.searching ? 1 : 0.96
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
         width: resultList.width + Style.spacing.popupPadding * 2
         height: resultList.height + Style.spacing.popupPadding * 2
         radius: Style.cornerRadius
