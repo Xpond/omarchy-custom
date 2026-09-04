@@ -117,6 +117,8 @@ Item {
   // so the first sample is kept as an origin and the wheel only arms once the
   // pointer has travelled past this from it.
   readonly property int moveThreshold: Style.space(8)
+  // Shared by the fade and by the timer that waits for it.
+  readonly property int fadeDuration: 130
   property real originX: -1
   property real originY: -1
   readonly property string pluginId: (manifest && manifest.id) || "xpo.wheel"
@@ -139,7 +141,10 @@ Item {
   }
 
   function open(payloadJson) {
-    var wasOpen = root.opened
+    // A wheel that is still fading out is logically shut, so a press during
+    // the fade is a fresh open and earns the tap-to-hold grace.
+    var wasOpen = root.opened && !unmap.running
+    unmap.stop()
     root.selected = -1
     root.armed = false
     root.originX = -1
@@ -152,10 +157,30 @@ Item {
     Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
   }
 
-  function close() { root.opened = false; root.shown = false }
+  // `visible` follows `opened`, so dropping it unmaps the layer surface on the
+  // spot -- which is why the exit half of the fade never used to play. Drop
+  // `shown` to run the fade and let the surface go once it has finished.
+  //
+  // Firing a slice is the one case that cannot wait: the target panel grabs
+  // the keyboard on the next tick, and a layer surface still holding an
+  // exclusive grab hands it a window without focus. Cancelling has nobody to
+  // hand off to, so that path gets the fade. The shell's own hide() reaches
+  // this as close(null), which is the fade.
+  function close(immediate) {
+    if (immediate) { unmap.stop(); root.opened = false; root.shown = false; return }
+    if (!root.opened || unmap.running) return
+    root.shown = false
+    unmap.start()
+  }
 
-  function dismiss() {
-    root.close()
+  Timer {
+    id: unmap
+    interval: root.fadeDuration
+    onTriggered: root.opened = false
+  }
+
+  function dismiss(immediate) {
+    root.close(immediate)
     if (root.shell && typeof root.shell.hide === "function") root.shell.hide(root.pluginId)
   }
 
@@ -205,7 +230,7 @@ Item {
   function activate(i) {
     if (i < 0 || i >= root.slices.length) return
     var s = root.slices[i]
-    root.dismiss()
+    root.dismiss(true)
     // Let this layer surface unmap and hand the keyboard back before the
     // target grabs it, or the panel opens without focus.
     Qt.callLater(function () {
@@ -218,7 +243,7 @@ Item {
     var r = root.results[i]
     if (!r) return
     if (r.slice >= 0) { root.activate(r.slice); return }
-    root.dismiss()
+    root.dismiss(true)
     Qt.callLater(function () {
       // Omarchy 4 configures Hyprland in Lua, and its dispatcher rejects the
       // legacy string form -- which is what both Quickshell's own activate()
@@ -307,7 +332,7 @@ Item {
     color: "transparent"
     WlrLayershell.namespace: "omarchy-wheel"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: root.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
 
     Rectangle {
@@ -382,8 +407,8 @@ Item {
       anchors.fill: parent
       opacity: root.shown ? 1 : 0
       scale: root.shown ? 1 : 0.92
-      Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-      Behavior on scale { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+      Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
+      Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
 
       // Ring and pill drawn once into a texture, so one effect pass shadows
       // the whole dial. Not a separate MultiEffect fed by `source`: that form
@@ -510,6 +535,10 @@ Item {
                 // Labels name the icon rather than compete with it, so they sit
                 // back until the slice is the one selected.
                 opacity: active ? 1 : 0.6
+                // The disc under it eases; without these the ring of text
+                // strobes while the discs glide.
+                Behavior on color { ColorAnimation { duration: 90 } }
+                Behavior on opacity { NumberAnimation { duration: 90 } }
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.caption
               }
