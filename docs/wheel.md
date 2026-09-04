@@ -3,9 +3,9 @@
 A radial control center for Omarchy, on `SUPER+A`.
 
 Eight panels sit on a ring, reachable by direction; typing turns the hub into
-a search over every entry in the Omarchy menu and every installed app. It
-replaces reaching for eight separate `SUPER+CTRL` shortcuts with one key and a
-direction.
+a search over every entry in the Omarchy menu, every installed app, every open
+window, and every theme and font. It replaces reaching for eight separate
+`SUPER+CTRL` shortcuts with one key and a direction.
 
     plugins/xpo.wheel/
       manifest.json   kind: "overlay", keepLoaded
@@ -19,7 +19,7 @@ direction.
 | `SUPER+A` | open (tap — do not hold, see below) |
 | `↑` `↓` `←` `→` | `↑` Audio · `↓` Menu · `←` Display · `→` System, then `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice |
-| type anything | search every menu action and installed app |
+| type anything | search menu actions, apps, windows, themes and fonts |
 | `Esc` | clear the query, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
@@ -73,12 +73,18 @@ because this runs on every window close.
 
 Two things about that script are load-bearing, and both were bugs first:
 
-**`hyprctl dispatch killactive` does nothing.** Omarchy 4's Hyprland takes Lua
+**Legacy Hyprland dispatchers do nothing.** Omarchy 4's Hyprland takes Lua
 dispatchers — `hyprctl` wraps the argument as `hl.dispatch(<arg>)`, so the
-legacy string form is rejected at runtime with a nonzero exit and the window
-simply never closes. Use `hyprctl dispatch 'hl.dsp.window.close()'`. This is
-the same trap as `env =` in `hyprland.conf` and `layerrule`: the old syntax is
-accepted by the tooling and inert in practice.
+legacy string form is rejected at runtime and the action never happens. Same
+trap as `env =` in `hyprland.conf` and `layerrule`: accepted by the tooling,
+inert in practice. Two of these bit this project.
+
+`killactive` fails loudly, with a nonzero exit; use `hl.dsp.window.close()`.
+Focusing a window fails *silently*: Quickshell's `HyprlandToplevel.activate()`
+returns without error and focus simply does not move, because it sends
+`focuswindow` under the hood. Use `hl.dsp.focus({ window = "address:0x..." })`.
+Note the `0x` — Quickshell reports the address without it, and Hyprland only
+matches it with one.
 
 **Do not use `omarchy-shell -q` when you need the answer.** Quiet mode
 suppresses stdout (`if (( !QUIET )) && [[ -n $output ]]`), so the result never
@@ -100,14 +106,27 @@ appear as breadcrumbs. That yields 271 searchable rows from 320 entries.
 Applications come from `shell.appLibrary` (`services/AppLibrary.qml`), which
 wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
 resolves an icon name to a file, and launches through `uwsm-app -- gtk-launch`
-so an app does not inherit the compositor's service scope. Its `appsChanged`
-rebuilds the index, so a newly installed app is searchable without a restart.
+so an app does not inherit the compositor's service scope.
+
+Open windows come from `Hyprland.toplevels`. A row carries the window's address
+rather than its toplevel object, so it can never go stale on a window that has
+since closed, and focusing one is a `Hyprland.dispatch` — see the trap below.
+
+Themes and fonts are `omarchy theme list` and `omarchy font list`, run once at
+startup and fired back as `omarchy theme set '<name>'`. Both are otherwise
+buried: `style.theme` in the menu shells out to `omarchy-theme-switcher`, a
+second overlay on top of the first.
+
+The whole index is rebuilt when the wheel opens. That is the only moment any of
+it has to be correct, and it means windows, apps and menu entries are all as
+fresh as the keystroke that asked for them.
 
 Every query term must appear somewhere in the row, so terms narrow. Ranking is
 label-prefix, then label-substring, then a hit anywhere else (breadcrumb,
 alias, description), with shorter labels breaking ties. A dead heat past that
-goes slice, then app, then menu entry — "chromium" matches the app and the
-menu's install/set-default rows identically, and the app is what was meant.
+goes by `KIND` — slice, window, app, theme/font, menu — so "chromium", which
+matches the app and the menu's install/set-default rows identically, lands on
+the app.
 
 `when:` conditions are **not** evaluated — they need a bash round trip per
 entry, which the shell's own menu batches at startup. Hardware-specific rows
@@ -116,4 +135,9 @@ therefore appear in search on machines they don't apply to.
 ## Known limits
 
 - Opens on the primary monitor only, same as the emoji overlay.
+- A window is found by its title, and only ranks well when the title starts
+  with the query. `brave` puts the browser's window last, behind seven menu
+  rows, because its title reads "Browse Plugins | Omarchy Plugins - Brave".
+  Searching the app id (`kitty`) lists every window of that app together,
+  which is the reliable way in.
 - The 8 ring slices are hard-coded in `Wheel.qml`; there is no config file yet.

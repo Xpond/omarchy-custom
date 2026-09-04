@@ -21,7 +21,7 @@ a merge on every upstream release.
 
 **The wheel** (`plugins/xpo.wheel/`) — a radial control center on `SUPER+A`.
 Eight panels on a ring reachable by direction, and a search field in the hub
-that covers every entry in the Omarchy menu plus every installed app.
+that covers the Omarchy menu, installed apps, open windows, themes and fonts.
 `SUPER+W` closes the wheel and anything it opened, falling back to
 close-window.
 See [`docs/wheel.md`](docs/wheel.md).

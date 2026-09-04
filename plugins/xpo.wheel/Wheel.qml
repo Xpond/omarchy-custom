@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
@@ -30,6 +31,8 @@ Item {
 
   property string query: ""
   property var menuItems: ({})
+  property var themes: []
+  property var fonts: []
   readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
   property var index: []
   readonly property var results: MenuIndex.search(root.index, root.query, 8)
@@ -71,9 +74,15 @@ Item {
   // Applications come from the shell's own library rather than a .desktop scan
   // of our own: it sorts, drops hidden entries, resolves icon names, and
   // launches through uwsm so an app doesn't inherit the compositor's scope.
+  // Windows come straight off the compositor. Both are read fresh on every
+  // open rather than watched, which is the only moment either has to be right.
   function rebuildIndex() {
-    root.index = MenuIndex.build(root.menuItems, root.slices,
-                                 root.appLibrary ? root.appLibrary.sortedEntries("") : [])
+    root.index = MenuIndex.build(root.menuItems, root.slices, {
+      apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
+      windows: Hyprland.toplevels.values,
+      themes: root.themes,
+      fonts: root.fonts
+    })
   }
 
   function open(payloadJson) {
@@ -86,6 +95,7 @@ Item {
     // a press onto an already-open wheel is the second tap, which closes it.
     root.justOpened = !wasOpen
     root.opened = true
+    root.rebuildIndex()
     Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
   }
 
@@ -149,7 +159,11 @@ Item {
     if (r.slice >= 0) { root.activate(r.slice); return }
     root.dismiss()
     Qt.callLater(function () {
-      if (r.appId) root.appLibrary.launch(r.appId, r.label)
+      // Omarchy 4 configures Hyprland in Lua, and its dispatcher rejects the
+      // legacy string form -- which is what both Quickshell's own activate()
+      // and `hyprctl dispatch focuswindow` send, silently doing nothing.
+      if (r.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + r.address + "\" })")
+      else if (r.appId) root.appLibrary.launch(r.appId, r.label)
       else Util.execDetached(r.action)
     })
   }
@@ -176,30 +190,29 @@ Item {
   }
 
   onQueryChanged: root.resultIndex = 0
-  // The shell is injected after this component loads, so the first app list
-  // has to wait for it; afterwards the library tells us when apps change.
-  onAppLibraryChanged: root.rebuildIndex()
 
-  Connections {
-    target: root.appLibrary
-    ignoreUnknownSignals: true
-    function onAppsChanged() { root.rebuildIndex() }
+  // Listed once at startup: installing a theme or a font is a rare, deliberate
+  // act, and both commands cost a subprocess that opening the wheel shouldn't.
+  Process {
+    running: true
+    command: ["omarchy", "theme", "list"]
+    stdout: StdioCollector { onStreamFinished: root.themes = MenuIndex.lines(text) }
+  }
+
+  Process {
+    running: true
+    command: ["omarchy", "font", "list"]
+    stdout: StdioCollector { onStreamFinished: root.fonts = MenuIndex.lines(text) }
   }
 
   FileView {
     path: root.omarchyPath + "/default/omarchy/omarchy-menu.jsonc"
-    onLoaded: {
-      root.menuItems = MenuIndex.merge(MenuIndex.parse(text()), root.menuItems)
-      root.rebuildIndex()
-    }
+    onLoaded: root.menuItems = MenuIndex.merge(MenuIndex.parse(text()), root.menuItems)
   }
 
   FileView {
     path: Quickshell.env("HOME") + "/.config/omarchy/extensions/omarchy-menu.jsonc"
-    onLoaded: {
-      root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.parse(text()))
-      root.rebuildIndex()
-    }
+    onLoaded: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.parse(text()))
   }
 
   PanelWindow {
@@ -400,6 +413,7 @@ Item {
             }
 
             Row {
+              id: resultRow
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
               anchors.leftMargin: Style.spacing.rowPaddingX
@@ -407,37 +421,54 @@ Item {
               anchors.rightMargin: Style.spacing.rowPaddingX
               spacing: Style.spacing.controlGap
 
+              // What the label and the breadcrumb share, once the icon and
+              // the two gaps are paid for. A window title is arbitrary text --
+              // a terminal's is a whole command line -- so without a budget
+              // one row draws straight through the edge of the card.
+              readonly property real textBudget:
+                Math.max(0, width - Style.font.iconLarge - spacing * 2)
+
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !modelData.appId
+                visible: !modelData.appIcon
                 width: Style.font.iconLarge
                 text: modelData.icon
                 color: root.resultIndex === index ? Color.menu.selectedText : Color.menu.text
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.iconLarge
               }
-              // Apps have an image icon rather than a glyph. Only one of the
-              // two is ever visible, and a Row skips what isn't.
+              // Apps and windows name an icon file rather than carrying a
+              // glyph. Only one of the two is ever visible, and a Row skips
+              // what isn't.
               Image {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !!modelData.appId
+                visible: !!modelData.appIcon
                 width: Style.font.iconLarge
                 height: Style.font.iconLarge
-                source: modelData.appId ? root.appLibrary.iconSource(modelData.appIcon) : ""
+                source: modelData.appIcon ? root.appLibrary.iconSource(modelData.appIcon) : ""
                 sourceSize.width: Style.font.iconLarge
                 sourceSize.height: Style.font.iconLarge
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
               }
               Text {
+                id: labelText
                 anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
+                elide: Text.ElideRight
                 text: modelData.label
                 color: root.resultIndex === index ? Color.menu.selectedText : Color.menu.text
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.body
               }
               Text {
+                id: trailText
                 anchors.verticalCenter: parent.verticalCenter
+                // Whatever the label leaves, but never squeezed below a share
+                // of its own -- a breadcrumb that elides to nothing is noise.
+                width: Math.min(implicitWidth,
+                                Math.max(resultRow.textBudget * 0.4,
+                                         resultRow.textBudget - labelText.implicitWidth))
                 text: modelData.trail
                 color: Color.menu.text
                 opacity: 0.45
