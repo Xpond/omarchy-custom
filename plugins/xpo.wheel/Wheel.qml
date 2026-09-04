@@ -138,10 +138,13 @@ Item {
   // a long streak while an arrow is held down. Unwrapped rather than kept in
   // 0..360, so a lap past north keeps running forward.
   property real arcTarget: -90
+  // Both durations ride the charge: the head closes on the target quicker
+  // while the tail lets go slower, so a held arrow sharpens the point and
+  // stretches the streak at the same time.
   property real arcHead: root.arcTarget
-  Behavior on arcHead { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+  Behavior on arcHead { NumberAnimation { duration: 90 - 45 * root.charge; easing.type: Easing.OutCubic } }
   property real arcTail: root.arcTarget
-  Behavior on arcTail { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+  Behavior on arcTail { NumberAnimation { duration: 300 + 160 * root.charge; easing.type: Easing.OutCubic } }
   // Half the arc at rest. The discs are painted over the dial, so anything no
   // wider than one hides behind it; half a slice's share of the ring, less a
   // hair, lights the dial on either side of the selected disc instead.
@@ -152,6 +155,97 @@ Item {
   readonly property real arcDrag: Math.max(-300, Math.min(300, root.arcHead - root.arcTail))
   readonly property real arcFrom: Math.min(root.arcHead, root.arcHead - root.arcDrag) - root.arcSpread
   readonly property real arcSpan: Math.abs(root.arcDrag) + root.arcSpread * 2
+  // How hard the ring is being turned, 0 at rest and 1 saturated. Every step
+  // adds a bite and the bleed takes it back out faster than a person can
+  // press: stepping by hand never accumulates, while an arrow held at the
+  // 40Hz key-repeat rate fills it in about a quarter second and a release
+  // empties it in half of one. The comet's hue and its speed both read from
+  // this one number, so the two cannot drift apart.
+  property real charge: 0
+
+  // How far round the color wheel this spin has travelled. A fixed offset per
+  // charge arrives at one color and sits there, which is what a long hold
+  // looked like: this keeps moving for as long as the ring is being turned,
+  // about half a rotation of hue per second at the key-repeat rate.
+  property real huePhase: 0
+
+  // One tick bleeds both of those back out.
+  Timer {
+    interval: 40
+    repeat: true
+    running: root.charge > 0
+    onTriggered: {
+      root.charge = Math.max(0, root.charge - 0.09)
+      // Back to the theme's own accent once the ring has stopped, so the next
+      // spin starts from it rather than from wherever the last one ended.
+      if (root.charge <= 0) root.huePhase = 0
+    }
+  }
+
+  // The comet heats up as it spins: the accent's own color, turned `turns` of
+  // the way round the spectrum, with `amount` saying how far from the accent
+  // it is allowed to get. Swept in OKLCH rather than HSL, because rotating an
+  // HSL hue at a fixed lightness walks sRGB's idea of brightness rather than
+  // the eye's -- a pure yellow carries about twice the weight of a pure blue
+  // at the same "lightness", so the sweep lands hard on four or five poster
+  // colors and skips everything in between. OKLCH holds the perceived
+  // lightness and the chroma steady, so the whole spectrum comes past at one
+  // weight and no hue is a landmark.
+  function cometAt(turns, amount) {
+    // Cube root by hand: the linear channels below are never negative, and
+    // Math.cbrt is not worth depending on for three calls.
+    function cb(v) { return Math.pow(Math.max(0, v), 1 / 3) }
+    function lin(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+    var c = Color.accent
+    var r = lin(c.r), g = lin(c.g), b = lin(c.b)
+    var la = cb(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+    var ma = cb(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+    var sa = cb(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+    var L = 0.2104542553 * la + 0.7936177850 * ma - 0.0040720468 * sa
+    var A = 1.9779984951 * la - 2.4285922050 * ma + 0.4505937099 * sa
+    var B = 0.0259040371 * la + 0.7827717662 * ma - 0.8086757660 * sa
+
+    var C = Math.sqrt(A * A + B * B)
+    var h = Math.atan2(B, A) + turns * 2 * Math.PI
+    // Pulled toward a band that can actually hold color at every hue as the
+    // spin builds: a near-white or near-black accent has nowhere to put
+    // chroma, and a grey one has no chroma to rotate in the first place.
+    // At `amount` 0 both are the accent's own, so a ring at rest is exactly
+    // the theme's color and winds back to it as the spin bleeds out.
+    L += (Math.min(0.78, Math.max(0.52, L)) - L) * amount
+    C += (0.13 - C) * amount
+
+    A = C * Math.cos(h)
+    B = C * Math.sin(h)
+    var lb = L + 0.3963377774 * A + 0.2158037573 * B
+    var mb = L - 0.1055613458 * A - 0.0638541728 * B
+    var sb = L - 0.0894841775 * A - 1.2914855480 * B
+    lb = lb * lb * lb; mb = mb * mb * mb; sb = sb * sb * sb
+    function enc(v) {
+      v = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(Math.max(0, v), 1 / 2.4) - 0.055
+      return Math.max(0, Math.min(1, v))
+    }
+    return Qt.rgba(enc( 4.0767416621 * lb - 3.3077115913 * mb + 0.2309699292 * sb),
+                   enc(-1.2684380046 * lb + 2.6097574011 * mb - 0.3413193965 * sb),
+                   enc(-0.0041960863 * lb - 0.7034186147 * mb + 1.7076147010 * sb), 1)
+  }
+
+  readonly property color cometColor: root.charge <= 0 ? Color.accent
+    : root.cometAt(root.huePhase * root.charge, root.charge)
+
+  // How hard the comet is sitting over a given bearing: 1 right at the head,
+  // falling off to 0 at the end of the tail, 0 anywhere the streak is not.
+  // What the trail crosses lights up from this, which is what stops the
+  // streak looking like it passes behind the discs.
+  function sweepAt(deg) {
+    var span = Math.abs(root.arcDrag) + root.arcSpread
+    // Degrees behind the head, measured against the way the ring is turning.
+    var off = ((deg - root.arcHead) % 360 + 540) % 360 - 180
+    var behind = root.arcDrag >= 0 ? -off : off
+    if (behind < -root.arcSpread || behind > span) return 0
+    return 1 - Math.max(0, behind) / span
+  }
+
   // Opening spins the comet once around the ring. This has to step the target
   // in whole slices at the key-repeat rate rather than sweep it smoothly: the
   // streak is the gap the two followers open up behind a jump, so a target
@@ -358,6 +452,8 @@ Item {
 
   function rotate(step) {
     var n = root.sliceCount
+    root.charge = Math.min(1, root.charge + 0.16)
+    root.huePhase += 0.012
     root.select(root.selected < 0 ? (step > 0 ? 0 : n - 1) : (root.selected + step + n) % n)
   }
 
@@ -630,8 +726,8 @@ Item {
             opacity: root.selected >= 0 || Math.abs(root.arcDrag) > 0.5 ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
 
-            Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(Color.accent, 0.16) }
-            Track { strokeWidth: Style.space(3); strokeColor: Color.accent }
+            Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(root.cometColor, 0.16) }
+            Track { strokeWidth: Style.space(3); strokeColor: root.cometColor }
           }
 
           Repeater {
@@ -641,6 +737,12 @@ Item {
               required property int index
               required property var modelData
               readonly property bool active: root.selected === index
+              // Where the streak is on this disc right now, and what that
+              // does to its glyph: full accent while selected, and the
+              // comet's hue washing over it as the trail crosses.
+              readonly property real sweep: root.sweepAt(root.sliceAngle(index) - 90)
+              readonly property color glyphColor: Qt.tint(Color.menu.text,
+                Util.alpha(root.cometColor, active ? 1 : slice.sweep))
               // Tied to the disc rather than fixed: once the ring is full
               // enough that the discs have to shrink, a fixed icon would be the
               // thing that overflows them.
@@ -662,10 +764,15 @@ Item {
                 color: active
                   ? root.selectedFill
                   : root.surfaceFill
-                // A full-weight accent ring against everyone else's hairline.
+                // A full weight ring against everyone else's hairline, in
+                // the comet's hue rather than the flat accent -- and every
+                // unselected one takes that hue as the streak crosses it and
+                // gives it back as the tail leaves.
                 borderSpec: active
-                  ? Border.flat(Color.accent, Style.space(2))
-                  : Border.flat(root.surfaceEdge, Style.spacing.hairline)
+                  ? Border.flat(root.cometColor, Style.space(2))
+                  : Border.flat(Qt.tint(root.surfaceEdge,
+                                        Util.alpha(root.cometColor, slice.sweep * 0.9)),
+                                Style.spacing.hairline)
                 // Only the disc grows. Scaling the label with it would drift the
                 // whole ring of text every time selection moved.
                 scale: active ? root.selectedScale : 1
@@ -677,7 +784,7 @@ Item {
                   anchors.centerIn: parent
                   visible: !modelData.iconFile
                   text: modelData.icon
-                  color: active ? Color.accent : Color.menu.text
+                  color: slice.glyphColor
                   font.family: Style.font.menuFamily
                   font.pixelSize: slice.glyphSize
                 }
@@ -687,7 +794,7 @@ Item {
                   anchors.centerIn: parent
                   file: modelData.iconFile || ""
                   size: slice.glyphSize
-                  tint: slice.active ? Color.accent : Color.menu.text
+                  tint: slice.glyphColor
                 }
               }
 
