@@ -163,19 +163,32 @@ Item {
   // this one number, so the two cannot drift apart.
   property real charge: 0
 
+  // How long the ring has been held at speed. The comet has to answer the
+  // first keypress, but the screen taking the wheel's color is a reward for a
+  // real spin rather than a flick, so this runs on its own much slower clock:
+  // a couple of seconds of spinning to fill, under one to drain.
+  property real hold: 0
+  // ...and dead for the first stretch of that, so several laps of the comet go
+  // past before anything happens at all.
+  readonly property real glow: Math.max(0, Math.min(1, (root.hold - 0.3) / 0.7))
+
   // How far round the color wheel this spin has travelled. A fixed offset per
   // charge arrives at one color and sits there, which is what a long hold
   // looked like: this keeps moving for as long as the ring is being turned,
   // about half a rotation of hue per second at the key-repeat rate.
   property real huePhase: 0
 
-  // One tick bleeds both of those back out.
+  // One tick bleeds all three of those back out.
   Timer {
     interval: 40
     repeat: true
-    running: root.charge > 0
+    running: root.charge > 0 || root.hold > 0
     onTriggered: {
       root.charge = Math.max(0, root.charge - 0.09)
+      // Only a ring already at speed fills the hold.
+      root.hold = root.charge > 0.9
+        ? Math.min(1, root.hold + 0.018)
+        : Math.max(0, root.hold - 0.045)
       // Back to the theme's own accent once the ring has stopped, so the next
       // spin starts from it rather than from wherever the last one ended.
       if (root.charge <= 0) root.huePhase = 0
@@ -588,6 +601,33 @@ Item {
     Rectangle {
       anchors.fill: parent
       color: Color.menu.scrim
+    }
+
+    // The blurred desktop takes the comet's own color as the ring winds up,
+    // and gives it back as the spin bleeds out. Hyprland owns the blur itself
+    // -- its size and passes are global config, and driving them per frame
+    // would mean an hyprctl round trip on every step -- so what moves is the
+    // scrim laid over it.
+    //
+    // The falloff is a shader because every stock way of drawing it was
+    // visibly segmented: bloom.frag carries the reasoning and the curve.
+    // Uniforms bind by name, and these three floats pack tight after
+    // qt_Opacity with the color on the next 16 -- check `qsb --dump` if one
+    // is ever added, because std140 padding here fails silently.
+    ShaderEffect {
+      anchors.fill: parent
+      visible: root.glow > 0
+      fragmentShader: Qt.resolvedUrl("bloom.frag.qsb")
+      // Center to furthest corner, in the half-heights the shader measures
+      // in. Blooms outward as the spin builds, so the reach is part of the
+      // readout, and lands on the screen's own corners at full spin -- short
+      // of them, the falloff's own edge shows as a circle.
+      readonly property real reach: Math.sqrt(surface.width * surface.width
+        + surface.height * surface.height) / surface.height
+        * (0.62 + 0.38 * root.glow)
+      readonly property real amount: root.glow * 0.09
+      readonly property real aspect: surface.width / surface.height
+      readonly property color tint: root.cometColor
     }
 
     MouseArea {
