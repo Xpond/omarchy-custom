@@ -34,10 +34,11 @@ function trailOf(items, id) {
   return trail
 }
 
-// One flat list of everything runnable: the wheel's own slices, then every
-// menu entry carrying an action. Entries without one are submenus -- they hold
-// nothing to run, and their labels already appear as breadcrumbs.
-function build(items, slices) {
+// One flat list of everything runnable: the wheel's own slices, every menu
+// entry carrying an action, and every desktop application. Menu entries
+// without an action are submenus -- they hold nothing to run, and their
+// labels already appear as breadcrumbs.
+function build(items, slices, apps) {
   var out = []
   for (var i = 0; i < slices.length; i++) {
     out.push({ icon: slices[i].icon, label: slices[i].label, trail: "Wheel",
@@ -55,6 +56,22 @@ function build(items, slices) {
                 .join(" ").toLowerCase()
     })
   }
+  // `apps` is the shell app library's own row list, so each element wraps the
+  // desktop entry. An app carries an icon NAME rather than a glyph -- the row
+  // resolves it to a file -- and launches by desktop id, not by command.
+  for (var j = 0; j < apps.length; j++) {
+    var a = apps[j].entry
+    if (!a.id) continue
+    var name = String(a.name || a.id)
+    out.push({
+      icon: "", appIcon: String(a.icon || ""), label: name, trail: "App",
+      appId: String(a.id), slice: -1,
+      keywords: [name, a.genericName || "", a.comment || "",
+                 a.keywords && a.keywords.join ? a.keywords.join(" ") : "",
+                 String(a.id).replace(/[._]/g, " ")]
+                .join(" ").toLowerCase()
+    })
+  }
   return out
 }
 
@@ -62,6 +79,9 @@ function build(items, slices) {
 // widen. Ranking puts a label that starts with the query above one that merely
 // contains it, above a hit that only matched a breadcrumb or alias; shorter
 // labels break ties, which floats "Screenshot" over "Stop Screenrecording".
+// Dead heats past that go slice, then app, then menu entry: "firefox" matches
+// the app and the menu's install/remove/set-default rows identically, and the
+// one the typist meant is the app.
 function search(index, query, limit) {
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
@@ -76,9 +96,10 @@ function search(index, query, limit) {
     if (!matched) continue
     var label = e.label.toLowerCase()
     var at = label.indexOf(q)
-    hits.push({ rank: at === 0 ? 0 : (at !== -1 ? 1 : 2), len: label.length, entry: e })
+    hits.push({ rank: at === 0 ? 0 : (at !== -1 ? 1 : 2), len: label.length,
+                kind: e.slice >= 0 ? 0 : (e.appId ? 1 : 2), entry: e })
   }
-  hits.sort(function (a, b) { return a.rank - b.rank || a.len - b.len })
+  hits.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.kind - b.kind })
   var out = []
   for (var j = 0; j < hits.length && j < limit; j++) out.push(hits[j].entry)
   return out

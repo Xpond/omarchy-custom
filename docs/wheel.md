@@ -3,8 +3,9 @@
 A radial control center for Omarchy, on `SUPER+A`.
 
 Eight panels sit on a ring, reachable by direction; typing turns the hub into
-a search over every entry in the Omarchy menu. It replaces reaching for eight
-separate `SUPER+CTRL` shortcuts with one key and a direction.
+a search over every entry in the Omarchy menu and every installed app. It
+replaces reaching for eight separate `SUPER+CTRL` shortcuts with one key and a
+direction.
 
     plugins/xpo.wheel/
       manifest.json   kind: "overlay", keepLoaded
@@ -18,7 +19,7 @@ separate `SUPER+CTRL` shortcuts with one key and a direction.
 | `SUPER+A` | open (tap — do not hold, see below) |
 | `↑` `↓` `←` `→` | `↑` Audio · `↓` Menu · `←` Display · `→` System, then `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice |
-| type anything | search all 271 menu actions |
+| type anything | search every menu action and installed app |
 | `Esc` | clear the query, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
@@ -96,9 +97,17 @@ trailing commas, and merges the user's over the defaults by id. Ids are dotted
 Entries without an `action` are submenus and are skipped; their labels still
 appear as breadcrumbs. That yields 271 searchable rows from 320 entries.
 
+Applications come from `shell.appLibrary` (`services/AppLibrary.qml`), which
+wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
+resolves an icon name to a file, and launches through `uwsm-app -- gtk-launch`
+so an app does not inherit the compositor's service scope. Its `appsChanged`
+rebuilds the index, so a newly installed app is searchable without a restart.
+
 Every query term must appear somewhere in the row, so terms narrow. Ranking is
 label-prefix, then label-substring, then a hit anywhere else (breadcrumb,
-alias, description), with shorter labels breaking ties.
+alias, description), with shorter labels breaking ties. A dead heat past that
+goes slice, then app, then menu entry — "chromium" matches the app and the
+menu's install/set-default rows identically, and the app is what was meant.
 
 `when:` conditions are **not** evaluated — they need a bash round trip per
 entry, which the shell's own menu batches at startup. Hardware-specific rows

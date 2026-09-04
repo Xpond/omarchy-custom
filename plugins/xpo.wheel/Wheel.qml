@@ -30,6 +30,7 @@ Item {
 
   property string query: ""
   property var menuItems: ({})
+  readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
   property var index: []
   readonly property var results: MenuIndex.search(root.index, root.query, 8)
   property int resultIndex: 0
@@ -67,7 +68,13 @@ Item {
   property real originY: -1
   readonly property string pluginId: (manifest && manifest.id) || "xpo.wheel"
 
-  function rebuildIndex() { root.index = MenuIndex.build(root.menuItems, root.slices) }
+  // Applications come from the shell's own library rather than a .desktop scan
+  // of our own: it sorts, drops hidden entries, resolves icon names, and
+  // launches through uwsm so an app doesn't inherit the compositor's scope.
+  function rebuildIndex() {
+    root.index = MenuIndex.build(root.menuItems, root.slices,
+                                 root.appLibrary ? root.appLibrary.sortedEntries("") : [])
+  }
 
   function open(payloadJson) {
     var wasOpen = root.opened
@@ -141,7 +148,10 @@ Item {
     if (!r) return
     if (r.slice >= 0) { root.activate(r.slice); return }
     root.dismiss()
-    Qt.callLater(function () { Util.execDetached(r.action) })
+    Qt.callLater(function () {
+      if (r.appId) root.appLibrary.launch(r.appId, r.label)
+      else Util.execDetached(r.action)
+    })
   }
 
   function moveResult(step) {
@@ -166,6 +176,15 @@ Item {
   }
 
   onQueryChanged: root.resultIndex = 0
+  // The shell is injected after this component loads, so the first app list
+  // has to wait for it; afterwards the library tells us when apps change.
+  onAppLibraryChanged: root.rebuildIndex()
+
+  Connections {
+    target: root.appLibrary
+    ignoreUnknownSignals: true
+    function onAppsChanged() { root.rebuildIndex() }
+  }
 
   FileView {
     path: root.omarchyPath + "/default/omarchy/omarchy-menu.jsonc"
@@ -390,11 +409,25 @@ Item {
 
               Text {
                 anchors.verticalCenter: parent.verticalCenter
+                visible: !modelData.appId
                 width: Style.font.iconLarge
                 text: modelData.icon
                 color: root.resultIndex === index ? Color.menu.selectedText : Color.menu.text
                 font.family: Style.font.menuFamily
                 font.pixelSize: Style.font.iconLarge
+              }
+              // Apps have an image icon rather than a glyph. Only one of the
+              // two is ever visible, and a Row skips what isn't.
+              Image {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !!modelData.appId
+                width: Style.font.iconLarge
+                height: Style.font.iconLarge
+                source: modelData.appId ? root.appLibrary.iconSource(modelData.appIcon) : ""
+                sourceSize.width: Style.font.iconLarge
+                sourceSize.height: Style.font.iconLarge
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
               }
               Text {
                 anchors.verticalCenter: parent.verticalCenter
