@@ -54,6 +54,15 @@ function quote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'"
 }
 
+// How long ago a window was focused, smaller being more recent. The order the
+// wheel observed itself wins. A window it has not seen focused -- every one of
+// them, for a moment after the shell restarts -- sorts behind those, by
+// Hyprland's own cached history, which is right at the instant it was fetched.
+function recencyOf(order, address, cachedHistory) {
+  var seen = order.indexOf(address)
+  return seen >= 0 ? seen : order.length + (Number(cachedHistory) || 0)
+}
+
 // Themes and fonts are one shape: a name the CLI takes as an argument.
 function styleRows(out, names, icon, trail, command) {
   for (var i = 0; i < names.length; i++) {
@@ -66,13 +75,13 @@ function styleRows(out, names, icon, trail, command) {
   }
 }
 
-// One flat list of everything runnable: the wheel's own slices, every menu
-// entry carrying an action, every desktop application, every open window, and
-// every theme and font. Menu entries without an action are submenus -- they
-// hold nothing to run, and their labels already appear as breadcrumbs.
-//
-// `sources` is the live half: { apps, windows, themes, fonts }.
-function build(items, slices, sources) {
+// The half of the index that only changes when the menu files load: the
+// wheel's own slices and every menu entry carrying an action. Entries without
+// one are submenus -- they hold nothing to run, and their labels already
+// appear as breadcrumbs. Kept apart from the live half because flattening 271
+// entries costs three times what everything else does, and it is the same
+// answer every time.
+function menuRows(items, slices) {
   var out = []
   for (var i = 0; i < slices.length; i++) {
     out.push({ icon: slices[i].icon, label: slices[i].label, trail: "Wheel",
@@ -91,6 +100,13 @@ function build(items, slices, sources) {
                 .join(" ").toLowerCase()
     })
   }
+  return out
+}
+
+// Everything that can differ between one open and the next:
+// { apps, windows, focusOrder, themes, fonts }.
+function liveRows(sources) {
+  var out = []
   // `sources.apps` is the shell app library's own row list, so each element
   // wraps the desktop entry. An app carries an icon NAME rather than a glyph
   // -- a non-empty `appIcon` is what tells the row to draw an image -- and it
@@ -122,6 +138,7 @@ function build(items, slices, sources) {
   var windows = sources.windows
   for (var w = 0; w < windows.length; w++) {
     var t = windows[w]
+    var ipc = t.lastIpcObject || {}
     var appId = String((t.wayland && t.wayland.appId) || "")
     var title = String(t.title || appId)
     if (!title) continue
@@ -129,6 +146,7 @@ function build(items, slices, sources) {
       icon: "󰖯", appIcon: iconByAppId[appId.toLowerCase()] || "", label: title,
       trail: appId || "Window", address: "0x" + t.address, slice: -1,
       kind: KIND.window,
+      recency: recencyOf(sources.focusOrder, t.address, ipc.focusHistoryID),
       keywords: (title + " " + appId).toLowerCase()
     })
   }
@@ -140,12 +158,22 @@ function build(items, slices, sources) {
 }
 
 // Every term must appear somewhere in the entry, so terms narrow rather than
-// widen. Ranking puts a label that starts with the query above one that merely
-// contains it, above a hit that only matched a breadcrumb or alias; shorter
-// labels break ties, which floats "Screenshot" over "Stop Screenrecording".
-// Dead heats past that go by KIND above: "firefox" matches the app and the
-// menu's install/remove/set-default rows identically, and the one the typist
-// meant is the app.
+// widen. Rows then sort on four keys in order:
+//
+//   rank    a label that starts with the query, then one that merely contains
+//           it, then a hit that only matched a breadcrumb, alias or app id.
+//   kind    KIND above. "firefox" matches the app and the menu's install,
+//           remove and set-default rows identically; the app is what was meant.
+//   recency for windows, Hyprland's focus history -- the one you were last in
+//           comes first. Zero, and inert, for everything else.
+//   len     shorter labels win, which floats "Screenshot" over "Stop
+//           Screenrecording" among menu entries.
+//
+// An open window is never a weak hit: matching one at all counts as rank 0.
+// A window title is written by the program, so the query lands mid-string
+// ("...Omarchy Plugins - Brave") where a menu label has it at the front, and
+// without this the window you are looking at sorts below seven rows offering
+// to install the thing.
 function search(index, query, limit) {
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
@@ -160,10 +188,14 @@ function search(index, query, limit) {
     if (!matched) continue
     var label = e.label.toLowerCase()
     var at = label.indexOf(q)
-    hits.push({ rank: at === 0 ? 0 : (at !== -1 ? 1 : 2), len: label.length, entry: e })
+    var rank = e.kind === KIND.window ? 0 : (at === 0 ? 0 : (at !== -1 ? 1 : 2))
+    hits.push({ rank: rank, len: label.length, entry: e })
   }
   hits.sort(function (a, b) {
-    return a.rank - b.rank || a.len - b.len || a.entry.kind - b.entry.kind
+    return a.rank - b.rank
+        || a.entry.kind - b.entry.kind
+        || (a.entry.recency || 0) - (b.entry.recency || 0)
+        || a.len - b.len
   })
   var out = []
   for (var j = 0; j < hits.length && j < limit; j++) out.push(hits[j].entry)

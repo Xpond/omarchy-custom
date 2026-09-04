@@ -31,8 +31,16 @@ Item {
 
   property string query: ""
   property var menuItems: ({})
+  readonly property var menuRows: MenuIndex.menuRows(root.menuItems, root.slices)
   property var themes: []
   property var fonts: []
+  // Window addresses, most recently focused first. Hyprland has its own focus
+  // history, but only inside each toplevel's cached IPC object, which is not
+  // re-fetched when focus moves -- it reports whatever was true when the list
+  // was last pulled. `activeToplevel` does track focus, so the order is
+  // accumulated from that instead.
+  property var focusOrder: []
+  readonly property var activeWindow: Hyprland.activeToplevel
   readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
   property var index: []
   readonly property var results: MenuIndex.search(root.index, root.query, 8)
@@ -76,13 +84,16 @@ Item {
   // launches through uwsm so an app doesn't inherit the compositor's scope.
   // Windows come straight off the compositor. Both are read fresh on every
   // open rather than watched, which is the only moment either has to be right.
+  // The menu half is flattened once per file load instead: doing that on every
+  // open costs three times what everything else costs together.
   function rebuildIndex() {
-    root.index = MenuIndex.build(root.menuItems, root.slices, {
+    root.index = root.menuRows.concat(MenuIndex.liveRows({
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
+      focusOrder: root.focusOrder,
       themes: root.themes,
       fonts: root.fonts
-    })
+    }))
   }
 
   function open(payloadJson) {
@@ -190,6 +201,17 @@ Item {
   }
 
   onQueryChanged: root.resultIndex = 0
+
+  // Opening the wheel takes the keyboard, which drops activeToplevel to null.
+  // Ignoring that is what keeps the window you came from at the head.
+  onActiveWindowChanged: {
+    if (!root.activeWindow) return
+    var address = root.activeWindow.address
+    var next = [address]
+    for (var i = 0; i < root.focusOrder.length; i++)
+      if (root.focusOrder[i] !== address) next.push(root.focusOrder[i])
+    root.focusOrder = next
+  }
 
   // Listed once at startup: installing a theme or a font is a rare, deliberate
   // act, and both commands cost a subprocess that opening the wheel shouldn't.

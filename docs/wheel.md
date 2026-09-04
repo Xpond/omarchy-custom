@@ -117,16 +117,33 @@ startup and fired back as `omarchy theme set '<name>'`. Both are otherwise
 buried: `style.theme` in the menu shells out to `omarchy-theme-switcher`, a
 second overlay on top of the first.
 
-The whole index is rebuilt when the wheel opens. That is the only moment any of
-it has to be correct, and it means windows, apps and menu entries are all as
-fresh as the keystroke that asked for them.
+The live half of the index — apps, windows, themes, fonts — is rebuilt when the
+wheel opens. That is the only moment any of it has to be correct, and it means
+they are all as fresh as the keystroke that asked for them. The menu half is
+not rebuilt: `MenuIndex.menuRows()` runs once per file load, because flattening
+271 entries costs 1.6ms against 0.4ms for everything else together, and it
+returns the same answer every time. Opening the wheel costs 0.5ms of index
+work; a keystroke costs 0.06ms to search all 352 rows.
 
-Every query term must appear somewhere in the row, so terms narrow. Ranking is
-label-prefix, then label-substring, then a hit anywhere else (breadcrumb,
-alias, description), with shorter labels breaking ties. A dead heat past that
-goes by `KIND` — slice, window, app, theme/font, menu — so "chromium", which
-matches the app and the menu's install/set-default rows identically, lands on
-the app.
+Every query term must appear somewhere in the row, so terms narrow. Rows then
+sort on four keys: **rank** (label-prefix, then label-substring, then a hit
+anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
+theme/font, menu), **recency**, and finally **label length**, which floats
+"Screenshot" over "Stop Screenrecording".
+
+An open window is never a weak hit: matching one at all counts as rank 0. A
+window's title is written by the program, so a query lands mid-string
+("…Omarchy Plugins - Brave") where a menu label has it at the front — without
+this the window you are looking at sorts below seven rows offering to install
+the thing.
+
+Recency orders the windows among themselves, most recently focused first, and
+is inert for every other row. Hyprland publishes a `focusHistoryID`, but only
+inside each toplevel's cached IPC object, which is **not** re-fetched when
+focus moves — it keeps reporting the order from whenever the list was last
+pulled. `Hyprland.activeToplevel` does track focus, so the wheel accumulates
+the order from that instead, and falls back to the cached history for windows
+it has not yet seen focused (everything, for a moment after a shell restart).
 
 `when:` conditions are **not** evaluated — they need a bash round trip per
 entry, which the shell's own menu batches at startup. Hardware-specific rows
@@ -135,9 +152,8 @@ therefore appear in search on machines they don't apply to.
 ## Known limits
 
 - Opens on the primary monitor only, same as the emoji overlay.
-- A window is found by its title, and only ranks well when the title starts
-  with the query. `brave` puts the browser's window last, behind seven menu
-  rows, because its title reads "Browse Plugins | Omarchy Plugins - Brave".
-  Searching the app id (`kitty`) lists every window of that app together,
-  which is the reliable way in.
+- A window is found by its title or its app id, never by what is running
+  inside it: a terminal holding a Claude Code session is titled after the
+  session's topic, so `claude` will not find it. Searching the app id
+  (`kitty`) lists every window of that app, most recent first.
 - The 8 ring slices are hard-coded in `Wheel.qml`; there is no config file yet.
