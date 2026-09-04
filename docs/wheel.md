@@ -48,6 +48,38 @@ every label clears its disc by `labelGap` whatever its width and angle, and it
 is measured from the disc's *grown* radius so selecting a slice does not close
 the gap as the disc scales up.
 
+## Transitions
+
+One tempo, `fadeDuration`, drives the whole wheel: the open, the close, and
+the ring-to-results swap.
+
+The exit fade is the half that used to be missing. `visible` follows `opened`,
+so dropping it unmapped the layer surface the same frame it asked for the
+fade -- the wheel eased in and vanished out. `close()` now drops `shown` to run
+the fade and a timer releases the surface once it has finished. Firing a slice
+keeps the instant unmap: the target panel grabs the keyboard on the next tick
+and a layer surface still holding an exclusive grab hands it a window without
+focus, so `close(true)` skips the fade. Only cancelling gets it. Reopening
+mid-fade cancels the pending unmap and counts as a fresh open.
+
+Typing swaps the ring for the results card by fading rather than switching
+`visible`: the ring draws back to 0.94 while the card grows from
+`transformOrigin: Item.Top`, pinned under the pill. Both still drop out of
+`visible` once faded -- the result rows carry `MouseArea`s, so a transparent
+card would keep catching clicks meant for the ring behind it.
+
+Opening spins the comet once around the ring -- the wheel introduces itself
+with the streak it already draws. `spin` is a `Timer` that steps `arcTarget`
+by a whole slice every 25ms for one lap, and it has to work that way: the
+streak *is* the gap the two followers open up behind a jump, so a target that
+slides smoothly is tracked almost exactly and draws no trail at all. Eight
+45-degree jumps 25ms apart is the same 40Hz input a held arrow delivers, which
+is why it produces the same streak. Selecting during the lap stops the timer.
+
+The comet shows while anything is selected or while `arcDrag` is non-zero, so
+it stays up past the end of the lap for as long as the tail needs to catch up,
+then fades on its own.
+
 ## Why a plugin and not a patch
 
 Third-party plugins live in `~/.config/omarchy/plugins/<id>/` and are

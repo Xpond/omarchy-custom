@@ -105,6 +105,22 @@ Item {
   readonly property real arcDrag: Math.max(-300, Math.min(300, root.arcHead - root.arcTail))
   readonly property real arcFrom: Math.min(root.arcHead, root.arcHead - root.arcDrag) - root.arcSpread
   readonly property real arcSpan: Math.abs(root.arcDrag) + root.arcSpread * 2
+  // Opening spins the comet once around the ring. This has to step the target
+  // in whole slices at the key-repeat rate rather than sweep it smoothly: the
+  // streak is the gap the two followers open up behind a jump, so a target
+  // that slides continuously is tracked almost exactly and draws no trail at
+  // all. Eight jumps of 45 degrees is one lap, and 25ms apart is the 40Hz a
+  // held arrow delivers -- the same input, so the same streak.
+  Timer {
+    id: spin
+    interval: 25
+    repeat: true
+    property int stepsLeft: 0
+    onTriggered: {
+      root.arcTarget += 45
+      if (--spin.stepsLeft <= 0) spin.stop()
+    }
+  }
 
   // One palette for every floating piece of the wheel -- discs, pill, card --
   // so they can't drift apart. Short of opaque so the blur still reads through.
@@ -155,6 +171,8 @@ Item {
     root.justOpened = !wasOpen
     root.opened = true
     root.rebuildIndex()
+    spin.stepsLeft = root.slices.length
+    spin.restart()
     Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
   }
 
@@ -219,6 +237,7 @@ Item {
   }
 
   function select(i) {
+    spin.stop()
     root.armed = true
     root.selected = i
     if (i < 0) return
@@ -467,8 +486,9 @@ Item {
           Shape {
             anchors.fill: parent
             preferredRendererType: Shape.CurveRenderer
-            // Nothing to point at until something is selected.
-            opacity: root.selected >= 0 ? 1 : 0
+            // Nothing to point at until something is selected -- except during
+            // the opening lap, which is the comet with nothing to point at yet.
+            opacity: root.selected >= 0 || Math.abs(root.arcDrag) > 0.5 ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
 
             Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(Color.accent, 0.16) }
