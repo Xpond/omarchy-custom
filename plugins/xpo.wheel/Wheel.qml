@@ -297,6 +297,19 @@ Item {
   property real originX: -1
   property real originY: -1
   readonly property string pluginId: (manifest && manifest.id) || "xpo.wheel"
+  // Resolved once per open and held while the wheel is up: Hyprland moves
+  // focus with the pointer, and the compass reads the whole screen, so a live
+  // binding would re-map the surface onto another monitor mid-flick. By name,
+  // because this Quickshell's HyprlandMonitor carries no `screen` of its own.
+  property var openScreen: null
+  function focusedScreen() {
+    var m = Hyprland.focusedMonitor
+    if (!m) return null
+    var screens = Quickshell.screens
+    for (var i = 0; i < screens.length; i++)
+      if (screens[i].name === m.name) return screens[i]
+    return null
+  }
 
   // Applications come from the shell's own library rather than a .desktop scan
   // of our own: it sorts, drops hidden entries, resolves icon names, and
@@ -329,6 +342,7 @@ Item {
     // Only a press that actually opened the wheel earns the tap-to-hold grace;
     // a press onto an already-open wheel is the second tap, which closes it.
     root.justOpened = !wasOpen
+    root.openScreen = root.focusedScreen()
     root.opened = true
     root.rebuildIndex()
     spin.stepsLeft = root.sliceCount
@@ -496,6 +510,9 @@ Item {
   }
 
   onQueryChanged: root.resultIndex = 0
+  // The index is rebuilt when the late condition scan lands, which can shorten
+  // the list under a standing selection without the query having changed.
+  onResultsChanged: if (root.resultIndex >= root.results.length) root.resultIndex = 0
 
   // Opening the wheel takes the keyboard, which drops activeToplevel to null.
   // Ignoring that is what keeps the window you came from at the head.
@@ -639,6 +656,7 @@ Item {
   PanelWindow {
     id: surface
     visible: root.opened
+    screen: root.openScreen
     anchors { top: true; bottom: true; left: true; right: true }
     color: "transparent"
     WlrLayershell.namespace: "omarchy-wheel"
