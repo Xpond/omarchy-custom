@@ -581,6 +581,18 @@ Item {
     }
   }
 
+  // A surface that is not scrim. Clicks land here and stop, rather than
+  // reaching the full-screen area underneath -- which reads a press as
+  // "clicked away" and closes the wheel, taking the query with it. Neither
+  // place it shields is clickable in any other sense -- the field always holds
+  // the keyboard -- so there is deliberately no hover state and no cursor:
+  // advertising an interaction that does not exist is worse than silence.
+  // Left button only, so right-click still falls through to dismiss.
+  component ClickShield: MouseArea {
+    anchors.fill: parent
+    acceptedButtons: Qt.LeftButton
+  }
+
   component Track: ShapePath {
     fillColor: "transparent"
     capStyle: ShapePath.RoundCap
@@ -649,6 +661,13 @@ Item {
           if (dx * dx + dy * dy < root.moveThreshold * root.moveThreshold) return
         }
         root.select(root.sliceAt(mouse.x, mouse.y))
+      }
+      // A wheel you cannot turn with the wheel. One notch is one step, the
+      // same as one arrow press, so it feeds `charge` at the rate a hand can
+      // scroll and never accumulates into the held-arrow streak.
+      onWheel: function (wheel) {
+        var step = wheel.angleDelta.y > 0 ? -1 : 1
+        root.searching ? root.moveResult(step) : root.rotate(step)
       }
       onClicked: function (mouse) {
         if (mouse.button === Qt.RightButton || root.searching) { root.dismiss(); return }
@@ -911,6 +930,8 @@ Item {
           borderSpec: Border.flat(root.searching ? Color.accent : root.surfaceEdge,
                                   Style.spacing.hairline)
 
+          ClickShield {}
+
           Text {
             anchors.centerIn: parent
             width: parent.width - Style.spacing.rowPaddingX * 2
@@ -969,6 +990,10 @@ Item {
           shadowOpacity: 0.4
           shadowVerticalOffset: Style.space(3)
         }
+
+        // Ahead of the rows, so their own areas still take the clicks that
+        // land on them and this only catches the padding they leave.
+        ClickShield {}
 
         Column {
           id: resultList

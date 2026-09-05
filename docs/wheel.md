@@ -29,7 +29,16 @@ disc, because a ring you have to read is slower than a word you can type.
 | `SUPER+W` | close the wheel and whatever it opened |
 
 Mouse works too: the whole screen is a compass around center, so a flick in
-any direction selects that slice. Release of `SUPER+A` commits it.
+any direction selects that slice. Release of `SUPER+A` commits it. The scroll
+wheel steps the ring one slice per notch, or the result list while searching.
+
+Clicking the field or the results card does nothing, rather than closing the
+wheel: everywhere else a click away closes it, and the two surfaces you are
+most likely to hit by accident -- the thing shaped like a text field, and the
+gap beside a row you missed -- must not count as "away". Neither is clickable
+in any other sense, and neither shows a hover state, because there is nothing
+to click for: the field always holds the keyboard, so a click can do nothing a
+keystroke does not already do.
 
 ## The comet
 
