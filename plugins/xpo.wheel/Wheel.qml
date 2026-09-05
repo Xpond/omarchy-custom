@@ -374,9 +374,15 @@ Item {
       var id = catalogue[i].plugin
       if (id && root.shell.isPluginOpen(id)) { root.shell.hide(id); acted = true }
     }
-    // The bar's own menu widget is a shell plugin too, and a wheel entry can
-    // still have summoned a picker that lives inside it.
-    if (root.shell.isPluginOpen("omarchy.menu")) { root.shell.hide("omarchy.menu"); acted = true }
+    // Overlays no slice points at, so the loop above never sees them: the bar's
+    // own menu widget, and the four reached through a menu action, which the
+    // wheel dismisses itself to open. Nothing else knows they are up, so
+    // without this SUPER+W answers "none" and the wrapper falls through to
+    // killactive -- closing the window behind the overlay.
+    var summoned = ["omarchy.menu", "omarchy.emojis", "omarchy.speedtest",
+                    "omarchy.disk-speedtest", "omarchy.wifiqr"]
+    for (var j = 0; j < summoned.length; j++)
+      if (root.shell.isPluginOpen(summoned[j])) { root.shell.hide(summoned[j]); acted = true }
     return acted ? "closed" : "none"
   }
 
