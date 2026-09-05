@@ -65,7 +65,11 @@ Item {
   readonly property var activeWindow: Hyprland.activeToplevel
   readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
   property var index: []
-  readonly property var results: MenuIndex.search(root.index, root.query, 8)
+  // How often each row has been picked, by MenuIndex.keyOf. A plain count with
+  // no decay: what you reach for through a wheel is stable for months, and a
+  // half-life is a second tuning knob to be wrong about.
+  property var uses: ({})
+  readonly property var results: MenuIndex.search(root.index, root.query, 8, root.uses)
   property int resultIndex: 0
   readonly property bool searching: root.query.length > 0
 
@@ -438,6 +442,7 @@ Item {
   // was picked stops mattering here.
   function run(e) {
     if (!e) return
+    root.countUse(e)
     if (e.node) { root.enter(e.node); return }
     root.dismiss(true)
     // Let this layer surface unmap and hand the keyboard back before the
@@ -451,6 +456,20 @@ Item {
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
       else if (e.action) Util.execDetached(e.action)
     })
+  }
+
+  // Written through on every pick rather than batched at close: the wheel is
+  // never shut down in an orderly way -- it is a plugin in a shell that gets
+  // restarted -- so there is no later moment guaranteed to arrive. A new
+  // object rather than a mutation, because QML re-evaluates `results` off the
+  // property changing, not off what it points at changing.
+  function countUse(e) {
+    var key = MenuIndex.keyOf(e)
+    if (!key) return
+    var bump = {}
+    bump[key] = (root.uses[key] || 0) + 1
+    root.uses = MenuIndex.merge(root.uses, bump)
+    usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
   function moveResult(step) {
@@ -528,6 +547,17 @@ Item {
   FileView {
     path: root.omarchyPath + "/config/omarchy/shell.json"
     onLoaded: root.stockBarIds = MenuIndex.barWidgets(text())
+  }
+
+  // Beside the shell's own state rather than in the config: this is something
+  // the wheel learns, not something the user writes.
+  FileView {
+    id: usesFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/wheel-uses.json"
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.uses = MenuIndex.parse(text())
+    onLoadFailed: root.uses = ({})
   }
 
   // The ring, if the user has said what they want on it. Absent by default.

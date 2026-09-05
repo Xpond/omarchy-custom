@@ -257,6 +257,27 @@ pulled. `Hyprland.activeToplevel` does track focus, so the wheel accumulates
 the order from that instead, and falls back to the cached history for windows
 it has not yet seen focused (everything, for a moment after a shell restart).
 
+## What it remembers
+
+Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
+menu entry's dotted id, `app:` plus a desktop id, or a theme/font command --
+and the count is a sort key in `search()` ranked under `kind`. So habit breaks
+ties *inside* a kind (which of forty themes, which of the eleven "Toggle"
+rows) and never reorders the kinds themselves: that an app beats a menu row
+offering to install it is a fact about the query, while a use count is only a
+guess.
+
+Windows are deliberately uncounted -- their address is new on every launch, so
+counting them would grow the file without bound, and they already sort on live
+focus order. `check.js` holds both invariants: every counted row has a key,
+and no two share one.
+
+The counts live in `~/.local/state/omarchy/wheel-uses.json`, written through on
+each pick rather than batched at exit -- the wheel is a plugin in a shell that
+gets restarted, so no orderly shutdown is guaranteed to arrive. Delete the file
+to forget everything. There is no decay: what you reach for through a wheel is
+stable for months, and a half-life is a second knob to be wrong about.
+
 ## The ring
 
 By default the ring is the panels your bar carries, in a fixed order, plus the

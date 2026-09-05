@@ -38,6 +38,17 @@ function trailOf(items, id) {
 // well under labels of the same length come back in this order.
 var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4 }
 
+// What a row is across opens, for the use counter. A menu row carries both an
+// id and an action, and the id is the stable half -- an action's text changes
+// whenever Omarchy retunes a command. Windows deliberately answer "": their
+// address is new on every launch, and they already sort on live focus order.
+function keyOf(e) {
+  if (e.plugin) return e.plugin
+  if (e.id) return e.id
+  if (e.appId) return "app:" + e.appId
+  return e.action || ""
+}
+
 // The breadcrumb of an open ring, current node included.
 function crumb(items, path) {
   var out = []
@@ -352,6 +363,11 @@ function liveRows(sources) {
 //           it, then a hit that only matched a breadcrumb, alias or app id.
 //   kind    KIND above. "firefox" matches the app and the menu's install,
 //           remove and set-default rows identically; the app is what was meant.
+//   uses    how often this row has been picked before, most-used first. Under
+//           `kind` rather than over it, so habit breaks ties inside a kind --
+//           which of forty themes -- and never reorders the kinds themselves:
+//           that an app beats a row offering to install it is a fact about the
+//           query, while a use count is only a guess.
 //   recency for windows, Hyprland's focus history -- the one you were last in
 //           comes first. Zero, and inert, for everything else.
 //   len     shorter labels win, which floats "Screenshot" over "Stop
@@ -362,7 +378,8 @@ function liveRows(sources) {
 // ("...Omarchy Plugins - Brave") where a menu label has it at the front, and
 // without this the window you are looking at sorts below seven rows offering
 // to install the thing.
-function search(index, query, limit) {
+function search(index, query, limit, uses) {
+  var counts = uses || {}
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
   var terms = q.split(/\s+/)
@@ -377,11 +394,13 @@ function search(index, query, limit) {
     var label = e.label.toLowerCase()
     var at = label.indexOf(q)
     var rank = e.kind === KIND.window ? 0 : (at === 0 ? 0 : (at !== -1 ? 1 : 2))
-    hits.push({ rank: rank, len: label.length, entry: e })
+    // Negated so every key in the comparator below sorts ascending.
+    hits.push({ rank: rank, uses: -(counts[keyOf(e)] || 0), len: label.length, entry: e })
   }
   hits.sort(function (a, b) {
     return a.rank - b.rank
         || a.entry.kind - b.entry.kind
+        || a.uses - b.uses
         || (a.entry.recency || 0) - (b.entry.recency || 0)
         || a.len - b.len
   })

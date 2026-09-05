@@ -70,6 +70,20 @@ check(dead.length === 0, "every row has something to do", dead.map(r => r.label)
 const empty = rows.filter(r => r.node && M.ringSlices(items, r.node.split("."), cond, []).length === 0)
 check(empty.length === 0, "no row drills into an empty ring", empty.map(r => r.id).join(", "))
 
+// The use counter keys rows through keyOf, and a key that is empty or shared
+// makes the count quietly wrong: a row that never learns, or two rows keeping
+// one tally between them. Windows are the deliberate exception -- their address
+// is new every launch, so counting them would grow the file without bound.
+const counted = [...M.panelRows(M.panels(null)), ...rows]
+const keyless = counted.filter(r => !M.keyOf(r))
+check(keyless.length === 0, "every counted row has a use key", keyless.map(r => r.label).join(", "))
+
+const keys = counted.map(r => M.keyOf(r))
+const collided = keys.filter((k, i) => keys.indexOf(k) !== i)
+check(collided.length === 0, `use keys are unique (${keys.length} keys)`, collided.join(", "))
+
+check(M.keyOf({ label: "a window", address: "0x1" }) === "", "windows are not counted")
+
 // Odd rings put nothing at 3 and 9 o'clock, so every default has to be even.
 for (const [label, cfg] of [["shipped", `${omarchy}/config/omarchy/shell.json`],
                             ["this machine", `${home}/.config/omarchy/shell.json`]]) {
