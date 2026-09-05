@@ -682,6 +682,26 @@ Item {
       focus: true
       Keys.priority: Keys.BeforeItem
       Keys.onPressed: function (event) {
+        // Editing the query the way any text field does. Ahead of the plain
+        // Backspace below, which ignores modifiers and would take
+        // Ctrl+Backspace one character at a time; these also arrive as control
+        // codes under " ", which the printable test at the end drops.
+        if (event.modifiers & Qt.ControlModifier) {
+          switch (event.key) {
+          case Qt.Key_U:
+            root.query = ""; event.accepted = true; return
+          case Qt.Key_W:
+          case Qt.Key_Backspace:
+            // The trailing space stays, so the next word does not need one.
+            root.query = root.query.replace(/\S+\s*$/, ""); event.accepted = true; return
+          case Qt.Key_V:
+            // The field is one line and a clipboard is not: a pasted path or
+            // error message arrives with newlines and runs, which would draw
+            // straight through the pill.
+            root.query += String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim()
+            event.accepted = true; return
+          }
+        }
         // One step at a time: the query, then the menu tree, then the screen.
         if (event.key === Qt.Key_Escape) {
           if (root.searching) root.query = ""

@@ -25,6 +25,9 @@ disc, because a ring you have to read is slower than a word you can type.
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
 | type anything | search menu entries, apps, windows, themes and fonts |
 | `Backspace` | delete a character, then go up one level |
+| `Ctrl+W` `Ctrl+Backspace` | delete the last word of the query |
+| `Ctrl+U` | clear the query |
+| `Ctrl+V` | paste into the query, runs of whitespace collapsed to one space |
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
