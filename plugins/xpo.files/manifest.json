@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "xpo.files",
+  "name": "Files",
+  "version": "0.1.0",
+  "author": "xpo",
+  "description": "Keyboard-driven directory browser",
+  "kinds": ["overlay"],
+  "keepLoaded": true,
+  "entryPoints": { "overlay": "Files.qml" }
+}

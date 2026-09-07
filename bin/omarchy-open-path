@@ -1,0 +1,24 @@
+#!/bin/bash
+# Hand a file to the desktop app that owns it -- or decline, and say so.
+#
+# Not plain xdg-open: text/plain resolves to nvim.desktop here, and xdg-open
+# launches that with no terminal attached, so nvim hangs invisibly and Enter
+# looks like it did nothing. Nothing here opens an editor at all -- a text file
+# is already open in the browser's preview pane -- so a terminal handler, or no
+# handler, exits 3 and the caller keeps its place. A viewer means exit 0, and
+# the caller steps aside for it.
+
+path="${1-}"
+[[ -n $path ]] || { echo "Usage: omarchy-open-path <path>" >&2; exit 1; }
+
+desktop=$(xdg-mime query default "$(xdg-mime query filetype "$path" 2>/dev/null)" 2>/dev/null)
+[[ -n $desktop ]] || exit 3
+
+entry=$(find "$HOME/.local/share/applications" /usr/share/applications \
+             -name "$desktop" -print -quit 2>/dev/null)
+[[ -n $entry ]] && grep -q '^Terminal=true' "$entry" && exit 3
+
+# Detached and returning at once: a zero exit means "a viewer is coming", not
+# "the viewer has been closed again".
+setsid xdg-open "$path" >/dev/null 2>&1 &
+exit 0
