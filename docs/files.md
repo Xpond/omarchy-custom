@@ -7,19 +7,29 @@ the right. It answers where is it, what is in it, and open it — which is what 
 file manager actually gets reached for.
 
     plugins/xpo.files/
-      manifest.json   kind: "overlay", keepLoaded
-      Files.qml       surface, input model, list and preview
-      FilesIndex.js   snapshotting, filtering, path and preview text helpers
+      manifest.json     kind: "overlay", keepLoaded
+      Files.qml         state, keys, file operations, the surface itself
+      FilesHeader.qml   breadcrumb, path entry, filter and rename field
+      FilesList.qml     the directory, one row per entry
+      FilesPreview.qml  the scroller, and the editor inside it
+      FilesHints.qml    the foot: the legend, and what a held file would do
+      FilesIndex.js     snapshotting, filtering, path and text helpers
 
-It is deliberately a browser and **not** a manager. Nothing here renames,
-copies or deletes. Those are the operations that cost you data when they go
-wrong, `yazi` is installed and already does them properly, and a half-built
-version of them in an overlay is worse than none.
+Each component takes the panel as `panel` rather than reaching for a parent, so
+its one dependency is visible at the call site. `FilesPreview` owns its
+scrolling and its editor and exposes verbs — `scrollBy`, `keepPlace`,
+`copy` — rather than letting the panel reach into a `Flickable`.
 
-The one exception is `Ctrl+E`, which turns the preview into an editor for the
-file it is already showing — see [Editing](#editing). It is the same reach as
-the rest of the panel: you are looking at the thing, and fixing a line in it
-should not cost you a terminal.
+It answers where is it, what is in it, and open it — and then the four things
+you reach for once you are already looking at the file: edit it
+([`Ctrl+E`](#editing)), move or copy it, [rename](#moving-files) it, throw it
+away. Each earns its place the same way: you are looking at the thing, and
+acting on it should not cost you a terminal.
+
+Every one of them can cost you data when it is wrong, so none of them are quiet.
+Nothing is overwritten, a delete goes to the trash and is asked twice in red,
+and a save is confirmed by reading the file back. There is still no new-folder
+and no undo beyond the trash; `yazi` is installed and does the rest properly.
 
 ## Keys
 
@@ -36,6 +46,10 @@ should not cost you a terminal.
 | `PageUp` `PageDown` | scroll the preview a page |
 | `Shift+←` `Shift+→` | pan the preview sideways, for lines past the edge |
 | `Ctrl+E` | edit the previewed file — see [Editing](#editing) |
+| `Ctrl+X` `Ctrl+C` | take the selection to move or to copy — see [Moving files](#moving-files) |
+| `Ctrl+V` | place it in the directory you are standing in |
+| `F2` | rename the selection — see [Moving files](#moving-files) |
+| `Del` | trash the selection, asked twice |
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
 | `Esc` | clear the field, then close |
@@ -158,6 +172,68 @@ Files over **256 KB** are never read. A NUL byte in the first kilobyte is what
 marks a binary, rather than an extension list to maintain: `.frag` and `.qsb`
 sit either side of any list you would write by hand, and the bytes do not lie.
 
+## Moving files
+
+`Ctrl+X` or `Ctrl+C` takes the selected entry, you walk to another directory,
+`Ctrl+V` places it. `F2` renames it where it stands, `Del` puts it in the trash.
+The foot names what is held and what `Ctrl+V` would do with it; the heading says
+what happened. A move spends its source and the hold is released; a copy keeps
+it, so it can be placed again somewhere else.
+
+These are the operations the "browser, not a manager" rule was really about.
+They earn the exception on the same grounds editing did: a move between two
+directories is what people open a second pane for, and not having it is what
+sends you to a terminal.
+
+**Rename types into the filter chip**, which is already a text box with a caret
+in it, sitting where the name reads — so a rename needs no second field, only a
+different fill, so it cannot be mistaken for a filter narrowing the list. A name
+with a `/` in it is refused: that is a move being asked for in the wrong field,
+and moving is what `Ctrl+X` is for.
+
+It is a real field, not an append-only one: renaming is mostly changing a few
+characters in the middle of a name you already have. `←` `→` `Home` `End` move
+the caret, `Backspace` and `Del` cut either side of it, `Ctrl+U` and `Ctrl+K`
+cut to the ends, `Ctrl+V` pastes with separators stripped. It opens with the
+caret on the stem, before the extension. The chip draws the name in two halves
+with the caret between them, so it stands where the next character will go; a
+filter is only ever typed at, so its caret is always the trailing one.
+
+**Delete trashes, and asks twice, loudly.** `gio trash` puts the entry in the
+freedesktop trash with its original path recorded, so it can be got back — the
+difference between a delete you can survive and one you cannot. It is still
+asked twice, because it is the one verb here that takes something away.
+
+The question is asked where you are looking. A note in the heading was missed
+entirely: the row itself now fills with the theme's urgent colour and the foot
+turns urgent and reads `del  again to trash <name>`. Any key that is not the
+second `Del` cancels it, and so does moving the selection — a second `Del` can
+never land on a row you did not aim it at.
+
+**One process, one contract.** Every write goes through the same `Process` and
+the same exit codes: `0` done, `17` the name is taken, anything else failed.
+`op` carries what to say about each outcome, so move, copy, rename and delete
+share one success path and one failure path rather than three of each.
+
+**Nothing is ever overwritten.** The destination name is tested before the
+command runs:
+
+    sh -c '[ -e "$2" ] && exit 17; exec mv -- "$1" "$2"' files <src> <dst>
+
+Paths go as arguments, never spliced into the script, so a name with a space, a
+dash or a `$` in it is just a name. `17` is this panel's word for *something is
+already called that* and is nothing `mv` or `cp` returns on their own; it comes
+back as `a wheel.md is already here` rather than being resolved by inventing a
+`(copy)` name — a file manager that renames your file for you is one you cannot
+predict. Directories go with `cp -r`, and `mv` refuses to move one into itself
+without any help from here.
+
+There is no undo beyond the trash, and no new-folder. Those stay with `yazi`.
+
+The pasted row arrives on its own: `FolderListModel` watches the directory, so
+the paste only has to name what to land on — `pending`, the same mechanism the
+wheel uses to hand a file over.
+
 ## Editing
 
 `Ctrl+E` turns the preview into a `TextEdit` over the same file, `Ctrl+S`
@@ -167,17 +243,21 @@ writes it, `Esc` comes back. It is the only thing in this panel that writes.
 |---|---|
 | `Ctrl+E` | edit the previewed file |
 | `Ctrl+S` | save |
+| `Ctrl+C` `Ctrl+X` `Ctrl+V` `Ctrl+A` | copy, cut, paste, select all |
 | `Esc` | back — pressed twice, within 2 s, if there are unsaved changes |
 
 What makes it safe rather than merely possible:
 
 **It is modal, because the keyboard is a filter.** Every printable key in this
 panel lands in the search field; nothing can type into a file and into a search
-box at once. While `editing`, the whole keyboard goes to the editor and only
-`Esc` and `Ctrl+S` are kept — reached because key events go to the focused item
-first and bubble *out* to the card's handler, so the guard at the top of
-`Keys.onPressed` is the only thing needed. Hover, clicks and the click-outside
-shield stop moving the selection for the same reason.
+box at once. While `editing`, the whole keyboard goes to the editor and only the
+edit verbs are kept. `Keys.priority: Keys.BeforeItem` means the card's handler
+sees every key *before* the editor, focused or not — the same thing Omarchy's
+own `PanelKeyCatcher` documents — so what makes typing work is that the guard
+returns without accepting. The clipboard verbs are spelled out rather than left
+to `TextEdit`'s own handling: a panel this modal should not have verbs that only
+work by accident. Hover, clicks and the click-outside shield stop moving the
+selection for the same reason.
 
 **It edits plain source, not the rendering.** What the preview draws is pygments
 HTML or Qt's Markdown; editing a rendering saves the rendering — `<span
@@ -384,8 +464,8 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
 - The line-number gutter counts the lines of the *source*. A wrapped Markdown
   paragraph has no numbers at all, by design; a code file never wraps, so the
   two agree.
-- No rename, copy, delete, or new-folder. Deliberate — use `yazi`. Editing an
-  existing file is the one write that exists.
+- No new-folder, and no undo for a move, a copy or a rename — only a delete can
+  be taken back, out of the trash. Use `yazi` for the rest.
 - **Only files the preview read whole are editable** — under 500 lines, under
   256 KB, not binary. Anything larger is a job for a real editor.
 - Only the first 500 lines of a file are ever shown, and only the first 400

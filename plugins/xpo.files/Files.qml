@@ -12,15 +12,20 @@ import "FilesIndex.js" as FilesIndex
 // overlay card, keyboard first, wearing the same [menu] tokens the wheel and
 // the clipboard do.
 //
-// Deliberately a browser and not a manager. Nothing here renames, copies or
-// deletes -- those are the operations that cost you data when they are wrong,
-// and yazi is installed and already does them properly. This answers where is
-// it, what is in it, and open it, which is what a file manager is actually
-// reached for.
+// It answers where is it, what is in it, and open it -- and then the four
+// things you reach for once you are already looking at the file: edit it
+// (ctrl+e), move or copy it (ctrl+x, ctrl+c, ctrl+v), rename it (f2), throw it
+// away (del). Each earns its place the same way: you are looking at the thing,
+// and acting on it should not cost you a terminal.
 //
-// The one exception is ctrl+e, which turns the preview into an editor for the
-// file it is already showing: you are looking at the thing, and fixing a line
-// in it should not cost you a terminal. See the edit block below.
+// Every one of them can cost you data when it is wrong, so none of them are
+// quiet. Nothing is overwritten -- a taken name comes back as exit 17 and is
+// reported, never resolved by inventing one. A delete goes to the trash and is
+// asked twice in red. An edit only ever saves a file that was read whole, and
+// the save is confirmed by reading it back.
+//
+// There is still no new-folder and no undo beyond the trash; yazi is installed
+// and does the rest properly.
 Item {
   id: root
 
@@ -103,25 +108,6 @@ Item {
     onTriggered: root.settledSel = root.sel
   }
   readonly property var crumbs: FilesIndex.crumbs(root.listedDir, root.home)
-
-  // One caret, blinking in one place: at the end of the path you are typing, or
-  // in the filter chip. Hoisted here so both wear the same beat rather than
-  // each running a timer of its own.
-  property bool caretLit: true
-  Timer {
-    running: root.opened && root.filter.length > 0
-    interval: 530
-    repeat: true
-    onTriggered: root.caretLit = !root.caretLit
-    onRunningChanged: root.caretLit = true
-  }
-
-  component Caret: Rectangle {
-    width: Style.space(2)
-    height: Style.font.subtitle
-    color: Color.accent
-    opacity: root.caretLit ? 0.85 : 0.0
-  }
 
   // ------------------------------------------------------------- surfaces
   //
@@ -250,8 +236,8 @@ Item {
                                    && root.dirEntries.length > 0
   // As many lines as the pane is tall, as many characters as it is wide: the
   // listing is cut to the pane it is going into.
-  readonly property int dirRows: Math.max(1, Math.floor(preview.height / root.lineHeight))
-  readonly property int dirPaneChars: Math.max(20, Math.floor(preview.width / codeMetrics.advanceWidth))
+  readonly property int dirRows: Math.max(1, Math.floor(preview.paneHeight / root.lineHeight))
+  readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
     ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400) : []
   // A line of text sits at the top of its line box; a list row sits in the
@@ -264,15 +250,14 @@ Item {
       ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
                             Style.font.menuFamily, Style.font.subtitle)
       : ""
-  readonly property string previewNumbers: root.editing ? FilesIndex.numbers(editor.text)
-    : root.showsMarkdown ? "" : FilesIndex.numbers(root.previewText)
-  onSelChanged: settle.restart()
+  // Arming a delete follows the selection: arrow away and it is disarmed, so a
+  // second Del can never land on a row you did not aim it at.
+  onSelChanged: { settle.restart(); root.doomed = "" }
   // Cleared here rather than left for the model to overwrite: the child model
   // only reports Ready, so between two folders the old folder's contents would
   // otherwise sit under the new folder's name.
   onSettledSelChanged: {
-    preview.contentY = 0
-    preview.contentX = 0
+    preview.resetScroll()
     root.dirEntries = []
   }
 
@@ -329,7 +314,7 @@ Item {
       if (root.rows[i].name === root.pending) {
         root.index = i
         root.pending = ""
-        list.positionViewAtIndex(root.index, ListView.Contain)
+        list.view.positionViewAtIndex(root.index, ListView.Contain)
         return
       }
     }
@@ -378,20 +363,7 @@ Item {
   function move(step) {
     var n = root.rows.length
     if (n > 0) root.index = (root.index + step + n) % n
-    list.positionViewAtIndex(root.index, ListView.Contain)
-  }
-
-  // The preview scrolls under the keyboard, because a preview you can only see
-  // the top of is a thumbnail. Clamped by hand rather than left to the
-  // Flickable, which would rubber-band past the end and settle back.
-  function scrollBy(dy) {
-    preview.contentY = Util.clamp(preview.contentY + dy, 0,
-                                  Math.max(0, preview.contentHeight - preview.height))
-  }
-
-  function scrollAcross(dx) {
-    preview.contentX = Util.clamp(preview.contentX + dx, 0,
-                                  Math.max(0, preview.contentWidth - preview.width))
+    list.view.positionViewAtIndex(root.index, ListView.Contain)
   }
 
   // ------------------------------------------------------------------- edit
@@ -413,35 +385,14 @@ Item {
   readonly property bool editable: !!root.previewPath && root.fullText === root.previewText
                                    && (!!root.fullText || root.settledSel.size === 0)
 
-  // Where you were reading, kept across the switch both ways. The two modes
-  // have nothing like the same height -- rendered markdown against plain source
-  // -- so the offset cannot be carried, but the fraction of the way down can.
-  // Applied when the scroller re-measures: at the moment the mode flips,
-  // `contentHeight` is still the other mode's.
-  property real pendingAt: -1
-  function keepPlace() {
-    root.pendingAt = Util.clamp(preview.contentY
-                                / Math.max(1, preview.contentHeight - preview.height), 0, 1)
-  }
-  function takePlace() {
-    if (root.pendingAt < 0) return
-    preview.contentY = root.pendingAt * Math.max(0, preview.contentHeight - preview.height)
-    preview.contentX = 0
-    root.pendingAt = -1
-    // The caret lands on the line you were reading, so the first thing you
-    // type goes where you were looking.
-    if (root.editing)
-      editor.cursorPosition = editor.positionAt(0, Math.max(0, preview.contentY - root.dirTopPad + 2))
-  }
-
   function edit() {
     if (!root.editable || root.editing) return
-    editor.text = root.fullText
+    preview.editorText = root.fullText
     root.dirty = false
     root.saveError = false
-    root.keepPlace()
+    preview.keepPlace()
     root.editing = true
-    editor.forceActiveFocus()
+    preview.focusEditor()
   }
 
   // Written and then read back: `FileView` emits neither `saved` nor
@@ -452,7 +403,7 @@ Item {
   function save() {
     if (!root.editing || root.saving) return
     root.saveError = false
-    root.saving = FilesIndex.endLine(editor.text)
+    root.saving = FilesIndex.endLine(preview.editorText)
     previewFile.setText(root.saving)
     verifySave.restart()
   }
@@ -464,7 +415,7 @@ Item {
   property bool discarding: false
   function leaveEdit() {
     if (root.dirty && !root.discarding) { root.discarding = true; discardArmed.restart(); return }
-    root.keepPlace()
+    preview.keepPlace()
     root.editing = false
     root.dirty = false
     root.discarding = false
@@ -474,17 +425,174 @@ Item {
   Timer { id: discardArmed; interval: 2000; onTriggered: root.discarding = false }
   Timer { id: savedFlash; interval: 1500 }
 
-  function revealCursor() {
-    if (!root.editing) return
-    var r = editor.cursorRectangle
-    var top = content.y + editor.y + r.y
-    if (top < preview.contentY) root.scrollBy(top - preview.contentY)
-    else if (top + r.height > preview.contentY + preview.height)
-      root.scrollBy(top + r.height - preview.contentY - preview.height)
-    var left = editor.x + r.x
-    if (left < preview.contentX) root.scrollAcross(left - preview.contentX - Style.space(40))
-    else if (left + r.width > preview.contentX + preview.width)
-      root.scrollAcross(left + r.width - preview.contentX - preview.width + Style.space(40))
+  // -------------------------------------------------------------- file moves
+  //
+  // One held entry and one verb, the idiom every file manager already uses:
+  // ctrl+x or ctrl+c takes the selection, ctrl+v places it in the directory you
+  // have walked to. A move between two directories is the thing people actually
+  // open a second pane for, and not having it is what sends you to a terminal.
+  //
+  // Nothing is ever overwritten. The destination name is tested before the
+  // command runs and a collision comes back as its own exit code, reported as
+  // it is rather than resolved by inventing a "(copy)" name -- a file manager
+  // that renames your file for you is one you cannot predict.
+  property var held: null
+  property string fileNote: ""
+  Timer { id: noteFade; interval: 4000; onTriggered: root.fileNote = "" }
+  function note(text) { root.fileNote = text; noteFade.restart() }
+
+  function hold(e, move) {
+    if (!e) return
+    root.held = { path: e.path, name: e.name, isDir: !!e.isDir, move: !!move }
+    root.note((move ? "moving " : "copying ") + e.name)
+  }
+
+  // Every write goes through one process and one contract: exit 0 is done, 17
+  // is the name is taken, anything else failed. `op` is what to say about it.
+  property var op: null
+  function run(command, about) {
+    if (filer.running) return
+    root.op = about
+    filer.command = command
+    filer.running = true
+  }
+
+  // Paths go as arguments, never spliced into the script, so a name with a
+  // space or a $ in it is just a name. $2 is the destination, and 17 is nothing
+  // mv or cp returns on its own.
+  function guarded(verb, src, dst) {
+    return ["sh", "-c", '[ -e "$2" ] && exit 17; exec ' + verb + ' -- "$1" "$2"',
+            "files", src, dst]
+  }
+
+  function inHere(name) { return root.listedDir.replace(/\/+$/, "") + "/" + name }
+
+  function paste() {
+    if (!root.held) return
+    if (root.inHere(root.held.name) === root.held.path) { root.note("already here"); return }
+    var h = root.held
+    root.run(root.guarded(h.move ? "mv" : "cp -r", h.path, root.inHere(h.name)),
+             { name: h.name, land: true, spend: h.move,
+               done: (h.move ? "moved " : "copied ") + h.name,
+               fail: (h.move ? "move" : "copy") + " failed" })
+  }
+
+  Process {
+    id: filer
+    onExited: function (exitCode) {
+      var o = root.op
+      root.op = null
+      if (!o) return
+      if (exitCode !== 0) {
+        root.note(exitCode === 17 ? "a " + o.name + " is already here" : o.fail)
+        return
+      }
+      // The model watches the directory, so the row arrives on its own; this
+      // is only which of them to land on once it does.
+      if (o.land) root.pending = o.name
+      root.note(o.done)
+      // A move has spent its source. A copy has not, so it can be placed again.
+      if (o.spend) root.held = null
+    }
+  }
+
+  // ---------------------------------------------------------- rename, delete
+  //
+  // The filter chip becomes the name field: it is already a text box with a
+  // caret in it, sitting where the name reads, and a second one would be a
+  // second thing to learn. With a real caret, because renaming is mostly
+  // changing a few characters in the middle of a name you already have and a
+  // field you can only type at the end of makes you retype all of it.
+  property bool renaming: false
+  property string renameTo: ""
+  property int renameAt: 0
+
+  function beginRename() {
+    if (!root.sel || root.editing) return
+    root.renameTo = root.sel.name
+    // On the stem, before the extension, because that is the part being
+    // changed nine times out of ten.
+    var dot = root.renameTo.lastIndexOf(".")
+    root.renameAt = dot > 0 ? dot : root.renameTo.length
+    root.renaming = true
+  }
+
+  function renameKey(event) {
+    var at = root.renameAt
+    var t = root.renameTo
+    switch (event.key) {
+    case Qt.Key_Left:  root.renameAt = Math.max(0, at - 1); return
+    case Qt.Key_Right: root.renameAt = Math.min(t.length, at + 1); return
+    case Qt.Key_Home:  root.renameAt = 0; return
+    case Qt.Key_End:   root.renameAt = t.length; return
+    case Qt.Key_Backspace:
+      if (!at) return
+      root.renameTo = t.slice(0, at - 1) + t.slice(at)
+      root.renameAt = at - 1
+      return
+    case Qt.Key_Delete:
+      root.renameTo = t.slice(0, at) + t.slice(at + 1)
+      return
+    }
+    if (event.modifiers & Qt.ControlModifier) {
+      switch (event.key) {
+      case Qt.Key_U: root.renameTo = t.slice(at); root.renameAt = 0; return
+      case Qt.Key_K: root.renameTo = t.slice(0, at); return
+      case Qt.Key_A: root.renameAt = 0; return
+      case Qt.Key_E: root.renameAt = t.length; return
+      // A name is text like any other, and a path is the likeliest thing to be
+      // on the clipboard while you are renaming. Separators come out: what
+      // goes in this field is a name.
+      case Qt.Key_V:
+        var clip = String(Quickshell.clipboardText || "").replace(/[\s\/]+/g, " ").trim()
+        root.renameTo = t.slice(0, at) + clip + t.slice(at)
+        root.renameAt = at + clip.length
+        return
+      }
+      return
+    }
+    if (event.text && event.text.length === 1 && event.text >= " ") {
+      root.renameTo = t.slice(0, at) + event.text + t.slice(at)
+      root.renameAt = at + event.text.length
+    }
+  }
+
+  function commitRename() {
+    var e = root.sel
+    var name = root.renameTo.trim()
+    root.renaming = false
+    if (!e || !name || name === e.name) return
+    // A name is a name. Anything with a separator in it is a move being asked
+    // for in the wrong field, and moving is what ctrl+x is for.
+    if (name.indexOf("/") !== -1) { root.note("a name cannot hold a /"); return }
+    root.run(root.guarded("mv", e.path, root.inHere(name)),
+             { name: name, land: true, done: "renamed to " + name, fail: "rename failed" })
+  }
+
+  // Trashed, not removed. gio puts it in the freedesktop trash, where it can be
+  // got back -- the difference between a delete you can survive and one you
+  // cannot. Asked twice all the same, because it is the one verb here that
+  // takes something away, and the second press is cheaper than the regret.
+  // Not Color.urgent: themes set it to a muted brick that reads brown at small
+  // sizes, and a question about destroying something has to be the one colour
+  // on the card nobody has to look twice at. Fixed on purpose, and the only
+  // place in this panel that ignores the theme.
+  readonly property color danger: "#ff2222"
+  property string doomed: ""
+  readonly property string doomedName:
+    root.doomed ? root.doomed.slice(root.doomed.lastIndexOf("/") + 1) : ""
+  Timer { id: doomArmed; interval: 3000; onTriggered: root.doomed = "" }
+  function remove() {
+    var e = root.sel
+    if (!e || root.editing) return
+    if (root.doomed !== e.path) {
+      root.doomed = e.path
+      doomArmed.restart()
+      return
+    }
+    root.doomed = ""
+    root.run(["gio", "trash", "--", e.path],
+             { name: e.name, done: "trashed " + e.name, fail: "delete failed" })
   }
 
   // A directory is somewhere to go; a file is something to hand off -- when the
@@ -548,7 +656,7 @@ Item {
       // The read-back half of a save. Typing during the wait leaves it dirty.
       if (root.saving) {
         root.saveError = root.fullText !== root.saving
-        root.dirty = root.saveError || FilesIndex.endLine(editor.text) !== root.saving
+        root.dirty = root.saveError || FilesIndex.endLine(preview.editorText) !== root.saving
         if (!root.saveError) savedFlash.restart()
         root.saving = ""
       }
@@ -609,18 +717,49 @@ Item {
         focus: true
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: function (event) {
-          // Reached only by what the editor did not want: keys go to the
-          // focused item first and bubble out to here.
+          // `Keys.priority: Keys.BeforeItem` means this handler sees every key
+          // before the editor does, focused or not -- the same thing Omarchy's
+          // own PanelKeyCatcher documents. Anything not accepted here goes on
+          // to the editor, which is what makes typing work; the clipboard is
+          // spelled out rather than left to TextEdit's own handling, because a
+          // panel this modal should not have verbs that only work by accident.
           if (root.editing) {
-            if (event.key === Qt.Key_Escape) { root.leaveEdit(); event.accepted = true }
-            else if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-              root.save(); event.accepted = true
+            if (event.modifiers & Qt.ControlModifier) {
+              switch (event.key) {
+              case Qt.Key_S: root.save(); event.accepted = true; return
+              case Qt.Key_C: preview.copy(); event.accepted = true; return
+              case Qt.Key_X: preview.cut(); event.accepted = true; return
+              case Qt.Key_V: preview.paste(); event.accepted = true; return
+              case Qt.Key_A: preview.selectAll(); event.accepted = true; return
+              }
             }
+            if (event.key === Qt.Key_Escape) { root.leaveEdit(); event.accepted = true }
+            return
+          }
+          // Renaming takes the keyboard the way editing does, and for the same
+          // reason: the field it is typing into is the one the filter uses.
+          // Any key that is not the second Del calls the delete off. The foot
+          // is showing a question; a keystroke that is not the answer is a no.
+          if (root.doomed && event.key !== Qt.Key_Delete) root.doomed = ""
+
+          if (root.renaming) {
+            switch (event.key) {
+            case Qt.Key_Escape: root.renaming = false; break
+            case Qt.Key_Return:
+            case Qt.Key_Enter:  root.commitRename(); break
+            default: root.renameKey(event)
+            }
+            // Everything, so an arrow cannot move the selection out from under
+            // the name being typed.
+            event.accepted = true
             return
           }
           if (event.modifiers & Qt.ControlModifier) {
             switch (event.key) {
             case Qt.Key_E: root.edit(); event.accepted = true; return
+            case Qt.Key_C: root.hold(root.sel, false); event.accepted = true; return
+            case Qt.Key_X: root.hold(root.sel, true); event.accepted = true; return
+            case Qt.Key_V: root.paste(); event.accepted = true; return
             case Qt.Key_H: root.showHidden = !root.showHidden; event.accepted = true; return
             case Qt.Key_U: root.filter = ""; event.accepted = true; return
             }
@@ -629,10 +768,10 @@ Item {
           // down, it is the one modifier that reads as "the other pane".
           if (event.modifiers & Qt.ShiftModifier) {
             switch (event.key) {
-            case Qt.Key_Down:  root.scrollBy(root.lineHeight * 3); event.accepted = true; return
-            case Qt.Key_Up:    root.scrollBy(-root.lineHeight * 3); event.accepted = true; return
-            case Qt.Key_Right: root.scrollAcross(Style.space(60)); event.accepted = true; return
-            case Qt.Key_Left:  root.scrollAcross(-Style.space(60)); event.accepted = true; return
+            case Qt.Key_Down:  preview.scrollBy(root.lineHeight * 3); event.accepted = true; return
+            case Qt.Key_Up:    preview.scrollBy(-root.lineHeight * 3); event.accepted = true; return
+            case Qt.Key_Right: preview.scrollAcross(Style.space(60)); event.accepted = true; return
+            case Qt.Key_Left:  preview.scrollAcross(-Style.space(60)); event.accepted = true; return
             }
           }
           switch (event.key) {
@@ -652,9 +791,11 @@ Item {
           case Qt.Key_Up:    root.move(-1); event.accepted = true; return
           case Qt.Key_Tab:   root.move(1); event.accepted = true; return
           case Qt.Key_Backtab: root.move(-1); event.accepted = true; return
-          case Qt.Key_PageDown: root.scrollBy(preview.height * 0.9); event.accepted = true; return
-          case Qt.Key_PageUp:   root.scrollBy(-preview.height * 0.9); event.accepted = true; return
+          case Qt.Key_PageDown: preview.scrollBy(preview.pageStep); event.accepted = true; return
+          case Qt.Key_PageUp:   preview.scrollBy(-preview.pageStep); event.accepted = true; return
           case Qt.Key_Home:  root.enter(root.home); event.accepted = true; return
+          case Qt.Key_F2:    root.beginRename(); event.accepted = true; return
+          case Qt.Key_Delete: root.remove(); event.accepted = true; return
           case Qt.Key_Right:
           case Qt.Key_Return:
           case Qt.Key_Enter:
@@ -667,180 +808,10 @@ Item {
           }
         }
 
-        // ------------------------------------------------------------ header
-        //
-        // Where you are, spelled as the trail you walked rather than as one
-        // string: the leaf at full strength, everything behind it dimmed to
-        // context. One line, because the path is the only thing that has to be
-        // legible at a glance and a second row of chrome would push the list
-        // down.
-        Item {
+        FilesHeader {
           id: header
+          panel: root
           anchors { top: parent.top; left: parent.left; right: parent.right }
-          height: Style.font.title + Style.spacing.controlPaddingY * 2
-          // A path deep enough to reach the preview's heading is cut off at
-          // the column boundary rather than allowed to run through it.
-          clip: true
-
-          // Path, query, count: one left-flowing group. Right-aligning the
-          // count instead put it directly above the preview's own size and
-          // date, where two dim figures in a column read as two facts about one
-          // file -- and squeezing it over the narrow list column alone leaves
-          // it nowhere to go the moment the path or the query grows.
-          Row {
-            anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
-            // Wide enough that the count is not read as part of the path the
-            // caret is still sitting at the end of.
-            spacing: Style.spacing.xxl
-
-            Row {
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: 0
-
-              Repeater {
-                model: root.crumbs
-
-                delegate: Row {
-                  required property int index
-                  required property string modelData
-                  spacing: 0
-
-                  Text {
-                    visible: index > 0
-                    text: "/"
-                    color: Color.menu.text
-                    opacity: 0.22
-                    leftPadding: Style.spacing.sm
-                    rightPadding: Style.spacing.sm
-                    font.family: Style.font.menuFamily
-                    font.pixelSize: Style.font.subtitle
-                  }
-
-                  Text {
-                    text: modelData
-                    color: Color.menu.text
-                    // While a path is being typed the trail is all context and
-                    // the tail is the live word, so nothing in the trail is lit.
-                    opacity: !root.pathMode && index === root.crumbs.length - 1 ? 0.95 : 0.5
-                    font.family: Style.font.menuFamily
-                    font.pixelSize: Style.font.subtitle
-                  }
-                }
-              }
-
-              // The tail of a typed path, written as the next segment of the
-              // trail it extends. The crumbs already ARE the path typed so far;
-              // this is only the word they do not know yet.
-              Row {
-                visible: root.pathMode
-                spacing: 0
-
-                Text {
-                  text: "/"
-                  color: Color.menu.text
-                  opacity: 0.22
-                  leftPadding: Style.spacing.sm
-                  rightPadding: Style.spacing.sm
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.subtitle
-                }
-
-                Text {
-                  text: root.typedLeaf
-                  color: Color.accent
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.subtitle
-                }
-
-                Caret { anchors.verticalCenter: parent.verticalCenter }
-              }
-            }
-
-            // What you have typed to narrow the list. It sits in a pill of its
-            // own rather than trusting the accent to distinguish it: plenty of
-            // themes set `accent` to the same colour as the foreground, and
-            // then a coloured word next to the path is just another segment.
-            Rectangle {
-              visible: root.filter.length > 0 && !root.pathMode
-              anchors.verticalCenter: parent.verticalCenter
-              width: filterText.width + caret.width + Style.spacing.xs + Style.spacing.md * 2
-              height: Style.font.subtitle + Style.spacing.sm * 2
-              radius: root.rowRadius
-              color: Util.alpha(Color.menu.text, 0.07)
-
-              Text {
-                id: filterText
-                anchors.left: parent.left
-                anchors.leftMargin: Style.spacing.md
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.filter
-                color: Color.accent
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.subtitle
-              }
-
-              Caret {
-                id: caret
-                anchors.left: filterText.right
-                anchors.leftMargin: Style.spacing.xs
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              text: FilesIndex.countLabel(root.rows.length, root.entries.length,
-                                          root.query, root.showHidden)
-              color: Color.menu.text
-              opacity: 0.5
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-          }
-
-          // The preview's own heading, on the same line as the path and over
-          // the column it describes. It used to sit inside the preview under a
-          // rule of its own, which made the card look like it had two headers
-          // and drew a line across the page for no one.
-          Row {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Style.spacing.lg
-            visible: !!root.settledSel
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              visible: root.editing
-              text: root.saveError ? "write failed"
-                    : savedFlash.running ? "saved"
-                    : root.dirty ? "unsaved" : "editing"
-              color: root.saveError ? Color.menu.text : Color.accent
-              opacity: 0.85
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              width: Math.min(implicitWidth, Math.round(root.previewWidth * 0.6))
-              elide: Text.ElideMiddle
-              text: root.settledSel ? root.settledSel.name : ""
-              color: Color.menu.text
-              opacity: 0.9
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.body
-            }
-
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.metaLine
-              color: Color.menu.text
-              opacity: 0.5
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-          }
         }
 
         Rectangle {
@@ -859,307 +830,24 @@ Item {
             bottom: footRule.top; bottomMargin: Style.spacing.panelGap
           }
 
-          ListView {
+          FilesList {
             id: list
+            panel: root
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
             width: root.listWidth
-            clip: true
-            model: root.rows
-            currentIndex: root.index
-            boundsBehavior: Flickable.StopAtBounds
-
-            delegate: Item {
-              id: entry
-              required property int index
-              required property var modelData
-              readonly property bool active: root.index === entry.index
-
-              width: list.width
-              height: root.rowHeight
-
-              // The fill stops short of the preview so the selection never
-              // touches it; the bar is what your eye actually lands on.
-              Rectangle {
-                anchors.fill: parent
-                anchors.rightMargin: Style.spacing.md
-                radius: root.rowRadius
-                color: entry.active ? root.activeFill
-                                    : (pointer.containsMouse ? root.hoverFill : "transparent")
-              }
-
-              Rectangle {
-                visible: entry.active
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(2)
-                height: Math.round(parent.height * 0.5)
-                radius: width / 2
-                color: Color.accent
-              }
-
-              MouseArea {
-                id: pointer
-                anchors.fill: parent
-                hoverEnabled: true
-                // positionChanged, not entered: retyping a query re-lays the
-                // rows out under a cursor that has not moved, and `entered`
-                // fires on every row that slides beneath it -- which drags the
-                // selection around mid-keystroke and leaves you unsure what
-                // Return will run. Real pointer motion is the only thing that
-                // should claim it.
-                onPositionChanged: function (mouse) {
-                  if (root.hoverMoved(mapToItem(null, mouse.x, mouse.y))) root.index = entry.index
-                }
-                onClicked: root.activate(entry.modelData)
-              }
-
-              Row {
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: Style.spacing.rowPaddingX
-                anchors.right: parent.right
-                anchors.rightMargin: Style.spacing.rowPaddingX + Style.spacing.md
-                spacing: Style.spacing.controlGap
-
-                // Folders carry a little of the accent even when they are not
-                // selected. It is the only cue that survives a list where every
-                // other row is a file with a long ordinary name.
-                Text {
-                  id: glyph
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.font.iconLarge
-                  text: entry.modelData.isDir ? "󰉋" : "󰈔"
-                  color: entry.active ? Color.accent
-                         : entry.modelData.isDir ? Util.alpha(Color.accent, 0.55)
-                         : Util.alpha(Color.menu.text, 0.35)
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.iconLarge
-                }
-
-                Text {
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: parent.width - glyph.width - trail.width - parent.spacing * 2
-                  elide: Text.ElideRight
-                  text: entry.modelData.name
-                  color: entry.active ? Color.menu.selectedText : Color.menu.text
-                  opacity: entry.active ? 1.0 : (entry.modelData.isDir ? 0.88 : 0.66)
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.body
-                }
-
-                // A size for files. For the folder you are standing on, the
-                // chevron that says Return goes in there.
-                Text {
-                  id: trail
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: entry.modelData.isDir
-                        ? (entry.active ? "›" : "")
-                        : FilesIndex.humanSize(entry.modelData.size)
-                  color: entry.active ? Color.accent : Color.menu.text
-                  opacity: entry.active ? 0.75 : 0.45
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: entry.modelData.isDir ? Style.font.body : Style.font.bodySmall
-                }
-              }
-            }
           }
 
-          // The same indicator the preview carries, for the same reason: a
-          // directory of 977 files is otherwise a list with no bottom.
-          Rectangle {
-            visible: list.contentHeight > list.height + 1
-            anchors.right: list.right
-            anchors.rightMargin: Style.spacing.xs
-            width: Style.space(2)
-            radius: width / 2
-            color: Util.alpha(Color.menu.text, 0.18)
-            height: Math.max(Style.space(24),
-                             list.height * list.height / Math.max(1, list.contentHeight))
-            y: list.y + (list.contentY / Math.max(1, list.contentHeight - list.height))
-               * (list.height - height)
-          }
-
-          // What the selection is, without opening it. A directory shows what
-          // is inside, an image shows itself, and text shows its top; anything
-          // else has only its name and size to give, and says so rather than
-          // drawing a screen of mojibake.
-          Item {
+          FilesPreview {
+            id: preview
+            panel: root
             anchors {
               top: parent.top; bottom: parent.bottom
               left: list.right; leftMargin: Style.spacing.huge
               right: parent.right
             }
-            clip: true
-
-            // No wrapping: a wrapped line is one the numbers beside it stop
-            // agreeing with, and code read at the wrong margins is worse than
-            // code read short. What runs off the edge is reachable by
-            // dragging, or by Shift and an arrow.
-            Flickable {
-              id: preview
-              // Neither the numbers nor the prose should start hard against
-              // the edge the column was cut at.
-              anchors {
-                top: parent.top; bottom: parent.bottom
-                left: parent.left; leftMargin: Style.spacing.lg
-                right: parent.right; rightMargin: Style.spacing.lg
-              }
-              visible: root.showsDir || !!root.previewBody || root.editing
-              contentWidth: root.showsDir ? folderView.width : content.width
-              // The content sits `dirTopPad` down the scroller, so its height
-              // is not the height of what is being scrolled: uncounted, the
-              // last line of the file cannot be reached. Counted twice, so the
-              // closing line gets the air the opening one stands in.
-              contentHeight: (root.showsDir ? folderView.height : content.height)
-                             + root.dirTopPad * 2
-              onContentHeightChanged: root.takePlace()
-              flickableDirection: Flickable.HorizontalAndVerticalFlick
-              boundsBehavior: Flickable.StopAtBounds
-              clip: true
-
-              // The folder, in columns, starting where the pane starts. It is
-              // the width of the facts that fills a pane, not the position of
-              // the block: centred, the space between the two columns of the
-              // card read as a channel of dead ground.
-              Row {
-                id: folderView
-                visible: root.showsDir
-                y: root.dirTopPad
-                spacing: root.gutterGap * 2
-
-                Repeater {
-                  model: root.dirColumns
-
-                  delegate: Text {
-                    required property string modelData
-                    text: modelData
-                    color: Color.menu.text
-                    opacity: 0.92
-                    font.family: Style.font.menuFamily
-                    font.pixelSize: Style.font.subtitle
-                    renderType: Text.NativeRendering
-                    lineHeightMode: Text.FixedHeight
-                    lineHeight: root.lineHeight
-                  }
-                }
-              }
-
-              Row {
-                id: content
-                visible: !root.showsDir
-                // The same nudge the folder gets, so arrowing from a folder to
-                // a file does not step the preview up the page.
-                y: root.dirTopPad
-                spacing: root.gutterGap
-
-                Text {
-                  visible: root.previewNumbers.length > 0
-                           && (!root.showsMarkdown || root.editing)
-                  text: root.previewNumbers
-                  horizontalAlignment: Text.AlignRight
-                  color: Color.menu.text
-                  opacity: 0.32
-                  font.family: Style.font.menuFamily
-                  // TextEdit carries no lineHeight, so an edited file is set at
-                  // the font's own leading -- which follows its size, so the
-                  // gutter has to be set at the size it is numbering or the two
-                  // drift apart down the page. The preview's fixed rhythm does
-                  // that job itself, and lets the numbers be smaller there.
-                  font.pixelSize: root.editing ? Style.font.subtitle : Style.font.bodySmall
-                  renderType: Text.NativeRendering
-                  lineHeightMode: root.editing ? Text.ProportionalHeight : Text.FixedHeight
-                  lineHeight: root.editing ? 1.0 : root.lineHeight
-                }
-
-                // The file, with nothing drawn over it.
-                TextEdit {
-                  id: editor
-                  visible: root.editing
-                  color: Color.menu.text
-                  opacity: 0.92
-                  selectionColor: Util.alpha(Color.accent, 0.35)
-                  selectedTextColor: Color.menu.text
-                  selectByMouse: true
-                  persistentSelection: true
-                  wrapMode: Text.NoWrap
-                  textFormat: TextEdit.PlainText
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.subtitle
-                  renderType: Text.NativeRendering
-                  onTextChanged: if (root.editing) root.dirty = true
-                  onCursorRectangleChanged: root.revealCursor()
-                }
-
-                Text {
-                  visible: !root.editing
-                  text: root.previewBody
-                  color: Color.menu.text
-                  opacity: 0.92
-                  // Prose wraps to the pane and flows; code keeps its own line
-                  // breaks and scrolls sideways past the edge.
-                  width: root.showsMarkdown ? preview.width : implicitWidth
-                  wrapMode: root.showsMarkdown ? Text.Wrap : Text.NoWrap
-                  textFormat: root.showsMarkdown ? Text.MarkdownText
-                              : root.showsCode ? Text.RichText
-                              : Text.PlainText
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.subtitle
-                  // Hinted against the pixel grid rather than distance-field
-                  // sampled. It is what makes small monospace look set rather
-                  // than printed slightly out of focus.
-                  renderType: Text.NativeRendering
-                  // A rendered heading is taller than a line of body text and
-                  // has to be allowed to be; only code wants a fixed rhythm.
-                  lineHeightMode: root.showsMarkdown ? Text.ProportionalHeight
-                                                     : Text.FixedHeight
-                  lineHeight: root.showsMarkdown ? 1.0 : root.lineHeight
-                }
-              }
-            }
-
-            // The only thing that tells you there is more below, and where in
-            // it you are standing.
-            Rectangle {
-              anchors.right: parent.right
-              visible: preview.visible && preview.contentHeight > preview.height + 1
-              width: Style.space(2)
-              radius: width / 2
-              color: Util.alpha(Color.menu.text, 0.22)
-              height: Math.max(Style.space(24),
-                               preview.height * preview.height / Math.max(1, preview.contentHeight))
-              y: (preview.contentY / Math.max(1, preview.contentHeight - preview.height))
-                 * (preview.height - height)
-            }
-
-            Image {
-              id: previewImage
-              anchors.fill: parent
-              // A format Qt has no plugin for, or a corrupt file, must fall
-              // through to the note rather than leaving an empty frame.
-              visible: root.showsImage && status !== Image.Error
-              source: root.showsImage ? "file://" + root.settledSel.path : ""
-              fillMode: Image.PreserveAspectFit
-              asynchronous: true
-              sourceSize.width: width
-              sourceSize.height: height
-            }
-
-            Text {
-              anchors.centerIn: parent
-              visible: !!root.previewNote
-              text: root.previewNote
-              color: Color.menu.text
-              opacity: 0.45
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.bodySmall
-            }
           }
         }
 
-        // Every key this panel answers to, in the order you reach for them. A
-        // browser with no visible verbs is one you have to remember. Key and
-        // word are told apart by weight rather than by space, so the pairs
-        // group themselves instead of reading as six phrases in a row.
         Rectangle {
           id: footRule
           // The same air above the words as below them.
@@ -1171,42 +859,10 @@ Item {
           color: root.edge
         }
 
-        Row {
+        FilesHints {
           id: hints
-          anchors.bottom: parent.bottom
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: Style.spacing.xxl
-
-          Repeater {
-            model: root.editing
-              ? [["ctrl+s", "save"],
-                 ["esc", root.discarding ? "again to discard"
-                         : root.dirty ? "discard" : "back"]]
-              : [["↑↓", "select"], ["→", "open"], ["←", "up"],
-                 ["shift+↑↓", "scroll"], ["ctrl+e", "edit"],
-                 ["ctrl+h", "hidden"], ["esc", "close"]]
-
-            delegate: Row {
-              required property var modelData
-              spacing: Style.spacing.xs
-
-              Text {
-                text: modelData[0]
-                color: Color.menu.text
-                opacity: 0.72
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              Text {
-                text: modelData[1]
-                color: Color.menu.text
-                opacity: 0.36
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-          }
+          panel: root
+          anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
         }
       }
     }
