@@ -1,8 +1,17 @@
 #!/bin/bash
-# Install the centered-panel patch into the packaged Omarchy shell.
+# Install this repo into a live Omarchy: the plugins, the opener they call, and
+# the centered-panel patch.
 #
-# These three files are package-owned, so `omarchy update` overwrites them.
-# This script is idempotent and is wired to run automatically afterwards via
+# Two halves, and only one of them wants root. The plugins are symlinked into
+# ~/.config/omarchy/plugins and registered in ~/.config/omarchy/shell.json,
+# all of it under $HOME and none of it touched by `omarchy update`. The patch
+# writes three package-owned files under /usr/share/omarchy/shell, and that is
+# the only reason sudo appears in this script at all -- asked for per file, and
+# only when that file actually differs, so a re-run that finds everything in
+# place never prompts.
+#
+# `omarchy update` overwrites those three files, so this script is idempotent
+# and is wired to run automatically afterwards via
 # ~/.config/omarchy/hooks/post-update.d/ (see hooks/), so an update repairs
 # itself instead of silently reverting the shell to stock.
 #
@@ -15,15 +24,48 @@ set -uo pipefail
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml)
+CONF=~/.config/omarchy/shell.json
 
 # Both failure paths below leave the user with a broken shell, so both must be
 # loud on screen AND on the desktop -- `omarchy update` output scrolls past.
 alert() {
   printf '\n\e[31m%s\e[0m\n' "$1" >&2
   printf '%s\n' "${@:2}" >&2
-  command -v notify-send >/dev/null && notify-send -u critical "Centered panels" "$1"
+  command -v notify-send >/dev/null && notify-send -u critical "omarchy-custom" "$1"
 }
 
+# ------------------------------------------------------------------ plugins
+# Symlinks rather than copies: editing the repo IS editing the installed
+# plugin, which is the whole reason these are plugins and not patches. -n so a
+# re-run replaces the link instead of dropping a new one inside the old one.
+# Linked and registered in one pass. A plugin the shell cannot find listed in
+# shell.json is a plugin it does not load, and `omarchy refresh shell` rewrites
+# that file from the defaults, so registering has to be repeatable rather than
+# done once by hand. jq writes through a temp file: failing halfway into
+# shell.json costs the whole shell config.
+mkdir -p ~/.config/omarchy/plugins ~/.local/bin
+ids=()
+for p in "$REPO"/plugins/*/; do
+  id=$(basename "$p")
+  ln -sfn "${p%/}" ~/.config/omarchy/plugins/"$id"
+  ids+=("$id")
+  if jq --arg id "$id" 'if any(.plugins[]?; .id == $id) then .
+                        else .plugins = (.plugins // []) + [{id: $id}] end' \
+        "$CONF" > "$CONF.new"; then
+    mv "$CONF.new" "$CONF"
+  else
+    rm -f "$CONF.new"
+    alert "Could not register $id in shell.json"
+  fi
+done
+
+# Files.qml runs the opener by name, so it has to be somewhere on PATH.
+# ~/.local/bin is on Omarchy's. (omarchy-wheel-close is not here: the keybind
+# names it by absolute path, so putting it on PATH would install nothing.)
+ln -sfn "$REPO"/bin/omarchy-open-path ~/.local/bin/omarchy-open-path
+echo "plugins: ${ids[*]}"
+
+# ------------------------------------------------------------------- patches
 applied=()   # patch copied in
 rebased=()   # patch re-based onto a new upstream version first
 conflicts=() # merge failed, left stock, needs a human
@@ -98,6 +140,21 @@ done
   'Expected hl.env("QSG_RENDER_LOOP", "threaded") in ~/.config/hypr/looknfeel.lua;' \
   'the legacy `env =` form in hyprland.conf is accepted silently and does nothing.' \
   'Then: hyprctl reload && omarchy restart shell'
+
+# Config this script deliberately does NOT write. looknfeel.lua and
+# bindings.lua are hand-kept Lua carrying the user's own comments, and a script
+# splicing lines into those fails worse than a missing line it names out loud
+# -- the same call the render-loop check above already makes. Advisory rather
+# than fatal: this runs from a post-update hook, and a hook that fails the
+# whole update over a keybind is a hook that gets uninstalled.
+cfg=()
+grep -qs omarchy-wheel ~/.config/hypr/looknfeel.lua ||
+  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-wheel -- the wheel gets no blur")
+grep -qs omarchy-files ~/.config/hypr/looknfeel.lua ||
+  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-files -- the browser gets no blur")
+grep -qs "summon xpo.wheel" ~/.config/hypr/bindings.lua ||
+  cfg+=("bindings.lua: nothing runs 'omarchy-shell -q shell summon xpo.wheel' -- the wheel has no key")
+(( ${#cfg[@]} )) && printf 'missing config:\n' && printf '  %s\n' "${cfg[@]}"
 
 # Non-zero so the post-update hook prints "Hook failed" instead of passing
 # silently with a stock or juddering shell.
