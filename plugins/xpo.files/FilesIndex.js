@@ -141,6 +141,26 @@ function flattenLinks(text) {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
 }
 
+// Qt's Markdown importer hands raw HTML to a sub-parser, and an unclosed tag
+// swallows every block after it -- one `<dir>` written inside a sentence in
+// docs/wheel.md rendered 7477 characters of 17907. Only code spans survived,
+// arriving as their own typed spans rather than as text. So every angle bracket
+// outside code is escaped and shown as written; inside code it is left alone,
+// where `&lt;` would be four literal characters.
+function escapeTags(md) {
+  var lines = String(md || "").split("\n")
+  var fenced = false
+  for (var i = 0; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) { fenced = !fenced; continue }
+    if (fenced || /^(\t| {4})/.test(lines[i])) continue
+    // Odd members of the split are the code spans that produced it.
+    lines[i] = lines[i].split(/(`+[^`]*`+)/).map(function (part, n) {
+      return n % 2 ? part : part.replace(/</g, "&lt;")
+    }).join("")
+  }
+  return lines.join("\n")
+}
+
 // Qt's Markdown importer gives a paragraph no margins, so a rendered document
 // arrives as one unbroken slab whatever line height it is set at -- headings
 // included. The blank lines that separated the blocks in the source are the
@@ -177,6 +197,13 @@ function isImage(name) {
 // A NUL byte in the first kilobyte is what separates a binary from a text file
 // without an extension list to maintain. `.frag` and `.qsb` sit either side of
 // any list you would write by hand, and the bytes do not lie about which.
+// A text file ends with a newline. vim fixes this silently on write and so
+// does the editor; git calls a file without one damaged.
+function endLine(t) {
+  t = String(t || "")
+  return t && !/\n$/.test(t) ? t + "\n" : t
+}
+
 function looksBinary(text) {
   return String(text || "").slice(0, 1024).indexOf("\u0000") !== -1
 }

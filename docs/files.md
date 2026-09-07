@@ -16,6 +16,11 @@ copies or deletes. Those are the operations that cost you data when they go
 wrong, `yazi` is installed and already does them properly, and a half-built
 version of them in an overlay is worse than none.
 
+The one exception is `Ctrl+E`, which turns the preview into an editor for the
+file it is already showing — see [Editing](#editing). It is the same reach as
+the rest of the panel: you are looking at the thing, and fixing a line in it
+should not cost you a terminal.
+
 ## Keys
 
 | | |
@@ -30,6 +35,7 @@ version of them in an overlay is worse than none.
 | `Shift+↑` `Shift+↓` | scroll the preview three lines |
 | `PageUp` `PageDown` | scroll the preview a page |
 | `Shift+←` `Shift+→` | pan the preview sideways, for lines past the edge |
+| `Ctrl+E` | edit the previewed file — see [Editing](#editing) |
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
 | `Esc` | clear the field, then close |
@@ -127,6 +133,9 @@ Four kinds of thing, one scroller:
 | any other text | the first 500 lines, syntax highlighted, with line numbers |
 | anything else | its size and `no preview` |
 
+The first four are read-only renderings. `Ctrl+E` replaces the fourth with the
+file itself — see [Editing](#editing).
+
 A folder previews in the same scroller a file does, rather than in a second
 `ListView` with its own delegate and its own way of being navigated. Its rows
 are set the way the browser's own rows are — name at the left, size and date out
@@ -148,6 +157,56 @@ spent on frames nobody saw.
 Files over **256 KB** are never read. A NUL byte in the first kilobyte is what
 marks a binary, rather than an extension list to maintain: `.frag` and `.qsb`
 sit either side of any list you would write by hand, and the bytes do not lie.
+
+## Editing
+
+`Ctrl+E` turns the preview into a `TextEdit` over the same file, `Ctrl+S`
+writes it, `Esc` comes back. It is the only thing in this panel that writes.
+
+| | |
+|---|---|
+| `Ctrl+E` | edit the previewed file |
+| `Ctrl+S` | save |
+| `Esc` | back — pressed twice, within 2 s, if there are unsaved changes |
+
+What makes it safe rather than merely possible:
+
+**It is modal, because the keyboard is a filter.** Every printable key in this
+panel lands in the search field; nothing can type into a file and into a search
+box at once. While `editing`, the whole keyboard goes to the editor and only
+`Esc` and `Ctrl+S` are kept — reached because key events go to the focused item
+first and bubble *out* to the card's handler, so the guard at the top of
+`Keys.onPressed` is the only thing needed. Hover, clicks and the click-outside
+shield stop moving the selection for the same reason.
+
+**It edits plain source, not the rendering.** What the preview draws is pygments
+HTML or Qt's Markdown; editing a rendering saves the rendering — `<span
+class="k">def</span>` into your Python file. So the colour drops away for the
+length of the edit, which is also the clearest signal that you are looking at
+bytes rather than at a picture of them. The heading says `editing`, `unsaved`,
+`saved` or `write failed` in the accent while it lasts.
+
+**It refuses anything it did not read whole.** `head()` cuts a file past 500
+lines and marks the cut with `…`; saving that back would delete the rest of the
+file. `FileView` holds `fullText` — the file as it is on disk — `previewText` is
+the cut *of* it, and `editable` is the identity between them, so a file over 500
+lines, over 256 KB, or binary is not editable. Writes go out `atomicWrites`.
+A save is then confirmed by reading the file back, because `FileView` will not
+tell you (see [Traps](#traps)), and `endLine()` adds the trailing newline `vim`
+would, since a file saved without one is a file `git` calls damaged.
+
+**Your place is kept, as a fraction.** The editor sets its lines at the font's
+own leading and the rendered preview does not, so a Markdown file is a wholly
+different height in the two modes and the offset cannot be carried across —
+`contentY` alone lands you somewhere unrelated in the document, which is what
+made an edit at the foot of a file come back to the middle of it. `keepPlace()`
+stores the fraction of the way down, `takePlace()` applies it when the scroller
+re-measures (at the moment the mode flips, `contentHeight` is still the other
+mode's), and the caret lands on the line you were reading.
+
+Closing is refused while there are unsaved changes — `close()` routes to
+`leaveEdit()` instead, so a click outside arms the discard rather than throwing
+the edit away silently.
 
 ### Syntax highlighting
 
@@ -228,6 +287,47 @@ unmaps — but a file the desktop has no viewer for opens nothing, and closing t
 browser for it would look like the panel had crashed. `omarchy-open-path` is run
 as a `Process` and the exit code decides: `0` closes, `3` stays.
 
+**`FileView` does not tell you whether a write worked.** Neither `saved` nor
+`saveFailed` fires for `setText`; a permission failure only prints a warning.
+Verified by measurement, not assumption — see [Editing](#editing). A `reload()`
+in the same tick as the write is also swallowed, which is what the 150 ms is
+for.
+
+**`TextEdit` has no `lineHeight`.** It is a `Text` property, not a
+`QQuickTextEdit` one, so an edited file is set at the font's own leading rather
+than the preview's 1.75 rhythm, and edit mode is unavoidably denser. The gutter
+has to follow it twice over: `ProportionalHeight` *and* the body's font size,
+because a font's leading follows its size — under the fixed rhythm the numbers
+can be smaller, since there the rhythm is what aligns them, but at natural
+leading a smaller gutter drifts off its own lines down the page.
+
+**Reopening where you already are announces nothing.** `enter()` sets the same
+`dir`, `FolderListModel` reloads nothing, `rows` is the same array — so
+`onRowsChanged` never fires and `claimPending()` is never reached, leaving the
+selection on row 0 instead of on the file the wheel named. `sel` has not changed
+either, so `settle` never restarts and `settledSel` — dropped on close — stays
+null, which the preview renders as `Empty` over a file sitting right there. So
+`open()` calls `claimPending()` directly and restarts the settle. The name is
+cleared only once found, or by `enter()` — walking somewhere yourself abandons
+it — so the direct call cannot discard it a frame before its rows arrive.
+
+**The scroller's content height is not the content's height.** Both panes sit
+`dirTopPad` down the Flickable so the first line aligns with the first list row.
+Counting only `content.height` leaves that offset unreachable, so the last line
+of a file is clipped by the bottom edge — on the file you scrolled to the bottom
+to read. It is counted twice, which also gives the closing line the air the
+opening one stands in.
+
+**Raw HTML in a Markdown file eats the rest of the document.** Qt's importer
+hands anything tag-shaped to a sub-parser, and an unclosed tag swallows every
+block after it — only code spans come through, because those arrive as their own
+typed spans rather than as text. One `<dir>` written inside a sentence in
+`docs/wheel.md` cut the preview from 17907 rendered characters to 7477, and the
+tail of the file read as a column of empty bullets. `escapeTags()` escapes every
+angle bracket outside code, so a tag is shown as it was written; code spans and
+fenced and indented blocks are left alone, where `&lt;` would be four literal
+characters rather than one.
+
 **Both `FolderListModel` handlers are gated on `Ready`.** A load raises `count`
 on its way to `Ready`, so ungated the model was snapshotted twice per directory
 and flashed empty in between. `onCountChanged` is still needed for a file
@@ -278,11 +378,16 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
   Caching the last few results, or keeping one Python process alive to serve
   requests, would be the next step.
 - Markdown is rendered by Qt, and Qt's importer is lossy: an indented code block
-  keeps its indentation but not its distinction from surrounding prose.
+  keeps its indentation but not its distinction from surrounding prose, and a
+  table's cells arrive with nothing between them, so a row reads as one run-on
+  word. Tables are the worst thing this preview renders.
 - The line-number gutter counts the lines of the *source*. A wrapped Markdown
   paragraph has no numbers at all, by design; a code file never wraps, so the
   two agree.
-- No rename, copy, delete, or new-folder. Deliberate — use `yazi`.
+- No rename, copy, delete, or new-folder. Deliberate — use `yazi`. Editing an
+  existing file is the one write that exists.
+- **Only files the preview read whole are editable** — under 500 lines, under
+  256 KB, not binary. Anything larger is a job for a real editor.
 - Only the first 500 lines of a file are ever shown, and only the first 400
   entries of a previewed folder.
 - **Opening the browser from the wheel flashes.** The wheel unmaps before this

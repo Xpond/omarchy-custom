@@ -17,6 +17,10 @@ import "FilesIndex.js" as FilesIndex
 // and yazi is installed and already does them properly. This answers where is
 // it, what is in it, and open it, which is what a file manager is actually
 // reached for.
+//
+// The one exception is ctrl+e, which turns the preview into an editor for the
+// file it is already showing: you are looking at the thing, and fixing a line
+// in it should not cost you a terminal. See the edit block below.
 Item {
   id: root
 
@@ -70,6 +74,7 @@ Item {
   // shifts under a stationary pointer, and a filtered list shifts constantly.
   property point hoverAt: Qt.point(-1, -1)
   function hoverMoved(pt) {
+    if (root.editing) return false
     if (root.hoverAt.x === pt.x && root.hoverAt.y === pt.y) return false
     root.hoverAt = pt
     return true
@@ -180,8 +185,11 @@ Item {
   readonly property string previewPath:
     (root.settledSel && !root.settledSel.isDir && !root.showsImage
      && root.settledSel.size <= root.previewLimit) ? root.settledSel.path : ""
-  property string previewText: ""
-  onPreviewPathChanged: { root.previewText = ""; root.previewHtml = "" }
+  // The file as it is on disk, held whole so editing has something truthful to
+  // save. `previewText` is the cut of it that gets drawn.
+  property string fullText: ""
+  readonly property string previewText: FilesIndex.head(root.fullText, root.previewLines)
+  onPreviewPathChanged: { root.fullText = ""; root.previewHtml = ""; root.saving = "" }
 
   // Colour comes from pygments rather than from a tokeniser written here. One
   // process per settled selection buys every language it knows, correctly,
@@ -251,13 +259,13 @@ Item {
   // above the first file in the list.
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
-    root.showsMarkdown ? FilesIndex.airOut(FilesIndex.flattenLinks(root.previewText))
+    root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
     : root.showsCode
       ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
                             Style.font.menuFamily, Style.font.subtitle)
       : ""
-  readonly property string previewNumbers: root.showsMarkdown
-    ? "" : FilesIndex.numbers(root.previewText)
+  readonly property string previewNumbers: root.editing ? FilesIndex.numbers(editor.text)
+    : root.showsMarkdown ? "" : FilesIndex.numbers(root.previewText)
   onSelChanged: settle.restart()
   // Cleared here rather than left for the model to overwrite: the child model
   // only reports Ready, so between two folders the old folder's contents would
@@ -281,7 +289,8 @@ Item {
   // empty directory, a filtered-out one, or a file whose bytes are no use on
   // screen. Empty when something IS being shown.
   readonly property string previewNote:
-    !root.settledSel ? (root.query ? "No match" : "Empty")
+    root.editing ? ""
+    : !root.settledSel ? (root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
     : root.previewBody ? ""
     : (root.showsImage && previewImage.status !== Image.Error) ? ""
@@ -300,7 +309,9 @@ Item {
     root.pending = payload.select ? String(payload.select) : ""
     root.openScreen = root.focusedScreen()
     root.opened = true
-    Qt.callLater(function () { keys.forceActiveFocus() })
+    // Reopening where you last were reloads nothing, so nothing announces the
+    // rows and only this call claims the name.
+    Qt.callLater(function () { keys.forceActiveFocus(); root.claimPending() })
   }
 
   // A name to land on once the directory has been read, which is how the wheel
@@ -308,22 +319,46 @@ Item {
   // itself selected, so the preview is showing it before you have touched a
   // key. Cleared on arrival, so it claims the selection once and never again.
   property string pending: ""
+  // Cleared only once the name is found. Reopening at the directory already
+  // shown changes nothing -- same `dir`, same rows -- so `onRowsChanged` never
+  // fires and only `open`'s direct call gets here; clearing on a miss would
+  // throw the name away a frame before its rows arrive.
   function claimPending() {
     if (!root.pending) return
     for (var i = 0; i < root.rows.length; i++) {
-      if (root.rows[i].name === root.pending) { root.index = i; break }
+      if (root.rows[i].name === root.pending) {
+        root.index = i
+        root.pending = ""
+        list.positionViewAtIndex(root.index, ListView.Contain)
+        return
+      }
     }
-    root.pending = ""
-    list.positionViewAtIndex(root.index, ListView.Contain)
   }
 
-  function close() { root.opened = false }
+  // Refused while an edit is unsaved, the click-outside shield included.
+  function close() {
+    if (root.editing && root.dirty) { root.leaveEdit(); return }
+    root.opened = false
+  }
 
   // Closing lets go of what the preview was holding -- the file's bytes, the
   // folder's entries, the image -- and cancels a settle that would otherwise
   // read a directory for a panel nobody is looking at. Every open starts at
   // home, so none of it would have been reused.
-  onOpenedChanged: if (!root.opened) { settle.stop(); root.settledSel = null }
+  onOpenedChanged: {
+    if (root.opened) {
+      // Closing drops the settled selection, so an open landing on the row it
+      // left on has no change to react to and would sit at "Empty" over a file
+      // that is right there.
+      settle.restart()
+    } else {
+      settle.stop()
+      root.settledSel = null
+      root.editing = false
+      root.dirty = false
+      root.discarding = false
+    }
+  }
   function toggle() { root.opened ? root.close() : root.open("{}") }
 
   // Moving house: the filter belongs to the directory it was typed in, and
@@ -333,6 +368,9 @@ Item {
     root.dir = FilesIndex.within(path || "/", root.home)
     root.filter = ""
     root.index = 0
+    // Walking somewhere yourself abandons a name that never turned up. `open`
+    // sets its own after calling this.
+    root.pending = ""
   }
 
   function up() { root.enter(FilesIndex.parentOf(root.dir)) }
@@ -356,13 +394,106 @@ Item {
                                   Math.max(0, preview.contentWidth - preview.width))
   }
 
+  // ------------------------------------------------------------------- edit
+  //
+  // The one thing here that writes. Modal, because every printable key in this
+  // panel lands in the filter and nothing can type into a file and into a
+  // search box at once: while `editing` the whole keyboard goes to the editor
+  // and only escape and ctrl+s are kept.
+  //
+  // Plain source, because what the preview draws is a rendering -- pygments
+  // HTML, or Qt's markdown -- and editing a rendering saves the rendering.
+  property bool editing: false
+  property bool dirty: false
+  property bool saveError: false
+  // Only a file read whole: `head` cuts past 500 lines and marks the cut with
+  // an ellipsis, and saving that back would delete the rest of the file. The
+  // size test is what tells an empty file from a binary one, both of which
+  // arrive here as no text at all.
+  readonly property bool editable: !!root.previewPath && root.fullText === root.previewText
+                                   && (!!root.fullText || root.settledSel.size === 0)
+
+  // Where you were reading, kept across the switch both ways. The two modes
+  // have nothing like the same height -- rendered markdown against plain source
+  // -- so the offset cannot be carried, but the fraction of the way down can.
+  // Applied when the scroller re-measures: at the moment the mode flips,
+  // `contentHeight` is still the other mode's.
+  property real pendingAt: -1
+  function keepPlace() {
+    root.pendingAt = Util.clamp(preview.contentY
+                                / Math.max(1, preview.contentHeight - preview.height), 0, 1)
+  }
+  function takePlace() {
+    if (root.pendingAt < 0) return
+    preview.contentY = root.pendingAt * Math.max(0, preview.contentHeight - preview.height)
+    preview.contentX = 0
+    root.pendingAt = -1
+    // The caret lands on the line you were reading, so the first thing you
+    // type goes where you were looking.
+    if (root.editing)
+      editor.cursorPosition = editor.positionAt(0, Math.max(0, preview.contentY - root.dirTopPad + 2))
+  }
+
+  function edit() {
+    if (!root.editable || root.editing) return
+    editor.text = root.fullText
+    root.dirty = false
+    root.saveError = false
+    root.keepPlace()
+    root.editing = true
+    editor.forceActiveFocus()
+  }
+
+  // Written and then read back: `FileView` emits neither `saved` nor
+  // `saveFailed` for a `setText`, and a write that fails on permissions only
+  // logs a warning nothing in QML hears. The disk is the only thing that can
+  // say. A reload in the same tick as the write is swallowed, hence the wait.
+  property string saving: ""
+  function save() {
+    if (!root.editing || root.saving) return
+    root.saveError = false
+    root.saving = FilesIndex.endLine(editor.text)
+    previewFile.setText(root.saving)
+    verifySave.restart()
+  }
+
+  Timer { id: verifySave; interval: 150; onTriggered: previewFile.reload() }
+
+  // Escape leaves a clean editor at once and asks twice for a dirty one, the
+  // shape the filter already has.
+  property bool discarding: false
+  function leaveEdit() {
+    if (root.dirty && !root.discarding) { root.discarding = true; discardArmed.restart(); return }
+    root.keepPlace()
+    root.editing = false
+    root.dirty = false
+    root.discarding = false
+    keys.forceActiveFocus()
+  }
+
+  Timer { id: discardArmed; interval: 2000; onTriggered: root.discarding = false }
+  Timer { id: savedFlash; interval: 1500 }
+
+  function revealCursor() {
+    if (!root.editing) return
+    var r = editor.cursorRectangle
+    var top = content.y + editor.y + r.y
+    if (top < preview.contentY) root.scrollBy(top - preview.contentY)
+    else if (top + r.height > preview.contentY + preview.height)
+      root.scrollBy(top + r.height - preview.contentY - preview.height)
+    var left = editor.x + r.x
+    if (left < preview.contentX) root.scrollAcross(left - preview.contentX - Style.space(40))
+    else if (left + r.width > preview.contentX + preview.width)
+      root.scrollAcross(left + r.width - preview.contentX - preview.width + Style.space(40))
+  }
+
   // A directory is somewhere to go; a file is something to hand off -- when the
   // desktop has an app for it. Nothing here opens an editor: a text file is
   // already open in the pane on the right. The panel steps aside only when
   // something is taking over, which is what the opener's exit code says: zero
   // means a viewer is coming, 3 that it declined and this keeps its place.
   function activate(e) {
-    if (!e) return
+    if (!e || root.editing) return
     if (e.isDir) { root.enter(e.path); return }
     opener.command = ["omarchy-open-path", e.path]
     opener.running = true
@@ -406,10 +537,23 @@ Item {
   }
 
   FileView {
+    id: previewFile
     path: root.previewPath
     printErrors: false
-    onLoaded: root.previewText = FilesIndex.looksBinary(text()) ? "" : FilesIndex.head(text(), root.previewLines)
-    onLoadFailed: root.previewText = ""
+    // Through a temporary and renamed into place, so a write that dies half way
+    // leaves the old file rather than half of a new one.
+    atomicWrites: true
+    onLoaded: {
+      root.fullText = FilesIndex.looksBinary(text()) ? "" : text()
+      // The read-back half of a save. Typing during the wait leaves it dirty.
+      if (root.saving) {
+        root.saveError = root.fullText !== root.saving
+        root.dirty = root.saveError || FilesIndex.endLine(editor.text) !== root.saving
+        if (!root.saveError) savedFlash.restart()
+        root.saving = ""
+      }
+    }
+    onLoadFailed: root.fullText = ""
   }
 
   // Clamped rather than left pointing past the end: typing narrows the list
@@ -465,8 +609,18 @@ Item {
         focus: true
         Keys.priority: Keys.BeforeItem
         Keys.onPressed: function (event) {
+          // Reached only by what the editor did not want: keys go to the
+          // focused item first and bubble out to here.
+          if (root.editing) {
+            if (event.key === Qt.Key_Escape) { root.leaveEdit(); event.accepted = true }
+            else if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
+              root.save(); event.accepted = true
+            }
+            return
+          }
           if (event.modifiers & Qt.ControlModifier) {
             switch (event.key) {
+            case Qt.Key_E: root.edit(); event.accepted = true; return
             case Qt.Key_H: root.showHidden = !root.showHidden; event.accepted = true; return
             case Qt.Key_U: root.filter = ""; event.accepted = true; return
             }
@@ -657,6 +811,18 @@ Item {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
+              visible: root.editing
+              text: root.saveError ? "write failed"
+                    : savedFlash.running ? "saved"
+                    : root.dirty ? "unsaved" : "editing"
+              color: root.saveError ? Color.menu.text : Color.accent
+              opacity: 0.85
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
               width: Math.min(implicitWidth, Math.round(root.previewWidth * 0.6))
               elide: Text.ElideMiddle
               text: root.settledSel ? root.settledSel.name : ""
@@ -838,9 +1004,15 @@ Item {
                 left: parent.left; leftMargin: Style.spacing.lg
                 right: parent.right; rightMargin: Style.spacing.lg
               }
-              visible: root.showsDir || !!root.previewBody
+              visible: root.showsDir || !!root.previewBody || root.editing
               contentWidth: root.showsDir ? folderView.width : content.width
-              contentHeight: root.showsDir ? folderView.height : content.height
+              // The content sits `dirTopPad` down the scroller, so its height
+              // is not the height of what is being scrolled: uncounted, the
+              // last line of the file cannot be reached. Counted twice, so the
+              // closing line gets the air the opening one stands in.
+              contentHeight: (root.showsDir ? folderView.height : content.height)
+                             + root.dirTopPad * 2
+              onContentHeightChanged: root.takePlace()
               flickableDirection: Flickable.HorizontalAndVerticalFlick
               boundsBehavior: Flickable.StopAtBounds
               clip: true
@@ -881,19 +1053,45 @@ Item {
                 spacing: root.gutterGap
 
                 Text {
-                  visible: root.previewNumbers.length > 0 && !root.showsMarkdown
+                  visible: root.previewNumbers.length > 0
+                           && (!root.showsMarkdown || root.editing)
                   text: root.previewNumbers
                   horizontalAlignment: Text.AlignRight
                   color: Color.menu.text
                   opacity: 0.32
                   font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.bodySmall
+                  // TextEdit carries no lineHeight, so an edited file is set at
+                  // the font's own leading -- which follows its size, so the
+                  // gutter has to be set at the size it is numbering or the two
+                  // drift apart down the page. The preview's fixed rhythm does
+                  // that job itself, and lets the numbers be smaller there.
+                  font.pixelSize: root.editing ? Style.font.subtitle : Style.font.bodySmall
                   renderType: Text.NativeRendering
-                  lineHeightMode: Text.FixedHeight
-                  lineHeight: root.lineHeight
+                  lineHeightMode: root.editing ? Text.ProportionalHeight : Text.FixedHeight
+                  lineHeight: root.editing ? 1.0 : root.lineHeight
+                }
+
+                // The file, with nothing drawn over it.
+                TextEdit {
+                  id: editor
+                  visible: root.editing
+                  color: Color.menu.text
+                  opacity: 0.92
+                  selectionColor: Util.alpha(Color.accent, 0.35)
+                  selectedTextColor: Color.menu.text
+                  selectByMouse: true
+                  persistentSelection: true
+                  wrapMode: Text.NoWrap
+                  textFormat: TextEdit.PlainText
+                  font.family: Style.font.menuFamily
+                  font.pixelSize: Style.font.subtitle
+                  renderType: Text.NativeRendering
+                  onTextChanged: if (root.editing) root.dirty = true
+                  onCursorRectangleChanged: root.revealCursor()
                 }
 
                 Text {
+                  visible: !root.editing
                   text: root.previewBody
                   color: Color.menu.text
                   opacity: 0.92
@@ -980,8 +1178,13 @@ Item {
           spacing: Style.spacing.xxl
 
           Repeater {
-            model: [["↑↓", "select"], ["→", "open"], ["←", "up"],
-                    ["shift+↑↓", "scroll"], ["ctrl+h", "hidden"], ["esc", "close"]]
+            model: root.editing
+              ? [["ctrl+s", "save"],
+                 ["esc", root.discarding ? "again to discard"
+                         : root.dirty ? "discard" : "back"]]
+              : [["↑↓", "select"], ["→", "open"], ["←", "up"],
+                 ["shift+↑↓", "scroll"], ["ctrl+e", "edit"],
+                 ["ctrl+h", "hidden"], ["esc", "close"]]
 
             delegate: Row {
               required property var modelData
