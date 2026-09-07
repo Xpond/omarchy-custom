@@ -74,7 +74,7 @@ check(empty.length === 0, "no row drills into an empty ring", empty.map(r => r.i
 // makes the count quietly wrong: a row that never learns, or two rows keeping
 // one tally between them. Windows are the deliberate exception -- their address
 // is new every launch, so counting them would grow the file without bound.
-const counted = [...M.panelRows(M.panels(null)), ...rows]
+const counted = [...M.panelRows([...M.panels(null), ...M.EXTRAS]), ...rows]
 const keyless = counted.filter(r => !M.keyOf(r))
 check(keyless.length === 0, "every counted row has a use key", keyless.map(r => r.label).join(", "))
 
@@ -83,6 +83,40 @@ const collided = keys.filter((k, i) => keys.indexOf(k) !== i)
 check(collided.length === 0, `use keys are unique (${keys.length} keys)`, collided.join(", "))
 
 check(M.keyOf({ label: "a window", address: "0x1" }) === "", "windows are not counted")
+
+// A sigil that a menu label also starts with would shadow every row under it.
+// Nothing does today; this is what says so after the next Omarchy release, and
+// after the next mode is added to the table.
+const shadowed = rows.filter(r => M.modeOf(r.label))
+check(shadowed.length === 0, `no menu label starts with a mode sigil (${Object.keys(M.MODES).join(" ")})`,
+      shadowed.map(r => r.label).join(", "))
+check(M.termOf("/wheel") === "wheel" && M.termOf("wheel") === "wheel",
+      "a sigil is stripped exactly once, and only when it leads")
+
+// fd marks a directory with a trailing slash, and that mark is the only thing
+// telling a folder row from a file row. Reading it wrong names every directory
+// "" -- which is a row you cannot see, pointing at a path that still opens.
+const scanned = M.parseFiles(`${home}/Downloads/\n${home}/.config/hypr/hyprland.conf\n`)
+const dir = M.fileRows(scanned, "downloads", 1, home)[0]
+const file = M.fileRows(scanned, "hyprland", 1, home)[0]
+check(!!dir && dir.label === "Downloads" && dir.trail === "~",
+      "a directory row is named without its trailing slash", JSON.stringify(dir))
+check(!!file && file.label === "hyprland.conf" && file.trail === "~/.config/hypr",
+      "a file row carries the directory above it, relative to home", JSON.stringify(file))
+check(!!dir && dir.icon !== file.icon, "files and directories wear different marks")
+
+// The payload the browser is handed: a file opens its directory with itself
+// selected, a directory opens itself. Getting the trailing slash wrong here
+// opens the parent of what was picked.
+check(M.pathPayload(`${home}/a/b.txt`) === JSON.stringify({ dir: `${home}/a`, select: "b.txt" }),
+      "a file payload names its directory and itself", M.pathPayload(`${home}/a/b.txt`))
+check(M.pathPayload(`${home}/a/`) === JSON.stringify({ dir: `${home}/a` }),
+      "a directory payload names itself and selects nothing", M.pathPayload(`${home}/a/`))
+
+// File rows are deliberately uncounted, for the reason windows are: a launcher
+// opens whatever this week's work is, and every path picked would be a line in
+// the state file forever.
+check(M.keyOf(M.fileRow(`${home}/a.txt`, home)) === "", "files are not counted")
 
 // Odd rings put nothing at 3 and 9 o'clock, so every default has to be even.
 for (const [label, cfg] of [["shipped", `${omarchy}/config/omarchy/shell.json`],

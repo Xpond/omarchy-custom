@@ -119,6 +119,15 @@ var OVERLAYS = [
   { plugin: "omarchy.clipboard", icon: "", label: "Clipboard" }
 ]
 
+// Ours: searchable without a disc. Outside panels(), so the default ring keeps
+// the even count that fills 3 and 9 o'clock. Searching as a slice is what puts
+// it over GNOME Files, whose entry is also called "Files": an app loses to a
+// slice on `kind` before a use count is consulted.
+var EXTRAS = [
+  { plugin: "xpo.files", icon: "󰉋", label: "Files",
+    keywords: "file manager browser folder directory explorer nautilus" }
+]
+
 // The ring the user asked for, as a list of ids. Null when there is no config
 // or it names no ring, which falls the wheel back to the bar's widgets.
 function ringIds(raw) {
@@ -249,7 +258,7 @@ function childrenOf(items, parent, cond) {
 // menu id. An id that names nothing is dropped, not drawn as a blank disc.
 function ringOf(items, ids, cond) {
   var byPlugin = {}
-  var catalogue = panels(null)
+  var catalogue = panels(null).concat(EXTRAS)
   for (var i = 0; i < catalogue.length; i++) byPlugin[catalogue[i].plugin] = catalogue[i]
   var out = []
   for (var j = 0; j < ids.length; j++) {
@@ -275,7 +284,7 @@ function panelRows(panels) {
     var p = panels[i]
     out.push({ icon: p.icon, iconFile: p.iconFile, label: p.label, trail: "Panel",
                kind: KIND.slice, plugin: p.plugin,
-               keywords: String(p.label).toLowerCase() })
+               keywords: (p.label + " " + (p.keywords || "")).toLowerCase() })
   }
   return out
 }
@@ -321,10 +330,17 @@ function liveRows(sources) {
     out.push({
       icon: "", appIcon: appIcon, label: name, trail: "App",
       appId: String(a.id), kind: KIND.app,
-      keywords: [name, a.genericName || "", a.comment || "",
-                 a.keywords && a.keywords.join ? a.keywords.join(" ") : "",
-                 String(a.id).replace(/[._]/g, " ")]
-                .join(" ").toLowerCase()
+      // Deliberately not Comment. It is prose about what an app does, so
+      // "files" matches Neovim ("Edit text files"). GenericName and Keywords
+      // are the fields an author fills in to be found BY.
+      keywords: [name, a.genericName || "",
+                 a.keywords && a.keywords.join ? a.keywords.join(" ") : ""]
+                .join(" ").toLowerCase(),
+      // The id is a filename, so its pieces are packaging: as a prefix "sys"
+      // reaches Print Settings through "system-config-printer". search()
+      // matches it WHOLE instead, which keeps "nvim" -> Neovim and "printer"
+      // -> Print Settings. Dotted tail only; the rest is reverse-DNS.
+      ident: String(a.id).split(".").pop().replace(/[_-]/g, " ").toLowerCase()
     })
   }
   // A window is carried by address, not by its toplevel object, so a row can
@@ -378,24 +394,61 @@ function liveRows(sources) {
 // ("...Omarchy Plugins - Brave") where a menu label has it at the front, and
 // without this the window you are looking at sorts below seven rows offering
 // to install the thing.
+// A term matches a word that STARTS with it, never a substring inside one --
+// otherwise "sys" reaches Files through "filesystem". Non-alphanumerics become
+// spaces and the whole is padded, so "starts a word" is a plain indexOf.
+// The punctuation-stripped form rides along too, because splitting alone turns
+// "Wi-Fi" into "wi" and "fi" and nobody types either.
+function words(text) {
+  var low = String(text || "").toLowerCase()
+  return " " + low.replace(/[^a-z0-9]+/g, " ").trim()
+       + " " + low.replace(/[^a-z0-9]+/g, "") + " "
+}
+
+function startsWord(padded, term) {
+  return padded.indexOf(" " + term) !== -1
+}
+
+function wholeWord(padded, term) {
+  return padded.indexOf(" " + term + " ") !== -1
+}
+
+// For asking whether a NAME begins with the query: "wifi" and "wi-fi" squash
+// alike, so either finds Wi-Fi and both count as a hit on the front.
+function squash(text) {
+  return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
 function search(index, query, limit, uses) {
   var counts = uses || {}
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
-  var terms = q.split(/\s+/)
+  // Split on punctuation, not just spaces, so a typed "wi-fi" is the same two
+  // terms the haystack was built from.
+  var terms = q.split(/[^a-z0-9]+/)
+  var spaced = q.replace(/[^a-z0-9]+/g, " ").trim()
+  var squashed = squash(q)
   var hits = []
   for (var i = 0; i < index.length; i++) {
     var e = index[i]
+    var haystack = words(e.keywords)
+    var ident = e.ident ? words(e.ident) : ""
     var matched = true
     for (var t = 0; t < terms.length; t++) {
-      if (e.keywords.indexOf(terms[t]) === -1) { matched = false; break }
+      if (!terms[t]) continue
+      if (startsWord(haystack, terms[t])) continue
+      if (ident && wholeWord(ident, terms[t])) continue
+      matched = false; break
     }
     if (!matched) continue
-    var label = e.label.toLowerCase()
-    var at = label.indexOf(q)
-    var rank = e.kind === KIND.window ? 0 : (at === 0 ? 0 : (at !== -1 ? 1 : 2))
+    // Where the query landed IN THE NAME: at its front, at the front of a
+    // later word, or nowhere -- which means it only matched something the row
+    // is filed under rather than what it is called.
+    var rank = e.kind === KIND.window ? 0
+             : squash(e.label).indexOf(squashed) === 0 ? 0
+             : startsWord(words(e.label), spaced) ? 1 : 2
     // Negated so every key in the comparator below sorts ascending.
-    hits.push({ rank: rank, uses: -(counts[keyOf(e)] || 0), len: label.length, entry: e })
+    hits.push({ rank: rank, uses: -(counts[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
   hits.sort(function (a, b) {
     return a.rank - b.rank
@@ -406,5 +459,106 @@ function search(index, query, limit, uses) {
   })
   var out = []
   for (var j = 0; j < hits.length && j < limit; j++) out.push(hits[j].entry)
+  return out
+}
+
+// A leading sigil aims the query at one source instead of at everything. With
+// no sigil the query searches the whole index, which is what it has always
+// done. One entry today: the point of the table is that the next source --
+// emoji, clipboard, the two that have been waiting on this decision -- is a
+// line here rather than a branch in three places.
+var MODES = { "/": "file" }
+
+function modeOf(query) {
+  return MODES[String(query || "").charAt(0)] || ""
+}
+
+// The query with its sigil taken off, which is what the mode's source is
+// actually asked for. Unchanged when there is no mode.
+function termOf(query) {
+  var q = String(query || "")
+  return modeOf(q) ? q.slice(1) : q
+}
+
+var NO_FILES = { paths: [], lower: [] }
+
+// fd's own output: one absolute path per line, a directory carrying a trailing
+// slash -- which is how a row knows which of the two marks to wear without a
+// second walk to ask.
+//
+// Folded to lower case once here rather than per keystroke. Matching eighty
+// thousand paths case-insensitively is the only work file mode does, and doing
+// the folding inside that loop is most of its cost.
+function parseFiles(raw) {
+  var paths = lines(raw)
+  var lower = []
+  for (var i = 0; i < paths.length; i++) lower.push(paths[i].toLowerCase())
+  return { paths: paths, lower: lower }
+}
+
+// Where a path's own name starts and ends, ignoring a directory's trailing
+// slash. Two callers, and getting the slash wrong in either one names every
+// directory "".
+function nameOf(path) {
+  var end = path.charAt(path.length - 1) === "/" ? path.length - 1 : path.length
+  return path.slice(path.lastIndexOf("/", end - 1) + 1, end)
+}
+
+// The name is what was searched for; the directory above it is what tells two
+// `main.py`s apart. Shown relative to home, because everything scanned is
+// under it.
+function fileRow(path, home) {
+  var isDir = path.charAt(path.length - 1) === "/"
+  var bare = isDir ? path.slice(0, -1) : path
+  var cut = bare.lastIndexOf("/")
+  var dir = bare.slice(0, cut) || "/"
+  return {
+    icon: isDir ? "󰉋" : "󰈔",
+    label: bare.slice(cut + 1),
+    trail: dir.indexOf(home) === 0 ? "~" + dir.slice(home.length) : dir,
+    path: path
+  }
+}
+
+// Where a picked path opens: the browser, standing in the directory the path
+// lives in with the path itself selected. A file is not a command and the wheel
+// is not an editor -- "open" for a file here means "show me it, where it
+// lives", which is the one thing a browser does better than a launcher.
+function pathPayload(path) {
+  var p = String(path)
+  if (p.charAt(p.length - 1) === "/") return JSON.stringify({ dir: p.slice(0, -1) })
+  var cut = p.lastIndexOf("/")
+  return JSON.stringify({ dir: p.slice(0, cut) || "/", select: p.slice(cut + 1) })
+}
+
+// Every term somewhere in the path, the same narrowing search() does. Rows are
+// then ordered by where the match landed -- at the front of the name, inside
+// it, or only in some directory above it -- and then by the shorter name,
+// which is what floats `Wheel.qml` over `WheelSettingsDialog.qml`.
+//
+// Paths stay raw strings until a row wins. Building eighty thousand row objects
+// to hand back eight is the whole reason this does not reuse search(), and a
+// use count is not consulted at all: what you open from a launcher is whatever
+// you are working on this week, which is a worse predictor than the query.
+function fileRows(files, term, limit, home) {
+  var src = files || NO_FILES
+  var q = String(term || "").trim().toLowerCase()
+  if (!q) return []
+  var terms = q.split(/\s+/)
+  var hits = []
+  for (var i = 0; i < src.lower.length; i++) {
+    var low = src.lower[i]
+    var matched = true
+    for (var t = 0; t < terms.length; t++) {
+      if (low.indexOf(terms[t]) === -1) { matched = false; break }
+    }
+    if (!matched) continue
+    var name = nameOf(low)
+    var at = name.indexOf(q)
+    hits.push({ rank: at === 0 ? 0 : (at !== -1 ? 1 : 2), len: name.length, at: i })
+  }
+  hits.sort(function (a, b) { return a.rank - b.rank || a.len - b.len })
+  var out = []
+  for (var j = 0; j < hits.length && j < limit; j++) out.push(fileRow(src.paths[hits[j].at], home))
   return out
 }

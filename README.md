@@ -28,6 +28,12 @@ close-window.
 `node plugins/xpo.wheel/check.js` verifies every menu entry is reachable.
 See [`docs/wheel.md`](docs/wheel.md).
 
+**The files browser** (`plugins/xpo.files/`) — a two-column directory browser
+the wheel opens by searching `files`. Type to filter, `/` to type a path,
+arrows to walk it; the right pane previews folders, images, rendered Markdown
+and syntax-highlighted code. Home is the floor and it opens there every time.
+See [`docs/files.md`](docs/files.md).
+
 **Centered panels** (`patches/shell/`) — the bar's panels open centered over a
 blurred desktop instead of tucked against their bar widget, with `Escape` to
 close and `Ctrl+Left/Right` to move between them.

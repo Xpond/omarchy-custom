@@ -21,6 +21,7 @@ Item {
   // this only after the component loads, and the FileViews below read on their
   // first binding evaluation.
   property string omarchyPath: Quickshell.env("OMARCHY_PATH")
+  readonly property string home: Quickshell.env("HOME")
 
   property bool opened: false
   property bool shown: false
@@ -52,7 +53,9 @@ Item {
   readonly property var ring: root.ringIds
     ? MenuIndex.ringOf(root.menuItems, root.ringIds, root.conditions)
     : root.panels
-  readonly property var staticRows: MenuIndex.panelRows(root.panels)
+  // EXTRAS is searchable but off the ring, so the search index is the ring's
+  // panels plus ours -- see MenuIndex.EXTRAS for why the two lists differ.
+  readonly property var staticRows: MenuIndex.panelRows(root.panels.concat(MenuIndex.EXTRAS))
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   property var themes: []
   property var fonts: []
@@ -69,9 +72,42 @@ Item {
   // no decay: what you reach for through a wheel is stable for months, and a
   // half-life is a second tuning knob to be wrong about.
   property var uses: ({})
-  readonly property var results: MenuIndex.search(root.index, root.query, 8, root.uses)
+  // A leading sigil aims the query at one source instead of at the whole
+  // index. Everything downstream reads `term` rather than `query`, so a mode's
+  // sigil is stripped in exactly one place.
+  readonly property string mode: MenuIndex.modeOf(root.query)
+  readonly property string term: MenuIndex.termOf(root.query)
+  // Paths under $HOME for file mode. Null until something asks for them, and
+  // null again the moment the wheel is down: six megabytes of strings is worth
+  // holding while a query is being typed against them and not a second longer,
+  // and what is on disk is exactly the thing that changes between two presses
+  // of the keybind.
+  property var files: null
+  readonly property var results: root.mode === "file"
+    ? MenuIndex.fileRows(root.files, root.term, 8, root.home)
+    : MenuIndex.search(root.index, root.term, 8, root.uses)
   property int resultIndex: 0
   readonly property bool searching: root.query.length > 0
+
+  // Hover may only claim the selection when the cursor has genuinely moved.
+  // Qt synthesises a hover move whenever an item's geometry changes beneath a
+  // stationary pointer, so `entered` and `positionChanged` both fire as a list
+  // re-lays out while you type -- handing the selection to whichever row
+  // happened to slide under the cursor, mid-keystroke, with the keyboard
+  // fighting it for the rest of the query. Scene coordinates, not the row's
+  // own: a row moving under a still pointer must read as no movement at all.
+  property point hoverAt: Qt.point(-1, -1)
+  function hoverMoved(pt) {
+    if (root.hoverAt.x === pt.x && root.hoverAt.y === pt.y) return false
+    root.hoverAt = pt
+    return true
+  }
+  // File mode has two more ways to be empty than the index does: the walk has
+  // not landed yet, or nothing has been typed after the sigil.
+  readonly property string emptyText: root.mode !== "file" ? "No match"
+    : !root.files ? "Scanning\u2026"
+    : !root.term ? "Type to find files"
+    : "No match"
 
   // Clockwise from north. The ring is the panels -- the things with a widget
   // worth a disc -- and the rest of the menu is one search away instead.
@@ -398,7 +434,7 @@ Item {
     // without this SUPER+W answers "none" and the wrapper falls through to
     // killactive -- closing the window behind the overlay.
     var summoned = ["omarchy.menu", "omarchy.emojis", "omarchy.speedtest",
-                    "omarchy.disk-speedtest", "omarchy.wifiqr"]
+                    "omarchy.disk-speedtest", "omarchy.wifiqr", "xpo.files"]
     for (var j = 0; j < summoned.length; j++)
       if (root.shell.isPluginOpen(summoned[j])) { root.shell.hide(summoned[j]); acted = true }
     return acted ? "closed" : "none"
@@ -468,6 +504,10 @@ Item {
       // and `hyprctl dispatch focuswindow` send, silently doing nothing.
       else if (e.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + e.address + "\" })")
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
+      // A path opens the browser where the path lives rather than launching
+      // anything: picking `main.py` out of the wheel used to drop an editor on
+      // the screen, and what you wanted was to see the file and where it sits.
+      else if (e.path && root.shell) root.shell.toggle("xpo.files", MenuIndex.pathPayload(e.path))
       else if (e.action) Util.execDetached(e.action)
     })
   }
@@ -524,6 +564,26 @@ Item {
       if (root.focusOrder[i] !== address) next.push(root.focusOrder[i])
     root.focusOrder = next
   }
+
+  // Walked only by someone who asks for it -- nothing scans until a query is
+  // aimed at files -- and the answer is held for that one open. Unlike themes
+  // and fonts, what is on disk is not a rare deliberate act, so the scan
+  // cannot be done once at startup.
+  //
+  // Depth 6 rather than the whole tree. Below it lie 200,000 entries of
+  // .gradle, Android SDK and browser caches, which is not what anyone reaches
+  // a launcher for, and walking down to them takes the scan from 99ms to 1.2s.
+  Process {
+    id: fileScan
+    command: ["fd", "--hidden", "--max-depth", "6", "--exclude", ".cache",
+              "--exclude", ".git", "--exclude", "node_modules", ".", root.home]
+    stdout: StdioCollector { onStreamFinished: root.files = MenuIndex.parseFiles(text) }
+  }
+
+  // Started by hand for the same reason conditionScan is: `running` bound to
+  // the mode would restart the walk on every keystroke that keeps it.
+  onModeChanged: if (root.mode === "file" && !root.files && !fileScan.running) fileScan.running = true
+  onOpenedChanged: if (!root.opened) root.files = null
 
   // Listed once at startup: installing a theme or a font is a rare, deliberate
   // act, and both commands cost a subprocess that opening the wheel shouldn't.
@@ -1072,7 +1132,7 @@ Item {
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: root.results.length === 0
-            text: "No match"
+            text: root.emptyText
             color: Color.menu.text
             opacity: 0.5
             font.family: Style.font.menuFamily
@@ -1104,7 +1164,14 @@ Item {
               MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
-                onEntered: root.resultIndex = index
+                // positionChanged, not entered: retyping a query re-lays the rows
+                // out under a cursor that has not moved, and `entered` fires on
+                // every row that slides beneath it -- which drags the selection
+                // around mid-keystroke and leaves you unsure what Return will run.
+                // Real pointer motion is the only thing that should claim it.
+                onPositionChanged: function (mouse) {
+                  if (root.hoverMoved(mapToItem(null, mouse.x, mouse.y))) root.resultIndex = index
+                }
                 onClicked: root.run(root.results[index])
               }
 
@@ -1176,7 +1243,11 @@ Item {
                   text: modelData.trail
                   color: Color.menu.text
                   opacity: 0.45
-                  elide: Text.ElideRight
+                  // A breadcrumb reads from the left -- Install › Package --
+                  // so it loses its tail. A path reads from the right: which
+                  // of four `src` directories this is, is the part nearest the
+                  // name, and eliding that end says nothing at all.
+                  elide: modelData.path ? Text.ElideLeft : Text.ElideRight
                   font.family: Style.font.menuFamily
                   font.pixelSize: Style.font.caption
                 }
