@@ -83,10 +83,22 @@ Item {
   // and what is on disk is exactly the thing that changes between two presses
   // of the keybind.
   property var files: null
+  // How deep the ranked list goes, and how many of it stands under the field at
+  // once. Both searches scan the whole index and sort every hit before they
+  // truncate, so a deeper list costs only the rows themselves -- what the cap
+  // buys is a stack that still fits in the hole.
+  readonly property int resultLimit: 40
+  readonly property int resultCap: 8
   readonly property var results: root.mode === "file"
-    ? MenuIndex.fileRows(root.files, root.term, 8, root.home)
-    : MenuIndex.search(root.index, root.term, 8, root.uses)
+    ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home)
+    : MenuIndex.search(root.index, root.term, root.resultLimit, root.uses)
   property int resultIndex: 0
+  // The first row standing under the field. The stack is a window onto the
+  // list rather than the list itself, so arrowing past the eighth row scrolls
+  // by one instead of stopping there.
+  property int resultTop: 0
+  readonly property var beads: root.results.slice(root.resultTop,
+                                                  root.resultTop + root.resultCap)
   readonly property bool searching: root.query.length > 0
 
   // Hover may only claim the selection when the cursor has genuinely moved.
@@ -168,9 +180,13 @@ Item {
   // and west slices if either size is retuned.
   readonly property int searchWidth: Math.min(Style.space(280),
     (root.ringRadius - root.itemSize / 2) * 2 - Style.space(48))
-  // Shared by the pill and by the results card, which is placed off the
-  // surface's center rather than off the pill itself.
   readonly property int searchHeight: Style.spacing.controlHeight + Style.spacing.controlPaddingY * 2
+  // A size down from the field, in both directions. Beads cut to the pill's
+  // own measurements read as a stack of identical fields, and nothing in the
+  // picture says which of them you are typing into -- the field has to stay
+  // the largest thing in the hole.
+  readonly property int resultWidth: root.searchWidth - Style.space(28)
+  readonly property int resultHeight: Style.spacing.popupRowHeight + Style.spacing.xs * 2
 
   // Where the arc is headed on the dial, and the two followers chasing it. The
   // head nearly keeps up and the tail drags well behind, so the gap between
@@ -528,7 +544,19 @@ Item {
 
   function moveResult(step) {
     var n = root.results.length
-    if (n > 0) root.resultIndex = (root.resultIndex + step + n) % n
+    if (n <= 0) return
+    root.resultIndex = (root.resultIndex + step + n) % n
+    root.showResult()
+  }
+
+  // Scrolls by the single row that just went past an edge, and jumps outright
+  // when the selection wraps around an end. Clamped last so a list shorter
+  // than the window -- or one that shrank under a standing selection -- can
+  // never leave the stack showing blank rows below its final bead.
+  function showResult() {
+    var top = Math.min(root.resultTop, root.resultIndex)
+    top = Math.max(top, root.resultIndex - root.resultCap + 1)
+    root.resultTop = Math.max(0, Math.min(top, root.results.length - root.resultCap))
   }
 
   // Direction from screen center, read off the absolute pointer position: the
@@ -549,10 +577,13 @@ Item {
     root.select(root.selected < 0 ? (step > 0 ? 0 : n - 1) : (root.selected + step + n) % n)
   }
 
-  onQueryChanged: root.resultIndex = 0
+  onQueryChanged: { root.resultIndex = 0; root.resultTop = 0 }
   // The index is rebuilt when the late condition scan lands, which can shorten
   // the list under a standing selection without the query having changed.
-  onResultsChanged: if (root.resultIndex >= root.results.length) root.resultIndex = 0
+  onResultsChanged: {
+    if (root.resultIndex >= root.results.length) root.resultIndex = 0
+    root.showResult()
+  }
 
   // Opening the wheel takes the keyboard, which drops activeToplevel to null.
   // Ignoring that is what keeps the window you came from at the head.
@@ -1074,10 +1105,12 @@ Item {
         }
       }
 
-      // Results get the same card the Omarchy menu gives its own list, so the
-      // wheel's search mode looks like the rest of the shell rather than rows
-      // laid straight onto the desktop.
-      BorderSurface {
+      // Search mode is the ring unrolled. The results wear the disc's own
+      // fill, hairline and capsule, and stand on the scrim the same way -- no
+      // card behind them, because a box under a dial of discs is a second
+      // surface language, and the jump between the two is exactly what the
+      // wheel's geometry was there to avoid.
+      Item {
         // Off the surface's center rather than the pill's edge: the pill is
         // inside the dial's layer, and anchors don't cross between parents.
         // Dead center is where the pill sits by construction.
@@ -1085,8 +1118,8 @@ Item {
         anchors.topMargin: root.searchHeight / 2 + Style.spacing.panelGap
         anchors.horizontalCenter: parent.horizontalCenter
         // Grown from its top edge, which is pinned just under the pill, so the
-        // card reads as unrolling out of the field rather than swelling from
-        // its own middle. Rows carry MouseAreas, so a faded card must go
+        // beads read as falling out of the field rather than swelling from
+        // their own middle. Rows carry MouseAreas, so a faded stack must go
         // properly invisible or it keeps catching clicks over the ring.
         transformOrigin: Item.Top
         opacity: root.searching ? 1 : 0
@@ -1094,40 +1127,39 @@ Item {
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
-        width: resultList.width + Style.spacing.popupPadding * 2
-        height: resultList.height + Style.spacing.popupPadding * 2
-        radius: Style.cornerRadius
-        // The same fill and hairline the discs wear. The Omarchy menu's own
-        // 2px full-strength border is louder than anything on the ring, and
-        // wearing it made search mode look like a different surface.
-        color: root.surfaceFill
-        borderSpec: Border.flat(root.surfaceEdge, Style.spacing.hairline)
-        // The card resizes with every query, so its shadow has to come from
-        // the card itself or it draws at a stale size. Layering does not block
-        // the rows' mouse input -- it only changes how they are painted.
+        // The field's width, not the beads'. The margin they gave up when they
+        // stepped down a size is exactly where the rail goes.
+        width: root.searchWidth
+        height: resultList.height
+        // One pass over the whole stack, the way the dial shadows its discs in
+        // one: each bead lands with its own falloff, and the layer re-renders
+        // at the new size every time the query changes the row count. Layering
+        // does not block the rows' mouse input -- only how they are painted.
         layer.enabled: true
         layer.effect: MultiEffect {
           autoPaddingEnabled: true
           shadowEnabled: true
           shadowColor: "#000000"
           shadowBlur: 1.0
-          // Tighter than the dial's. The discs are small enough to carry a
-          // wide falloff; on a card this size the same one hangs off the
-          // bottom edge as a skirt rather than reading as depth.
+          // Tighter than the dial's, which is cast by discs small enough to
+          // carry a wide falloff. On a bead this wide the same one reads as a
+          // skirt hanging off the bottom edge rather than as depth.
           blurMax: 16
           shadowOpacity: 0.4
           shadowVerticalOffset: Style.space(3)
         }
 
         // Ahead of the rows, so their own areas still take the clicks that
-        // land on them and this only catches the padding they leave.
+        // land on them and this catches only the gaps between the beads.
         ClickShield {}
 
         Column {
           id: resultList
-          anchors.centerIn: parent
-          width: root.searchWidth
-          spacing: Style.spacing.hairline
+          anchors.horizontalCenter: parent.horizontalCenter
+          width: root.resultWidth
+          // Wide enough that the beads read as separate objects on the scrim.
+          // At a hairline they fuse into one slab with lines ruled across it.
+          spacing: Style.spacing.md
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -1140,24 +1172,28 @@ Item {
           }
 
           Repeater {
-            model: root.results
+            // The window, not the list: eight delegates exist however deep the
+            // ranked list runs behind them.
+            model: root.beads
             delegate: BorderSurface {
               id: resultCard
               required property int index
               required property var modelData
-              readonly property bool active: root.resultIndex === index
+              // `index` counts beads on screen; the selection counts rows in
+              // the list. Everything a row does has to cross that offset.
+              readonly property int row: root.resultTop + index
+              readonly property bool active: root.resultIndex === resultCard.row
 
-              width: root.searchWidth
-              height: Style.spacing.popupRowHeight + Style.spacing.controlPaddingY * 2
-              radius: Style.cornerRadius
-              // The same accent tint and ring a selected disc wears, so the
-              // two modes highlight the current thing the same way.
-              color: active
-                ? root.selectedFill
-                : "transparent"
-              borderSpec: active
-                ? Border.flat(Color.accent, Style.spacing.hairline)
-                : Border.none()
+              width: root.resultWidth
+              height: root.resultHeight
+              radius: height / 2
+              // The disc's two fills, on a hairline either way. A full-weight
+              // ring works around a disc because a disc is small; drawn this
+              // wide it is a stroke long enough to outweigh the word inside
+              // it. Selection is carried by the accent, not by line weight.
+              color: active ? root.selectedFill : root.surfaceFill
+              borderSpec: Border.flat(active ? root.cometColor : root.surfaceEdge,
+                                      Style.spacing.hairline)
 
               Behavior on color { ColorAnimation { duration: 90 } }
 
@@ -1170,9 +1206,9 @@ Item {
                 // around mid-keystroke and leaves you unsure what Return will run.
                 // Real pointer motion is the only thing that should claim it.
                 onPositionChanged: function (mouse) {
-                  if (root.hoverMoved(mapToItem(null, mouse.x, mouse.y))) root.resultIndex = index
+                  if (root.hoverMoved(mapToItem(null, mouse.x, mouse.y))) root.resultIndex = resultCard.row
                 }
-                onClicked: root.run(root.results[index])
+                onClicked: root.run(root.results[resultCard.row])
               }
 
               Row {
@@ -1267,6 +1303,21 @@ Item {
               }
             }
           }
+        }
+
+        // The same rail the files panel runs beside its own list, for the same
+        // reason: eight beads under a query that matched forty is otherwise a
+        // list with no bottom, and nothing on screen says the ninth exists. It
+        // rides in the width the beads gave up, so nothing moves to make room.
+        Rectangle {
+          readonly property int span: Math.max(1, root.results.length - root.resultCap)
+          visible: root.results.length > root.resultCap
+          anchors.right: parent.right
+          width: Style.space(2)
+          radius: width / 2
+          color: Util.alpha(Color.menu.text, 0.18)
+          height: resultList.height * root.resultCap / root.results.length
+          y: root.resultTop / span * (resultList.height - height)
         }
       }
     }

@@ -126,7 +126,7 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       width: field.width + Style.spacing.md * 2
       height: Style.font.subtitle + Style.spacing.sm * 2
-      radius: panel.rowRadius
+      radius: height / 2
       color: panel.renaming ? Util.alpha(Color.accent, 0.16)
                             : Util.alpha(Color.menu.text, 0.07)
 

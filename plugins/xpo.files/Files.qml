@@ -149,7 +149,6 @@ Item {
   readonly property int gutterGap: Math.round(codeMetrics.advanceWidth * 2)
 
   readonly property int rowHeight: Style.spacing.popupRowHeight + Style.spacing.md
-  readonly property int rowRadius: Math.min(Style.cornerRadius, Style.space(6))
   // Fixed, and shared by the gutter and the body, so line 240 in the numbers
   // sits on line 240 of the file. It is also the unit a keypress scrolls by.
   // 1.75 is the leading a long block of code is comfortable at; below about
@@ -695,11 +694,16 @@ Item {
                       + Style.spacing.lg * 2 + Style.spacing.panelPadding * 2,
                       surface.width * 0.92)
       height: Math.min(Style.space(900), surface.height * 0.80)
-      radius: Style.cornerRadius
-      // Opaque, unlike the wheel's. The wheel is a thin ring where the blurred
-      // desktop showing through is the effect; this is a page of file names and
-      // a preview, and text over a moving desktop is what reads as unsharp.
-      color: Color.menu.background
+      // Far past `Style.cornerRadius`, which follows Hyprland's own rounding
+      // and is a square corner on plenty of setups. This panel is the one
+      // surface here that cannot be a capsule, so its radius is what has to
+      // carry the resemblance to the ring it was opened from.
+      radius: Style.space(24)
+      // Nearly opaque rather than fully. Text over a moving desktop is what
+      // reads as unsharp, so the blur comes through only far enough to stop
+      // the panel being a slab and make it the same membrane the discs are --
+      // the wheel's own 0.85 would put the wallpaper into the file names.
+      color: Util.alpha(Color.menu.background, 0.94)
       borderSpec: Border.flat(root.edge, Style.spacing.hairline)
 
       // Ahead of the rows so their own areas still take what lands on them,

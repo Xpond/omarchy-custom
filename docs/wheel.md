@@ -35,7 +35,7 @@ Mouse works too: the whole screen is a compass around center, so a flick in
 any direction selects that slice. Release of `SUPER+A` commits it. The scroll
 wheel steps the ring one slice per notch, or the result list while searching.
 
-Clicking the field or the results card does nothing, rather than closing the
+Clicking the field or the result stack does nothing, rather than closing the
 wheel: everywhere else a click away closes it, and the two surfaces you are
 most likely to hit by accident -- the thing shaped like a text field, and the
 gap beside a row you missed -- must not count as "away". Neither is clickable
@@ -79,11 +79,19 @@ and a layer surface still holding an exclusive grab hands it a window without
 focus, so `close(true)` skips the fade. Only cancelling gets it. Reopening
 mid-fade cancels the pending unmap and counts as a fresh open.
 
-Typing swaps the ring for the results card by fading rather than switching
-`visible`: the ring draws back to 0.94 while the card grows from
+Typing swaps the ring for the results by fading rather than switching
+`visible`: the ring draws back to 0.94 while the stack grows from
 `transformOrigin: Item.Top`, pinned under the pill. Both still drop out of
 `visible` once faded -- the result rows carry `MouseArea`s, so a transparent
-card would keep catching clicks meant for the ring behind it.
+stack would keep catching clicks meant for the ring behind it.
+
+The results are not a card. Each row is a capsule wearing the disc's own fill
+and hairline, standing on the scrim the way a disc does, one size down from the
+field so the field stays the largest thing in the hole. A box holding rows is a
+second surface language, and the jump from a dial of discs into one is the
+thing the wheel's geometry exists to avoid. Selection is the same signature
+everywhere -- accent fill, accent hairline, accent label -- on a disc, on a
+bead, and on a row of the file browser.
 
 Opening spins the comet once around the ring -- the wheel introduces itself
 with the streak it already draws. `spin` is a `Timer` that steps `arcTarget`
@@ -242,6 +250,15 @@ sort on four keys: **rank** (label-prefix, then label-substring, then a hit
 anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
 theme/font, menu), **recency**, and finally **label length**, which floats
 "Screenshot" over "Stop Screenrecording".
+
+`search()` and `fileRows()` both scan the whole index and sort every hit before
+they truncate, so the depth they are asked for costs only the rows themselves.
+They are asked for 40, and the stack shows 8 of them: `resultTop` is the first
+row on screen and `showResult()` walks it by one whenever the selection steps
+past an edge, jumping outright when the selection wraps around an end. The
+`Repeater` is fed that window, so eight delegates exist however deep the list
+runs. A rail beside the stack -- the same one the file browser runs beside its
+list -- is what says the ninth row is there at all.
 
 An open window is never a weak hit: matching one at all counts as rank 0. A
 window's title is written by the program, so a query lands mid-string

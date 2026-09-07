@@ -32,25 +32,20 @@ Item {
       width: list.width
       height: panel.rowHeight
 
-      // The fill stops short of the preview so the selection never
-      // touches it; the bar is what your eye actually lands on.
+      // The wheel's selection signature, unchanged: a capsule, the accent
+      // tint, and the accent hairline a selected search bead wears. One shape
+      // for "this is the thing Return runs", whichever of the three surfaces
+      // you are standing on. The fill stops short of the preview so the
+      // selection never touches it.
       Rectangle {
         anchors.fill: parent
         anchors.rightMargin: Style.spacing.md
-        radius: panel.rowRadius
+        radius: height / 2
         color: entry.doomed ? Util.alpha(panel.danger, 0.30)
                : entry.active ? panel.activeFill
                : (pointer.containsMouse ? panel.hoverFill : "transparent")
-      }
-
-      Rectangle {
-        visible: entry.active
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(2)
-        height: Math.round(parent.height * 0.5)
-        radius: width / 2
-        color: entry.doomed ? panel.danger : Color.accent
+        border.width: entry.active ? Style.spacing.hairline : 0
+        border.color: entry.doomed ? panel.danger : Color.accent
       }
 
       MouseArea {
