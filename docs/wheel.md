@@ -23,6 +23,8 @@ disc, because a ring you have to read is slower than a word you can type.
 | `SUPER+A` | open (tap — do not hold, see below) |
 | `↑` `↓` `←` `→` | jump to the slice at that compass point, then `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
+| `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
+| `Home` `End` | the first and last of the results, without walking the other thirty-eight |
 | type anything | search menu entries, apps, windows, themes and fonts |
 | `Backspace` | delete a character, then go up one level |
 | `Ctrl+W` `Ctrl+Backspace` | delete the last word of the query |
@@ -258,7 +260,8 @@ row on screen and `showResult()` walks it by one whenever the selection steps
 past an edge, jumping outright when the selection wraps around an end. The
 `Repeater` is fed that window, so eight delegates exist however deep the list
 runs. A rail beside the stack -- the same one the file browser runs beside its
-list -- is what says the ninth row is there at all.
+list -- is what says the ninth row is there at all, and `Home` and `End` are
+what reach the two ends of it without walking.
 
 An open window is never a weak hit: matching one at all counts as rank 0. A
 window's title is written by the program, so a query lands mid-string

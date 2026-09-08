@@ -12,20 +12,21 @@ import "FilesIndex.js" as FilesIndex
 // overlay card, keyboard first, wearing the same [menu] tokens the wheel and
 // the clipboard do.
 //
-// It answers where is it, what is in it, and open it -- and then the four
-// things you reach for once you are already looking at the file: edit it
-// (ctrl+e), move or copy it (ctrl+x, ctrl+c, ctrl+v), rename it (f2), throw it
-// away (del). Each earns its place the same way: you are looking at the thing,
-// and acting on it should not cost you a terminal.
+// It answers where is it, what is in it, and open it -- and then the things you
+// reach for once you are already looking at the file: edit it (ctrl+e), move or
+// copy it (ctrl+x, ctrl+c, ctrl+v), rename it (f2), make a file or a folder
+// beside it (ctrl+shift+n), name it to something else (ctrl+y), throw it away
+// (del). Each earns its place the same way: you are looking at the thing, and
+// acting on it should not cost you a terminal.
 //
-// Every one of them can cost you data when it is wrong, so none of them are
+// Every one that writes can cost you data when it is wrong, so none of them are
 // quiet. Nothing is overwritten -- a taken name comes back as exit 17 and is
 // reported, never resolved by inventing one. A delete goes to the trash and is
 // asked twice in red. An edit only ever saves a file that was read whole, and
 // the save is confirmed by reading it back.
 //
-// There is still no new-folder and no undo beyond the trash; yazi is installed
-// and does the rest properly.
+// There is still no undo beyond the trash; yazi is installed and does the rest
+// properly.
 Item {
   id: root
 
@@ -59,6 +60,13 @@ Item {
     ? FilesIndex.within(root.typedDir, root.home) : root.dir
   property int index: 0
   property bool showHidden: false
+  // Name, newest, biggest. The listing prints a size and a date beside every
+  // name; a browser that cannot order by them is asking you to read the rows.
+  property string order: "name"
+  function cycleOrder() {
+    root.order = FilesIndex.nextOrder(root.order)
+    root.index = 0
+  }
 
   // Resolved when the panel opens and held while it is up, the way the wheel
   // does it. Hyprland moves focus with the pointer, so a live binding would
@@ -92,7 +100,7 @@ Item {
   // typed, the whole field when it is a plain name filter. The count reads off
   // the same property, so "/Projects/" says 10 items rather than 10 of 10.
   readonly property string query: root.pathMode ? root.typedLeaf : root.filter
-  readonly property var rows: FilesIndex.filtered(root.entries, root.query)
+  readonly property var rows: FilesIndex.filtered(root.entries, root.query, root.order)
   readonly property var sel: root.index >= 0 && root.index < root.rows.length
     ? root.rows[root.index] : null
 
@@ -162,6 +170,17 @@ Item {
   readonly property int previewLines: 500
   readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir
                                      && FilesIndex.isImage(root.settledSel.name)
+  // The pane caps its own decode at the size it draws, so the Image reports the
+  // size it painted, never the size on disk -- measured, not asked. A nicety
+  // rather than a dependency: no `identify`, no numbers, size and date stand.
+  property string imageDims: ""
+  Process {
+    id: measurer
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.imageDims = text.split("\n")[0].trim()
+    }
+  }
   // Rendered rather than dumped: Qt draws Markdown itself, so headings are
   // headings and `**bold**` is bold. Line numbers and a no-wrap column are
   // right for code and wrong for prose, so both go away for these.
@@ -258,6 +277,14 @@ Item {
   onSettledSelChanged: {
     preview.resetScroll()
     root.dirEntries = []
+    root.imageDims = ""
+    measurer.running = false
+    // Asked of the selection, not of `showsImage` -- the stale-binding trap
+    // written out under `showsCode`.
+    if (root.settledSel && !root.settledSel.isDir && FilesIndex.isImage(root.settledSel.name)) {
+      measurer.command = ["identify", "-format", "%w×%h\n", root.settledSel.path]
+      measurer.running = true
+    }
   }
 
   // Name on the left, facts on the right. What a preview pane owes you before
@@ -266,6 +293,7 @@ Item {
     !root.settledSel ? ""
     : root.settledSel.isDir ? FilesIndex.countLabel(childFolder.count, childFolder.count, "", root.showHidden)
     : FilesIndex.humanSize(root.settledSel.size)
+      + (root.imageDims ? "  ·  " + root.imageDims : "")
       + (root.settledSel.modified
          ? "  ·  " + Qt.formatDateTime(root.settledSel.modified, "d MMM yyyy") : "")
 
@@ -277,7 +305,7 @@ Item {
     : !root.settledSel ? (root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
     : root.previewBody ? ""
-    : (root.showsImage && previewImage.status !== Image.Error) ? ""
+    : (root.showsImage && preview.imageStatus !== Image.Error) ? ""
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
 
   // A payload may name where to start; everything else opens at home.
@@ -341,6 +369,9 @@ Item {
       root.editing = false
       root.dirty = false
       root.discarding = false
+      // A name half typed belongs to the file it was typed at. Left standing, the
+      // next open is in rename mode over row 0, one Return from the wrong file.
+      root.naming = ""
     }
   }
   function toggle() { root.opened ? root.close() : root.open("{}") }
@@ -502,7 +533,10 @@ Item {
   // second thing to learn. With a real caret, because renaming is mostly
   // changing a few characters in the middle of a name you already have and a
   // field you can only type at the end of makes you retype all of it.
-  property bool renaming: false
+  //
+  // Two verbs share it, being the same act: naming a file that is already there,
+  // and naming one that is not. "rename", "new", or "" for neither.
+  property string naming: ""
   property string renameTo: ""
   property int renameAt: 0
 
@@ -513,7 +547,17 @@ Item {
     // changed nine times out of ten.
     var dot = root.renameTo.lastIndexOf(".")
     root.renameAt = dot > 0 ? dot : root.renameTo.length
-    root.renaming = true
+    root.naming = "rename"
+  }
+
+  // The one gap the "browser, not a manager" line left that a browser trips
+  // over: you have walked to where the thing belongs, and making it there is the
+  // last reason to open a terminal.
+  function beginNew() {
+    if (root.editing) return
+    root.renameTo = ""
+    root.renameAt = 0
+    root.naming = "new"
   }
 
   function renameKey(event) {
@@ -556,16 +600,40 @@ Item {
     }
   }
 
-  function commitRename() {
-    var e = root.sel
+  function commitName() {
+    var verb = root.naming
     var name = root.renameTo.trim()
-    root.renaming = false
-    if (!e || !name || name === e.name) return
+    root.naming = ""
+    // A new thing is whatever its name says it is: a dot in it is an extension,
+    // and an extension is what a file has. A trailing mark overrides that either
+    // way -- `/` for the folder whose name holds a dot, `.` for the file with no
+    // extension -- and neither can be part of a name, so neither costs anything.
+    var slashed = verb === "new" && name.slice(-1) === "/"
+    var dotted = verb === "new" && !slashed && name.slice(-1) === "."
+    if (slashed || dotted) name = name.slice(0, -1).trim()
+    if (!name) return
     // A name is a name. Anything with a separator in it is a move being asked
     // for in the wrong field, and moving is what ctrl+x is for.
     if (name.indexOf("/") !== -1) { root.note("a name cannot hold a /"); return }
+    if (verb === "new") {
+      var folder = slashed || (!dotted && name.indexOf(".") < 0)
+      root.run(["sh", "-c", '[ -e "$2" ] && exit 17; exec "$1" -- "$2"',
+                "files", folder ? "mkdir" : "touch", root.inHere(name)],
+               { name: name, land: true, done: "made " + name, fail: "could not make " + name })
+      return
+    }
+    var e = root.sel
+    if (!e || name === e.name) return
     root.run(root.guarded("mv", e.path, root.inHere(name)),
              { name: name, land: true, done: "renamed to " + name, fail: "rename failed" })
+  }
+
+  // The one thing the panel could not do with a file it is showing you: name it
+  // to something else. Path as an argument, never spliced -- `guarded`'s rule.
+  function copyPath() {
+    if (!root.sel || root.editing) return
+    Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "files", root.sel.path])
+    root.note("copied " + FilesIndex.display(root.sel.path, root.home))
   }
 
   // Trashed, not removed. gio puts it in the freedesktop trash, where it can be
@@ -599,16 +667,24 @@ Item {
   // already open in the pane on the right. The panel steps aside only when
   // something is taking over, which is what the opener's exit code says: zero
   // means a viewer is coming, 3 that it declined and this keeps its place.
+  property string opening: ""
   function activate(e) {
     if (!e || root.editing) return
     if (e.isDir) { root.enter(e.path); return }
+    root.opening = e.name
     opener.command = ["omarchy-open-path", e.path]
     opener.running = true
   }
 
   Process {
     id: opener
-    onExited: function (exitCode) { if (exitCode === 0) root.close() }
+    onExited: function (exitCode) {
+      if (exitCode === 0) { root.close(); return }
+      // 3 is a terminal handler declining a file the pane is already showing, so
+      // there is nothing to say. 4 is nothing owning it at all, and silence
+      // there reads as a key that did nothing.
+      if (exitCode === 4) root.note("nothing here opens " + root.opening)
+    }
   }
 
   // The list is rebuilt when the directory changes, when it finishes reading,
@@ -746,11 +822,11 @@ Item {
           // is showing a question; a keystroke that is not the answer is a no.
           if (root.doomed && event.key !== Qt.Key_Delete) root.doomed = ""
 
-          if (root.renaming) {
+          if (root.naming) {
             switch (event.key) {
-            case Qt.Key_Escape: root.renaming = false; break
+            case Qt.Key_Escape: root.naming = ""; break
             case Qt.Key_Return:
-            case Qt.Key_Enter:  root.commitRename(); break
+            case Qt.Key_Enter:  root.commitName(); break
             default: root.renameKey(event)
             }
             // Everything, so an arrow cannot move the selection out from under
@@ -766,6 +842,23 @@ Item {
             case Qt.Key_V: root.paste(); event.accepted = true; return
             case Qt.Key_H: root.showHidden = !root.showHidden; event.accepted = true; return
             case Qt.Key_U: root.filter = ""; event.accepted = true; return
+            case Qt.Key_Y: root.copyPath(); event.accepted = true; return
+            case Qt.Key_O: root.cycleOrder(); event.accepted = true; return
+            // The readline pair the rest of this field already speaks, and the
+            // same letter under shift for the other naming verb.
+            case Qt.Key_N:
+              if (event.modifiers & Qt.ShiftModifier) root.beginNew()
+              else root.move(1)
+              event.accepted = true; return
+            case Qt.Key_P: root.move(-1); event.accepted = true; return
+            // A word of a name, a segment of a path -- one step back through
+            // whichever is being written, never past the sigil that says which.
+            case Qt.Key_W:
+            case Qt.Key_Backspace:
+              root.filter = root.pathMode
+                ? (root.filter.replace(/\/+$/, "").replace(/[^\/]*$/, "") || root.filter.charAt(0))
+                : root.filter.replace(/\S+\s*$/, "")
+              event.accepted = true; return
             }
           }
           // Shift turns the arrows on the preview instead of the list. Held
@@ -776,6 +869,10 @@ Item {
             case Qt.Key_Up:    preview.scrollBy(-root.lineHeight * 3); event.accepted = true; return
             case Qt.Key_Right: preview.scrollAcross(Style.space(60)); event.accepted = true; return
             case Qt.Key_Left:  preview.scrollAcross(-Style.space(60)); event.accepted = true; return
+            // The two ends the page keys walk towards. Bare Home is the way
+            // back to ~, so these are held the way the other pane's arrows are.
+            case Qt.Key_Home:  preview.scrollTo(0); event.accepted = true; return
+            case Qt.Key_End:   preview.scrollTo(1); event.accepted = true; return
             }
           }
           switch (event.key) {

@@ -24,7 +24,11 @@ function snapshot(model) {
 // Directories first, then where the filter landed -- the front of a name beats
 // its middle -- then alphabetically. The same instincts the wheel's own search
 // has, for the same reason: what you typed the start of is what you meant.
-function filtered(entries, query) {
+//
+// `order` asks for something else: newest or biggest at the top. Where the
+// filter landed only ranks under "name" -- once you have asked for newest
+// first, a prefix match jumping the queue is the sort lying about itself.
+function filtered(entries, query, order) {
   var q = String(query || "").trim().toLowerCase()
   var hits = []
   for (var i = 0; i < entries.length; i++) {
@@ -35,11 +39,30 @@ function filtered(entries, query) {
   }
   hits.sort(function (a, b) {
     if (a.entry.isDir !== b.entry.isDir) return a.entry.isDir ? -1 : 1
-    return a.rank - b.rank || a.entry.name.localeCompare(b.entry.name)
+    var byName = a.entry.name.localeCompare(b.entry.name)
+    if (order === "date") return when(b.entry.modified) - when(a.entry.modified) || byName
+    // A directory's size is the block its entries are listed in, not what is
+    // inside it, so ordering folders by it sorts on nothing at all.
+    if (order === "size" && !a.entry.isDir) return b.entry.size - a.entry.size || byName
+    return a.rank - b.rank || byName
   })
   var out = []
   for (var j = 0; j < hits.length; j++) out.push(hits[j].entry)
   return out
+}
+
+// The three the listing already prints, cycled in that order. Name is the
+// default and goes unnamed in the header: a label for "as it has always been"
+// is a word to read every time.
+var ORDERS = ["name", "date", "size"]
+var ORDER_WORDS = { name: "", date: "newest", size: "largest" }
+
+function nextOrder(order) {
+  return ORDERS[(ORDERS.indexOf(order) + 1) % ORDERS.length]
+}
+
+function when(modified) {
+  return (modified && new Date(modified).getTime()) || 0
 }
 
 // The directory above, stopping at the root rather than walking off it.
@@ -85,11 +108,13 @@ function crumbs(dir, home) {
 
 // "3 of 41" while a filter is narrowing, plain counts otherwise. A bare number
 // in the corner is a riddle; the noun is what makes it a fact.
-function countLabel(shown, total, query, hidden) {
+function countLabel(shown, total, query, hidden, order) {
   var s = String(query || "").length
     ? shown + " of " + total
     : shown + (shown === 1 ? " item" : " items")
-  return hidden ? s + "  ·  hidden" : s
+  if (hidden) s += "  ·  hidden"
+  var word = ORDER_WORDS[order || "name"]
+  return word ? s + "  ·  " + word : s
 }
 
 // Sizes read at a glance, not to the byte: a browser is answering "which of

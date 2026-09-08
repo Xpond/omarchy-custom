@@ -21,6 +21,9 @@ Item {
   // characters that have to fit the narrower one.
   readonly property real paneWidth: scroller.width
   readonly property real paneHeight: scroller.height
+  // An id belongs to the document it is written in, so the panel's fallback
+  // note cannot reach `scrollerImage` and is handed what it asks of it.
+  readonly property int imageStatus: scrollerImage.status
   property alias editorText: editor.text
   readonly property string lineNumbers:
     panel.editing ? FilesIndex.numbers(editor.text)
@@ -37,6 +40,12 @@ Item {
   }
 
   function resetScroll() { scroller.contentY = 0; scroller.contentX = 0 }
+
+  // The two ends, as the fraction `keepPlace` already thinks in.
+  function scrollTo(fraction) {
+    scroller.contentY = fraction * Math.max(0, scroller.contentHeight - scroller.height)
+    scroller.contentX = 0
+  }
 
   // Where you were reading, kept across the switch between the rendering and
   // the source. The two have nothing like the same height, so the offset cannot

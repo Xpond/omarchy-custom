@@ -20,16 +20,17 @@ its one dependency is visible at the call site. `FilesPreview` owns its
 scrolling and its editor and exposes verbs — `scrollBy`, `keepPlace`,
 `copy` — rather than letting the panel reach into a `Flickable`.
 
-It answers where is it, what is in it, and open it — and then the four things
-you reach for once you are already looking at the file: edit it
-([`Ctrl+E`](#editing)), move or copy it, [rename](#moving-files) it, throw it
-away. Each earns its place the same way: you are looking at the thing, and
-acting on it should not cost you a terminal.
+It answers where is it, what is in it, and open it — and then the things you
+reach for once you are already looking at the file: edit it
+([`Ctrl+E`](#editing)), move or copy it, [rename](#moving-files) it, [make
+one](#moving-files) beside it, copy its path, throw it away. Each earns its place
+the same way: you are looking at the thing, and acting on it should not cost you
+a terminal.
 
-Every one of them can cost you data when it is wrong, so none of them are quiet.
-Nothing is overwritten, a delete goes to the trash and is asked twice in red,
-and a save is confirmed by reading the file back. There is still no new-folder
-and no undo beyond the trash; `yazi` is installed and does the rest properly.
+Every one that writes can cost you data when it is wrong, so none of them are
+quiet. Nothing is overwritten, a delete goes to the trash and is asked twice in
+red, and a save is confirmed by reading the file back. There is still no undo
+beyond the trash; `yazi` is installed and does the rest properly.
 
 ## Keys
 
@@ -37,7 +38,7 @@ and no undo beyond the trash; `yazi` is installed and does the rest properly.
 |---|---|
 | type anything | filter the current directory by name |
 | `/` or `~` | switch the field to a path — see [Path entry](#path-entry) |
-| `↑` `↓` `Tab` `Shift+Tab` | move the selection, wrapping at both ends |
+| `↑` `↓` `Tab` `Shift+Tab` `Ctrl+N` `Ctrl+P` | move the selection, wrapping at both ends |
 | `→` `Enter` | descend into a folder, or hand a file to the app that owns it |
 | `←` | go up one directory |
 | `Backspace` | delete a character, then go up one directory |
@@ -45,13 +46,18 @@ and no undo beyond the trash; `yazi` is installed and does the rest properly.
 | `Shift+↑` `Shift+↓` | scroll the preview three lines |
 | `PageUp` `PageDown` | scroll the preview a page |
 | `Shift+←` `Shift+→` | pan the preview sideways, for lines past the edge |
+| `Shift+Home` `Shift+End` | the top and the bottom of the preview |
 | `Ctrl+E` | edit the previewed file — see [Editing](#editing) |
 | `Ctrl+X` `Ctrl+C` | take the selection to move or to copy — see [Moving files](#moving-files) |
 | `Ctrl+V` | place it in the directory you are standing in |
 | `F2` | rename the selection — see [Moving files](#moving-files) |
+| `Ctrl+Shift+N` | make a file or a folder here — the name says which, see [Moving files](#moving-files) |
 | `Del` | trash the selection, asked twice |
+| `Ctrl+Y` | copy the selection's path to the clipboard |
+| `Ctrl+O` | order by name, then newest, then largest — see [Ordering](#ordering) |
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
+| `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
 | `Esc` | clear the field, then close |
 
 Shift is the one modifier that means "the other pane": held down, the arrows
@@ -101,6 +107,20 @@ on the header twice, once walked and once typed, and two spellings of the same
 place read as two places. The count reads off the same tail (`root.query`), so
 `/Projects/` says `10 items` rather than `10 of 10`.
 
+## Ordering
+
+Folders first and then alphabetically, until `Ctrl+O` asks for something else:
+**newest** first, then **largest** first, then back to name. The listing already
+prints a size and a date beside every name, and a browser that cannot order by
+them is asking you to read the rows. The header says which one you are in, and
+the order stays with the panel — it is a way of looking, not a place, so unlike
+a remembered directory it cannot go stale.
+
+Where the filter landed only ranks under **name**: once you have asked for
+newest first, a prefix match jumping the queue is the sort lying about itself.
+Folders are never ordered by size, which for a directory counts the block its
+entries are listed in rather than anything inside it.
+
 ## The two columns
 
 Both columns are sized in **characters of the font they render**, not in
@@ -124,10 +144,11 @@ a window dropped inside this one.
 
 The header is one line: the path as a breadcrumb trail with the leaf at full
 strength and the trail behind it dimmed, then whatever is narrowing the list,
-then the count, all flowing left. The preview's own heading — name, size, date —
-right-aligns on the same line. The count sits with the path rather than at the
-far edge because right-aligned it stacked directly above the preview's size and
-date, and two dim figures in a column read as two facts about one file.
+then the count, all flowing left. The preview's own heading — name, size, the
+pixel dimensions if it is an image, date — right-aligns on the same line. The
+count sits with the path rather than at the far edge because right-aligned it
+stacked directly above the preview's size and date, and two dim figures in a
+column read as two facts about one file.
 
 The foot of the card carries the keys, centred, in key-and-word pairs: the key
 lit, the verb whispered. Weight is what separates them, not the run of spaces
@@ -228,7 +249,34 @@ back as `a wheel.md is already here` rather than being resolved by inventing a
 predict. Directories go with `cp -r`, and `mv` refuses to move one into itself
 without any help from here.
 
-There is no undo beyond the trash, and no new-folder. Those stay with `yazi`.
+**`Ctrl+Shift+N` makes one**, into the same chip a rename types into. It is the
+one gap the "browser, not a manager" line left that a browser trips over: you
+have walked to where the thing belongs, and making it there is the last reason to
+open a terminal.
+
+**The name says which of the two it is.** A dot in it is an extension, and an
+extension is what a file has — which is how the listing above reads them back
+anyway, so there is nothing extra to remember. A trailing mark overrides that
+either way, and neither mark can be part of a name in the first place:
+
+    archive         a folder        v1.2/       a folder
+    notes.md        a file          Makefile.   a file
+    .gitignore      a file          .config/    a folder
+
+A second binding for the second verb would have been a second thing to learn for
+a difference the name already spells out. Anything *else* with a `/` in it is
+still refused: a slash in the middle is a nested path being asked for in a field
+that names one thing.
+
+`mkdir` and `touch` go out through the same script with the verb as an argument,
+so both cross the same collision test and come back as the same `17`.
+
+**`Ctrl+Y` copies the selection's path**, through `wl-copy` with the path as an
+argument rather than spliced into the script — the discipline the move commands
+are written with. It was the one thing the panel could not do with a file it was
+showing you: name it to something else.
+
+There is no undo beyond the trash. That stays with `yazi`.
 
 The pasted row arrives on its own: `FolderListModel` watches the directory, so
 the paste only has to name what to land on — `pending`, the same mechanism the
@@ -365,7 +413,12 @@ while you are reading it. Matched by name, because this Quickshell's
 opens wants the keyboard, and the layer surface holds it exclusively until it
 unmaps — but a file the desktop has no viewer for opens nothing, and closing the
 browser for it would look like the panel had crashed. `omarchy-open-path` is run
-as a `Process` and the exit code decides: `0` closes, `3` stays.
+as a `Process` and the exit code decides: `0` closes, `3` and `4` stay.
+
+Only one of the two declines needs saying. `3` is a terminal handler, for a file
+already open in the pane on the right, where a message would be noise. `4` is
+nothing owning it at all, and there the panel says `nothing here opens <name>`:
+with no pane covering for it, silence reads as a key that did nothing.
 
 **`FileView` does not tell you whether a write worked.** Neither `saved` nor
 `saveFailed` fires for `setText`; a permission failure only prints a warning.
@@ -416,7 +469,9 @@ appearing under an open panel, which raises `count` with the model already
 
 ## Wiring
 
-Nothing below is done by `install.sh` — same gap `xpo.wheel` has.
+`install.sh` does both halves — it links every `plugins/*/` into
+`~/.config/omarchy/plugins/`, registers the id in `shell.json`, and puts the
+opener on `PATH`:
 
     ln -s ~/xpo/omarchy-custom/plugins/xpo.files ~/.config/omarchy/plugins/
     ln -s ~/xpo/omarchy-custom/bin/omarchy-open-path ~/.local/bin/
@@ -464,8 +519,11 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
 - The line-number gutter counts the lines of the *source*. A wrapped Markdown
   paragraph has no numbers at all, by design; a code file never wraps, so the
   two agree.
-- No new-folder, and no undo for a move, a copy or a rename — only a delete can
-  be taken back, out of the trash. Use `yazi` for the rest.
+- No undo for a move, a copy, a rename or a new file — only a delete can be
+  taken back, out of the trash. Use `yazi` for the rest.
+- An image's pixel size comes from `identify`. Colour and dimensions are both
+  niceties rather than dependencies: without ImageMagick there are no numbers,
+  and the size and the date still stand.
 - **Only files the preview read whole are editable** — under 500 lines, under
   256 KB, not binary. Anything larger is a job for a real editor.
 - Only the first 500 lines of a file are ever shown, and only the first 400
@@ -476,4 +534,3 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
   over the browser stacks two blurred scrims (measured: 14% darker, half the
   contrast, for the length of the fade), and handing over on a handshake moved
   the artifact rather than removing it. Reverted; the flash stands.
-- `install.sh` wires none of this up.

@@ -4,15 +4,16 @@
 # Not plain xdg-open: text/plain resolves to nvim.desktop here, and xdg-open
 # launches that with no terminal attached, so nvim hangs invisibly and Enter
 # looks like it did nothing. Nothing here opens an editor at all -- a text file
-# is already open in the browser's preview pane -- so a terminal handler, or no
-# handler, exits 3 and the caller keeps its place. A viewer means exit 0, and
-# the caller steps aside for it.
+# is already open in the browser's preview pane -- so a terminal handler exits 3
+# and the caller keeps its place, silently. A viewer means exit 0, and the caller
+# steps aside for it. Nothing owning the file at all is a different answer and
+# gets its own code, 4: no pane is covering for it, so the caller has to say so.
 
 path="${1-}"
 [[ -n $path ]] || { echo "Usage: omarchy-open-path <path>" >&2; exit 1; }
 
 desktop=$(xdg-mime query default "$(xdg-mime query filetype "$path" 2>/dev/null)" 2>/dev/null)
-[[ -n $desktop ]] || exit 3
+[[ -n $desktop ]] || exit 4
 
 entry=$(find "$HOME/.local/share/applications" /usr/share/applications \
              -name "$desktop" -print -quit 2>/dev/null)

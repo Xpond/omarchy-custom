@@ -25,7 +25,7 @@ Item {
   // timer of its own.
   property bool caretLit: true
   Timer {
-    running: panel.opened && (panel.renaming || panel.filter.length > 0)
+    running: panel.opened && (!!panel.naming || panel.filter.length > 0)
     interval: 530
     repeat: true
     onTriggered: root.caretLit = !root.caretLit
@@ -122,12 +122,12 @@ Item {
       // The same pill holds the new name while one is being typed -- see
       // `beginRename`. It is lit differently so that a rename in progress can
       // never be mistaken for a filter narrowing the list.
-      visible: panel.renaming || (panel.filter.length > 0 && !panel.pathMode)
+      visible: !!panel.naming || (panel.filter.length > 0 && !panel.pathMode)
       anchors.verticalCenter: parent.verticalCenter
       width: field.width + Style.spacing.md * 2
       height: Style.font.subtitle + Style.spacing.sm * 2
       radius: height / 2
-      color: panel.renaming ? Util.alpha(Color.accent, 0.16)
+      color: panel.naming ? Util.alpha(Color.accent, 0.16)
                             : Util.alpha(Color.menu.text, 0.07)
 
       // Written in two halves with the caret between them, so it stands where
@@ -142,7 +142,7 @@ Item {
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: panel.renaming ? panel.renameTo.slice(0, panel.renameAt) : panel.filter
+          text: panel.naming ? panel.renameTo.slice(0, panel.renameAt) : panel.filter
           color: Color.accent
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.subtitle
@@ -152,7 +152,7 @@ Item {
 
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          text: panel.renaming ? panel.renameTo.slice(panel.renameAt) : ""
+          text: panel.naming ? panel.renameTo.slice(panel.renameAt) : ""
           color: Color.accent
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.subtitle
@@ -163,7 +163,7 @@ Item {
     Text {
       anchors.verticalCenter: parent.verticalCenter
       text: FilesIndex.countLabel(panel.rows.length, panel.entries.length,
-                                  panel.query, panel.showHidden)
+                                  panel.query, panel.showHidden, panel.order)
       color: Color.menu.text
       opacity: 0.5
       font.family: Style.font.menuFamily

@@ -839,6 +839,14 @@ Item {
             // straight through the pill.
             root.query += String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim()
             event.accepted = true; return
+          // The readline pair, on the one thing here that is a list -- the ring
+          // is a compass rather than a column, so there they fall through.
+          case Qt.Key_N:
+            if (root.searching) { root.moveResult(1); event.accepted = true }
+            return
+          case Qt.Key_P:
+            if (root.searching) { root.moveResult(-1); event.accepted = true }
+            return
           }
         }
         // One step at a time: the query, then the menu tree, then the screen.
@@ -859,6 +867,13 @@ Item {
         if (root.searching) {
           if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { root.moveResult(1); event.accepted = true; return }
           if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { root.moveResult(-1); event.accepted = true; return }
+          // Forty deep behind a window of eight: the far end is otherwise
+          // thirty-two presses away.
+          if (event.key === Qt.Key_Home) { root.resultIndex = 0; root.showResult(); event.accepted = true; return }
+          if (event.key === Qt.Key_End) {
+            root.resultIndex = Math.max(0, root.results.length - 1)
+            root.showResult(); event.accepted = true; return
+          }
         } else {
           switch (event.key) {
           // Arrows alone reach the whole ring: up/down jump to the top and

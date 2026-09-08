@@ -31,15 +31,20 @@ Item {
       ? [["ctrl+s", "save"], ["ctrl+c/x/v", "clipboard"],
          ["esc", panel.discarding ? "again to discard"
                  : panel.dirty ? "discard" : "back"]]
-    : panel.renaming
-      ? [["type", "the new name"], ["enter", "rename"], ["esc", "cancel"]]
+    : panel.naming
+      ? (panel.naming === "new"
+         ? [["type", "a name; a dot in it makes a file"],
+            ["/ at the end", "a folder"], [". at the end", "a file"],
+            ["enter", "make it"], ["esc", "cancel"]]
+         : [["type", "the new name"], ["enter", "rename"], ["esc", "cancel"]])
     : panel.held
       ? [["↑↓", "select"], ["→", "open"], ["←", "up"],
          ["ctrl+v", (panel.held.move ? "move " : "copy ") + panel.held.name + " here"],
          ["ctrl+e", "edit"], ["esc", "close"]]
     : [["↑↓", "select"], ["→", "open"], ["←", "up"],
        ["shift+↑↓", "scroll"], ["ctrl+x/c/v", "move/copy"],
-       ["ctrl+e", "edit"], ["f2", "rename"], ["del", "trash"],
+       ["ctrl+e", "edit"], ["ctrl+y", "copy path"], ["ctrl+o", "sort"],
+       ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"],
        ["esc", "close"]]
 
   Row {
