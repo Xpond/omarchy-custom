@@ -166,7 +166,6 @@ Item {
   // Anything bigger is not a preview, it is a download. Read as text only
   // after the size says it is worth opening at all.
   readonly property int previewLimit: 262144
-  // How much of a long file is worth colouring to show the top of.
   readonly property int previewLines: 500
   readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir
                                      && FilesIndex.isImage(root.settledSel.name)
@@ -896,7 +895,6 @@ Item {
             case Qt.Key_Left:  preview.scrollAcross(-Style.space(60)); event.accepted = true; return
             case Qt.Key_PageDown: preview.scrollBy(preview.pageStep); event.accepted = true; return
             case Qt.Key_PageUp:   preview.scrollBy(-preview.pageStep); event.accepted = true; return
-            // The two ends the page keys walk towards.
             case Qt.Key_Home:  preview.scrollTo(0); event.accepted = true; return
             case Qt.Key_End:   preview.scrollTo(1); event.accepted = true; return
             }
@@ -952,7 +950,6 @@ Item {
           color: root.edge
         }
 
-        // -------------------------------------------------------------- body
         Item {
           id: body
           anchors {

@@ -52,12 +52,7 @@ Item {
         id: pointer
         anchors.fill: parent
         hoverEnabled: true
-        // positionChanged, not entered: retyping a query re-lays the
-        // rows out under a cursor that has not moved, and `entered`
-        // fires on every row that slides beneath it -- which drags the
-        // selection around mid-keystroke and leaves you unsure what
-        // Return will run. Real pointer motion is the only thing that
-        // should claim it.
+        // Real pointer motion only, for the reason panel.hoverMoved gives.
         onPositionChanged: function (mouse) {
           if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) panel.index = entry.index
         }

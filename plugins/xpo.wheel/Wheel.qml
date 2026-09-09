@@ -167,7 +167,6 @@ Item {
     Math.min(root.baseItem,
              2 * root.ringRadius * Math.sin(Math.PI / Math.max(2, root.sliceCount)) - Style.space(14)))
   readonly property int deadzone: Style.space(54)
-  // How much a disc grows when it is the selected one.
   readonly property real selectedScale: 1.08
   // Disc edge to nearest label edge, at the disc's grown size.
   readonly property int labelGap: Style.space(18)
@@ -1179,10 +1178,9 @@ Item {
 
           ClickShield {}
 
-          // Written in two halves with the caret between them, the shape the
-          // browser's chip already has, so the mark stands where the next
-          // character goes rather than always at the end. A glyph inside one
-          // Text could not blink without the line jumping as it went.
+          // Two halves with the caret between them, the shape FilesHeader's
+          // chip already has. A glyph inside one Text could not blink without
+          // the line jumping as it went.
           Row {
             id: field
             anchors.centerIn: parent

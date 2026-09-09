@@ -168,7 +168,6 @@ Item {
         lineHeight: panel.editing ? 1.0 : panel.lineHeight
       }
 
-      // The file, with nothing drawn over it.
       TextEdit {
         id: editor
         visible: panel.editing
