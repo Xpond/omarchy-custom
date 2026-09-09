@@ -11,6 +11,7 @@ import tempfile
 repo = Path(__file__).resolve().parents[1]
 wheel = (repo / "plugins/xpo.wheel/Wheel.qml").read_text()
 ops = (repo / "plugins/xpo.files/FilesOps.qml").read_text()
+files = (repo / "plugins/xpo.files/Files.qml").read_text()
 
 
 def block(source, pattern):
@@ -117,6 +118,35 @@ Scope {
   }
 ''')
         assert target.read_bytes() == content
+
+    # Emptying a file and saving it. `saving` has to tell the text it is
+    # writing from having nothing to write, and "" is both.
+    (base / "wipe.md").write_bytes(b"line one\nline two\n")
+    run("save-emptied",
+        '  property string target: ' + json.dumps(str(base / "wipe.md")) + '\n'
+        + """
+  property var ops: ({ fileNote: "" })
+  property var preview: ({ editorText: "" })
+  property bool editing: true
+  property bool dirty: true
+  property bool saveError: false
+  property bool utf8: false
+  property string fullText: ""
+  property int flashes: 0
+  Timer { id: savedFlash; interval: 1500; onRunningChanged: if (running) root.flashes++ }
+  Timer { id: verifySave; interval: 150; onTriggered: previewFile.reload() }
+"""
+        + block(files, r"  property var saving:") + "\n"
+        + block(files, r"  FileView {\n    id: previewFile").replace("root.previewPath", "root.target") + """
+  Timer { interval: 200; running: true; onTriggered: root.save() }
+  Timer { interval: 1200; running: true; onTriggered: {
+    if (root.saving !== null) { console.error("FAIL save never settled"); Qt.exit(1) }
+    else if (root.dirty) { console.error("FAIL still dirty after a clean save"); Qt.exit(1) }
+    else if (root.flashes !== 1) { console.error("FAIL no saved confirmation", root.flashes); Qt.exit(1) }
+    else { console.log("PASS"); Qt.quit() }
+  } }
+""")
+    assert (base / "wipe.md").read_bytes() == b"", "the emptied file must actually be empty"
 
     # Replace the external clipboard owner, preserving the actual shell pipeline
     # and QML completion handler. Nothing touches the desktop clipboard.

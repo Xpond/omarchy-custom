@@ -194,7 +194,7 @@ Item {
   property string fullText: ""
   property bool utf8: false
   readonly property string previewText: FilesIndex.head(root.fullText, root.previewLines)
-  onPreviewPathChanged: { root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = "" }
+  onPreviewPathChanged: { root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = null }
 
   // Colour comes from pygments rather than from a tokeniser written here. One
   // process per settled selection buys every language it knows, correctly,
@@ -319,7 +319,7 @@ Item {
   // panel opens onto a path that no longer exists and shows an empty list with
   // no hint of why. Home is the one directory that is always there.
   function open(payloadJson) {
-    if (root.editing && (root.dirty || root.saving)) {
+    if (root.editing && (root.dirty || root.saving !== null)) {
       ops.note("save or discard the current edit first")
       preview.focusEditor()
       return
@@ -451,9 +451,12 @@ Item {
   // `saveFailed` for a `setText`, and a write that fails on permissions only
   // logs a warning nothing in QML hears. The disk is the only thing that can
   // say. A reload in the same tick as the write is swallowed, hence the wait.
-  property string saving: ""
+  // The text on its way to disk, and null when none is. A string alone cannot
+  // say both: emptying a file saves "", which read as "nothing in flight" and
+  // skipped the whole read-back below.
+  property var saving: null
   function save() {
-    if (!root.editing || root.saving) return
+    if (!root.editing || root.saving !== null) return
     root.saveError = false
     ops.fileNote = ""
     root.saving = FilesIndex.endLine(preview.editorText)
@@ -634,11 +637,11 @@ Item {
       root.utf8 = FilesIndex.isUtf8(data())
       root.fullText = FilesIndex.looksBinary(text()) ? "" : text()
       // The read-back half of a save. Typing during the wait leaves it dirty.
-      if (root.saving) {
+      if (root.saving !== null) {
         root.saveError = root.fullText !== root.saving
         root.dirty = root.saveError || FilesIndex.endLine(preview.editorText) !== root.saving
         if (!root.saveError) savedFlash.restart()
-        root.saving = ""
+        root.saving = null
       }
     }
     onLoadFailed: root.fullText = ""

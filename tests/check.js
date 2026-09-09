@@ -83,7 +83,7 @@ console.log("ok: file search ordering, limits, ties, and app fallback glyph")
 
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []
-const root = { editing: true, dirty: true, saving: "", opened: true,
+const root = { editing: true, dirty: true, saving: null, opened: true,
   note: t => calls.push(t), enter: d => calls.push(d), home: "/home/test",
   focusedScreen: () => null, claimPending() {}, leaveEdit() { this.editing = false } }
 const scope = { root, ops: { note: t => calls.push(t) },
@@ -97,7 +97,7 @@ assert.equal(calls.length, 2)
 root.dirty = false; root.saving = "pending write"
 open('{"dir":"/home/test/other"}')
 assert.equal(root.pending, undefined)
-root.saving = ""
+root.saving = null
 open('{"dir":"/home/test/other","select":"new.txt"}')
 assert.equal(root.editing, false)
 assert.equal(root.pending, "new.txt")
