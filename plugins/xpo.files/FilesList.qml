@@ -56,7 +56,7 @@ Item {
         onPositionChanged: function (mouse) {
           if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) panel.index = entry.index
         }
-        onClicked: panel.activate(entry.modelData)
+        onClicked: panel.ops.activate(entry.modelData)
       }
 
       Row {

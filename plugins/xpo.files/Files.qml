@@ -7,6 +7,7 @@ import Qt.labs.folderlistmodel
 import qs.Commons
 import qs.Ui
 import "FilesIndex.js" as FilesIndex
+import "FilesKeys.js" as FilesKeys
 
 // A directory browser that lives where the rest of the shell lives: one
 // overlay card, keyboard first, wearing the same [menu] tokens the wheel and
@@ -273,7 +274,7 @@ Item {
       : ""
   // Arming a delete follows the selection: arrow away and it is disarmed, so a
   // second Del can never land on a row you did not aim it at.
-  onSelChanged: { settle.restart(); root.doomed = "" }
+  onSelChanged: { settle.restart(); ops.doomed = "" }
   // Cleared here rather than left for the model to overwrite: the child model
   // only reports Ready, so between two folders the old folder's contents would
   // otherwise sit under the new folder's name.
@@ -319,7 +320,7 @@ Item {
   // no hint of why. Home is the one directory that is always there.
   function open(payloadJson) {
     if (root.editing && (root.dirty || root.saving)) {
-      root.note("save or discard the current edit first")
+      ops.note("save or discard the current edit first")
       preview.focusEditor()
       return
     }
@@ -435,9 +436,9 @@ Item {
                                    && (!!root.fullText || root.settledSel.size === 0)
 
   function edit() {
-    if (root.previewPath && !root.utf8) { root.note("not UTF-8; preview only"); return }
+    if (root.previewPath && !root.utf8) { ops.note("not UTF-8; preview only"); return }
     if (!root.editable || root.editing) return
-    root.fileNote = ""
+    ops.fileNote = ""
     preview.editorText = root.fullText
     root.dirty = false
     root.saveError = false
@@ -454,7 +455,7 @@ Item {
   function save() {
     if (!root.editing || root.saving) return
     root.saveError = false
-    root.fileNote = ""
+    ops.fileNote = ""
     root.saving = FilesIndex.endLine(preview.editorText)
     previewFile.setText(root.saving)
     verifySave.restart()
@@ -477,76 +478,6 @@ Item {
   Timer { id: discardArmed; interval: 2000; onTriggered: root.discarding = false }
   Timer { id: savedFlash; interval: 1500 }
 
-  // -------------------------------------------------------------- file moves
-  //
-  // One held entry and one verb, the idiom every file manager already uses:
-  // ctrl+x or ctrl+c takes the selection, ctrl+v places it in the directory you
-  // have walked to. A move between two directories is the thing people actually
-  // open a second pane for, and not having it is what sends you to a terminal.
-  //
-  // Nothing is ever overwritten. The destination name is tested before the
-  // command runs and a collision comes back as its own exit code, reported as
-  // it is rather than resolved by inventing a "(copy)" name -- a file manager
-  // that renames your file for you is one you cannot predict.
-  property var held: null
-  property string fileNote: ""
-  Timer { id: noteFade; interval: 4000; onTriggered: root.fileNote = "" }
-  function note(text) { root.fileNote = text; noteFade.restart() }
-
-  function hold(e, move) {
-    if (!e) return
-    root.held = { path: e.path, name: e.name, isDir: !!e.isDir, move: !!move }
-    root.note((move ? "moving " : "copying ") + e.name)
-  }
-
-  // Every write goes through one process and one contract: exit 0 is done, 17
-  // is the name is taken, anything else failed. `op` is what to say about it.
-  property var op: null
-  function run(command, about) {
-    if (filer.running) { root.note("a file operation is still running"); return }
-    root.op = about
-    filer.command = command
-    filer.running = true
-  }
-
-  // Paths go as arguments, never spliced into the script, so a name with a
-  // space or a $ in it is just a name. $2 is the destination, and 17 is nothing
-  // mv or cp returns on its own.
-  function guarded(verb, src, dst) {
-    return ["sh", "-c", '[ -e "$2" ] && exit 17; exec ' + verb + ' -- "$1" "$2"',
-            "files", src, dst]
-  }
-
-  function inHere(name) { return root.listedDir.replace(/\/+$/, "") + "/" + name }
-
-  function paste() {
-    if (!root.held) return
-    if (root.inHere(root.held.name) === root.held.path) { root.note("already here"); return }
-    var h = root.held
-    root.run(root.guarded(h.move ? "mv" : "cp -r", h.path, root.inHere(h.name)),
-             { name: h.name, land: true, spend: h.move,
-               done: (h.move ? "moved " : "copied ") + h.name,
-               fail: (h.move ? "move" : "copy") + " failed" })
-  }
-
-  Process {
-    id: filer
-    onExited: function (exitCode) {
-      var o = root.op
-      root.op = null
-      if (!o) return
-      if (exitCode !== 0) {
-        root.note(exitCode === 17 ? "a " + o.name + " is already here" : o.fail)
-        return
-      }
-      // The model watches the directory, so the row arrives on its own; this
-      // is only which of them to land on once it does.
-      if (o.land) root.pending = o.name
-      root.note(o.done)
-      // A move has spent its source. A copy has not, so it can be placed again.
-      if (o.spend) root.held = null
-    }
-  }
 
   // ---------------------------------------------------------- rename, delete
   //
@@ -636,79 +567,29 @@ Item {
     if (!name) return
     // A name is a name. Anything with a separator in it is a move being asked
     // for in the wrong field, and moving is what ctrl+x is for.
-    if (name.indexOf("/") !== -1) { root.note("a name cannot hold a /"); return }
+    if (name.indexOf("/") !== -1) { ops.note("a name cannot hold a /"); return }
     if (verb === "new") {
       var folder = slashed || (!dotted && name.indexOf(".") < 0)
-      root.run(["sh", "-c", '[ -e "$2" ] && exit 17; exec "$1" -- "$2"',
-                "files", folder ? "mkdir" : "touch", root.inHere(name)],
+      ops.run(["sh", "-c", '[ -e "$2" ] && exit 17; exec "$1" -- "$2"',
+                "files", folder ? "mkdir" : "touch", ops.inHere(name)],
                { name: name, land: true, done: "made " + name, fail: "could not make " + name })
       return
     }
     var e = root.sel
     if (!e || name === e.name) return
-    root.run(root.guarded("mv", e.path, root.inHere(name)),
+    ops.run(ops.guarded("mv", e.path, ops.inHere(name)),
              { name: name, land: true, done: "renamed to " + name, fail: "rename failed" })
   }
 
-  // The one thing the panel could not do with a file it is showing you: name it
-  // to something else. Path as an argument, never spliced -- `guarded`'s rule.
-  function copyPath() {
-    if (!root.sel || root.editing) return
-    root.run(["sh", "-c", 'printf %s "$1" | wl-copy', "files", root.sel.path],
-             { done: "copied " + FilesIndex.display(root.sel.path, root.home),
-               fail: "copy path failed" })
-  }
 
-  // Trashed, not removed. gio puts it in the freedesktop trash, where it can be
-  // got back -- the difference between a delete you can survive and one you
-  // cannot. Asked twice all the same, because it is the one verb here that
-  // takes something away, and the second press is cheaper than the regret.
-  // Not Color.urgent: themes set it to a muted brick that reads brown at small
-  // sizes, and a question about destroying something has to be the one colour
-  // on the card nobody has to look twice at. Fixed on purpose, and the only
-  // place in this panel that ignores the theme.
-  readonly property color danger: "#ff2222"
-  property string doomed: ""
-  readonly property string doomedName:
-    root.doomed ? root.doomed.slice(root.doomed.lastIndexOf("/") + 1) : ""
-  Timer { id: doomArmed; interval: 3000; onTriggered: root.doomed = "" }
-  function remove() {
-    var e = root.sel
-    if (!e || root.editing) return
-    if (root.doomed !== e.path) {
-      root.doomed = e.path
-      doomArmed.restart()
-      return
-    }
-    root.doomed = ""
-    root.run(["gio", "trash", "--", e.path],
-             { name: e.name, done: "trashed " + e.name, fail: "delete failed" })
-  }
 
-  // A directory is somewhere to go; a file is something to hand off -- when the
-  // desktop has an app for it. Nothing here opens an editor: a text file is
-  // already open in the pane on the right. The panel steps aside only when
-  // something is taking over, which is what the opener's exit code says: zero
-  // means a viewer is coming, 3 that it declined and this keeps its place.
-  property string opening: ""
-  function activate(e) {
-    if (!e || root.editing) return
-    if (e.isDir) { root.enter(e.path); return }
-    root.opening = e.name
-    opener.command = ["omarchy-open-path", e.path]
-    opener.running = true
-  }
 
-  Process {
-    id: opener
-    onExited: function (exitCode) {
-      if (exitCode === 0) { root.close(); return }
-      // 3 is a terminal handler declining a file the pane is already showing, so
-      // there is nothing to say. 4 is nothing owning it at all, and silence
-      // there reads as a key that did nothing.
-      if (exitCode === 4) root.note("nothing here opens " + root.opening)
-    }
-  }
+  FilesOps { id: ops; panel: root }
+  readonly property alias held: ops.held
+  readonly property alias fileNote: ops.fileNote
+  readonly property alias doomed: ops.doomed
+  readonly property alias doomedName: ops.doomedName
+  readonly property alias danger: ops.danger
 
   // The list is rebuilt when the directory changes, when it finishes reading,
   // and when hidden files are toggled -- all three arrive as one of these two.
@@ -820,122 +701,7 @@ Item {
         anchors.bottomMargin: Style.spacing.xl
         focus: true
         Keys.priority: Keys.BeforeItem
-        Keys.onPressed: function (event) {
-          // `Keys.priority: Keys.BeforeItem` means this handler sees every key
-          // before the editor does, focused or not -- the same thing Omarchy's
-          // own PanelKeyCatcher documents. Anything not accepted here goes on
-          // to the editor, which is what makes typing work; the clipboard is
-          // spelled out rather than left to TextEdit's own handling, because a
-          // panel this modal should not have verbs that only work by accident.
-          if (root.editing) {
-            if (event.modifiers & Qt.ControlModifier) {
-              switch (event.key) {
-              case Qt.Key_S: root.save(); event.accepted = true; return
-              case Qt.Key_C: preview.copy(); event.accepted = true; return
-              case Qt.Key_X: preview.cut(); event.accepted = true; return
-              case Qt.Key_V: preview.paste(); event.accepted = true; return
-              case Qt.Key_A: preview.selectAll(); event.accepted = true; return
-              }
-            }
-            if (event.key === Qt.Key_Escape) { root.leaveEdit(); event.accepted = true }
-            return
-          }
-          // Renaming takes the keyboard the way editing does, and for the same
-          // reason: the field it is typing into is the one the filter uses.
-          // Any key that is not the second Del calls the delete off. The foot
-          // is showing a question; a keystroke that is not the answer is a no.
-          if (root.doomed && event.key !== Qt.Key_Delete) root.doomed = ""
-
-          if (root.naming) {
-            switch (event.key) {
-            case Qt.Key_Escape: root.naming = ""; break
-            case Qt.Key_Return:
-            case Qt.Key_Enter:  root.commitName(); break
-            default: root.renameKey(event)
-            }
-            // Everything, so an arrow cannot move the selection out from under
-            // the name being typed.
-            event.accepted = true
-            return
-          }
-          if (event.modifiers & Qt.ControlModifier) {
-            switch (event.key) {
-            case Qt.Key_E: root.edit(); event.accepted = true; return
-            case Qt.Key_C: root.hold(root.sel, false); event.accepted = true; return
-            case Qt.Key_X: root.hold(root.sel, true); event.accepted = true; return
-            case Qt.Key_V: root.paste(); event.accepted = true; return
-            case Qt.Key_H: root.showHidden = !root.showHidden; event.accepted = true; return
-            case Qt.Key_U: root.filter = ""; event.accepted = true; return
-            case Qt.Key_Y: root.copyPath(); event.accepted = true; return
-            case Qt.Key_O: root.cycleOrder(); event.accepted = true; return
-            // The readline pair the rest of this field already speaks, and the
-            // same letter under shift for the other naming verb.
-            case Qt.Key_N:
-              if (event.modifiers & Qt.ShiftModifier) root.beginNew()
-              else root.move(1)
-              event.accepted = true; return
-            case Qt.Key_P: root.move(-1); event.accepted = true; return
-            // A word of a name, a segment of a path -- one step back through
-            // whichever is being written, never past the sigil that says which.
-            case Qt.Key_W:
-            case Qt.Key_Backspace:
-              root.filter = root.pathMode
-                ? (root.filter.replace(/\/+$/, "").replace(/[^\/]*$/, "") || root.filter.charAt(0))
-                : root.filter.replace(/\S+\s*$/, "")
-              event.accepted = true; return
-            }
-          }
-          // Shift turns the arrows on the preview instead of the list. Held
-          // down, it is the one modifier that reads as "the other pane".
-          if (event.modifiers & Qt.ShiftModifier) {
-            switch (event.key) {
-            case Qt.Key_Down:  preview.scrollBy(root.lineHeight * 3); event.accepted = true; return
-            case Qt.Key_Up:    preview.scrollBy(-root.lineHeight * 3); event.accepted = true; return
-            case Qt.Key_Right: preview.scrollAcross(Style.space(60)); event.accepted = true; return
-            case Qt.Key_Left:  preview.scrollAcross(-Style.space(60)); event.accepted = true; return
-            case Qt.Key_PageDown: preview.scrollBy(preview.pageStep); event.accepted = true; return
-            case Qt.Key_PageUp:   preview.scrollBy(-preview.pageStep); event.accepted = true; return
-            case Qt.Key_Home:  preview.scrollTo(0); event.accepted = true; return
-            case Qt.Key_End:   preview.scrollTo(1); event.accepted = true; return
-            }
-          }
-          switch (event.key) {
-          // One step at a time: the filter, then the panel.
-          case Qt.Key_Escape:
-            if (root.filter) root.filter = ""
-            else root.close()
-            event.accepted = true; return
-          // Backspace edits the filter while there is one, because that is
-          // what it does in every field. Left is the way up that always works.
-          case Qt.Key_Backspace:
-            if (root.filter) root.filter = root.filter.slice(0, -1)
-            else root.up()
-            event.accepted = true; return
-          case Qt.Key_Left:  root.up(); event.accepted = true; return
-          case Qt.Key_Down:  root.move(1); event.accepted = true; return
-          case Qt.Key_Up:    root.move(-1); event.accepted = true; return
-          case Qt.Key_Tab:   root.move(1); event.accepted = true; return
-          case Qt.Key_Backtab: root.move(-1); event.accepted = true; return
-          case Qt.Key_PageDown: root.goTo(root.index + root.listPage); event.accepted = true; return
-          case Qt.Key_PageUp:   root.goTo(root.index - root.listPage); event.accepted = true; return
-          // Home is the first row, not the home directory: every bare key here
-          // drives the list. `~` still opens path entry sitting at home, which
-          // is the character that says so anyway.
-          case Qt.Key_Home:  root.goTo(0); event.accepted = true; return
-          case Qt.Key_End:   root.goTo(root.rows.length - 1); event.accepted = true; return
-          case Qt.Key_F2:    root.beginRename(); event.accepted = true; return
-          case Qt.Key_Delete: root.remove(); event.accepted = true; return
-          case Qt.Key_Right:
-          case Qt.Key_Return:
-          case Qt.Key_Enter:
-            root.activate(root.sel); event.accepted = true; return
-          }
-          if (event.text && event.text.length === 1 && event.text >= " ") {
-            root.filter += event.text
-            root.index = 0
-            event.accepted = true
-          }
-        }
+        Keys.onPressed: function (event) { FilesKeys.onKey(root, ops, preview, event) }
 
         FilesHeader {
           id: header

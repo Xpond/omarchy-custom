@@ -16,6 +16,7 @@ Item {
   clip: true
 
   readonly property real pageStep: scroller.height * 0.9
+  readonly property real panStep: Style.space(60)
   // The scroller's own box, not this Item's: the two differ by the margins the
   // text is inset by, and the directory listing lays its columns out in
   // characters that have to fit the narrower one.

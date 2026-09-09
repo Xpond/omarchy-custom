@@ -8,6 +8,7 @@ import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 import "MenuIndex.js" as MenuIndex
+import "MenuKeys.js" as MenuKeys
 
 // Radial control center. Eight panels sit on a ring reachable by direction,
 // and typing searches every menu entry the system knows about -- the ring is
@@ -554,6 +555,24 @@ Item {
     root.queryAt = at
   }
 
+  // The field is one line and a clipboard is not: a pasted path or error
+  // message arrives with newlines and runs, which would draw straight through
+  // the pill.
+  function paste() {
+    root.insert(String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim())
+  }
+
+  // A path is worth taking away as well as opening. Nothing here can report a
+  // clipboard failure once the wheel is down, so it goes the way every other
+  // verb does: pick, act, leave. False when the highlighted row is not a path.
+  function takePath() {
+    var hit = root.searching ? root.results[root.resultIndex] : null
+    if (!hit || !hit.path) return false
+    Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", hit.path])
+    root.dismiss()
+    return true
+  }
+
   function moveResult(step) {
     var n = root.results.length
     if (n <= 0) return
@@ -752,43 +771,6 @@ Item {
   // Loaded by URL off `omarchyPath` rather than imported: an import path has to
   // be a literal, and this one belongs to another plugin whose location is only
   // known at runtime.
-  component PanelIcon: Loader {
-    property string file
-    property real size
-    property color tint
-    active: !!file
-    source: file ? root.omarchyPath + "/shell/plugins/panels/" + file : ""
-    onLoaded: {
-      item.iconSize = Qt.binding(function () { return size })
-      item.color = Qt.binding(function () { return tint })
-    }
-  }
-
-  // A surface that is not scrim. Clicks land here and stop, rather than
-  // reaching the full-screen area underneath -- which reads a press as
-  // "clicked away" and closes the wheel, taking the query with it. Neither
-  // place it shields is clickable in any other sense -- the field always holds
-  // the keyboard -- so there is deliberately no hover state and no cursor:
-  // advertising an interaction that does not exist is worse than silence.
-  // Left button only, so right-click still falls through to dismiss.
-  component ClickShield: MouseArea {
-    anchors.fill: parent
-    acceptedButtons: Qt.LeftButton
-  }
-
-  component Track: ShapePath {
-    fillColor: "transparent"
-    capStyle: ShapePath.RoundCap
-    PathAngleArc {
-      centerX: root.ringBox / 2
-      centerY: root.ringBox / 2
-      radiusX: root.ringRadius
-      radiusY: root.ringRadius
-      startAngle: root.arcFrom
-      sweepAngle: root.arcSpan
-    }
-  }
-
   PanelWindow {
     id: surface
     visible: root.opened
@@ -865,108 +847,7 @@ Item {
       anchors.fill: parent
       focus: true
       Keys.priority: Keys.BeforeItem
-      Keys.onPressed: function (event) {
-        // Editing the query the way any text field does. Ahead of the plain
-        // Backspace below, which ignores modifiers and would take
-        // Ctrl+Backspace one character at a time; these also arrive as control
-        // codes under " ", which the printable test at the end drops.
-        if (event.modifiers & Qt.ControlModifier) {
-          switch (event.key) {
-          // The readline kills, either side of the caret. With the caret at the
-          // end -- where it is unless you moved it -- ctrl+u still clears.
-          case Qt.Key_U:
-            root.query = root.query.slice(root.queryAt); root.queryAt = 0
-            event.accepted = true; return
-          case Qt.Key_K:
-            root.query = root.query.slice(0, root.queryAt); event.accepted = true; return
-          case Qt.Key_W:
-          case Qt.Key_Backspace:
-            // The trailing space stays, so the next word does not need one.
-            var kept = root.query.slice(0, root.queryAt).replace(/\S+\s*$/, "")
-            root.query = kept + root.query.slice(root.queryAt)
-            root.queryAt = kept.length; event.accepted = true; return
-          case Qt.Key_A: root.queryAt = 0; event.accepted = true; return
-          case Qt.Key_E: root.queryAt = root.query.length; event.accepted = true; return
-          case Qt.Key_V:
-            // The field is one line and a clipboard is not: a pasted path or
-            // error message arrives with newlines and runs, which would draw
-            // straight through the pill.
-            root.insert(String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim())
-            event.accepted = true; return
-          // A path is worth taking away as well as opening. Nothing here can
-          // report a clipboard failure once the wheel is down, so it goes the
-          // way every other verb does: pick, act, leave.
-          case Qt.Key_Y:
-            var hit = root.searching ? root.results[root.resultIndex] : null
-            if (!hit || !hit.path) return
-            Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", hit.path])
-            root.dismiss()
-            event.accepted = true; return
-          // The readline pair, on the one thing here that is a list -- the ring
-          // is a compass rather than a column, so there they fall through.
-          case Qt.Key_N:
-            if (root.searching) { root.moveResult(1); event.accepted = true }
-            return
-          case Qt.Key_P:
-            if (root.searching) { root.moveResult(-1); event.accepted = true }
-            return
-          }
-        }
-        // One step at a time: the query, then the menu tree, then the screen.
-        if (event.key === Qt.Key_Escape) {
-          if (root.searching) root.query = ""
-          else if (!root.up()) root.dismiss()
-          event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Backspace) {
-          if (!root.searching) root.up()
-          else if (root.queryAt > 0) {
-            var at = root.queryAt - 1
-            root.query = root.query.slice(0, at) + root.query.slice(root.queryAt)
-            root.queryAt = at
-          }
-          event.accepted = true; return
-        }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-          root.run(root.searching ? root.results[root.resultIndex] : root.slices[root.selected])
-          event.accepted = true; return
-        }
-        if (root.searching) {
-          if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { root.moveResult(1); event.accepted = true; return }
-          if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { root.moveResult(-1); event.accepted = true; return }
-          // Left and right carry the caret. Home and end stay on the list: it
-          // is the thing here with two ends, and stepping only wraps cheaply
-          // from the ends it is already standing on.
-          if (event.key === Qt.Key_Left) { root.queryAt = Math.max(0, root.queryAt - 1); event.accepted = true; return }
-          if (event.key === Qt.Key_Right) {
-            root.queryAt = Math.min(root.query.length, root.queryAt + 1); event.accepted = true; return
-          }
-          if (event.key === Qt.Key_Home) { root.resultIndex = 0; root.showResult(); event.accepted = true; return }
-          if (event.key === Qt.Key_End) {
-            root.resultIndex = Math.max(0, root.results.length - 1)
-            root.showResult(); event.accepted = true; return
-          }
-        } else {
-          switch (event.key) {
-          // Arrows alone reach the whole ring: up/down jump to the top and
-          // bottom slice, left/right pick the side slice first and then step
-          // around, so anything off a cardinal is a cardinal plus a few steps.
-          // Found by bearing rather than fixed at 0/4/2/6 -- the ring is nine
-          // slices by default and any count once it is configured.
-          case Qt.Key_Up:       root.select(root.nearestSlice(0)); event.accepted = true; return
-          case Qt.Key_Down:     root.select(root.nearestSlice(180)); event.accepted = true; return
-          case Qt.Key_Right:    root.selected < 0 ? root.select(root.nearestSlice(90)) : root.rotate(1); event.accepted = true; return
-          case Qt.Key_Left:     root.selected < 0 ? root.select(root.nearestSlice(270)) : root.rotate(-1); event.accepted = true; return
-          case Qt.Key_Tab:      root.rotate(1); event.accepted = true; return
-          case Qt.Key_Backtab:  root.rotate(-1); event.accepted = true; return
-          }
-        }
-        // Anything else printable starts the query or lands in it at the caret.
-        if (event.text && event.text.length === 1 && event.text >= " ") {
-          root.insert(event.text)
-          event.accepted = true
-        }
-      }
+      Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
     }
 
     Item {
@@ -1001,150 +882,7 @@ Item {
         // place: the ring while the query is empty, the list the moment
         // anything is typed. Both are placed off dead center, which is where
         // the field is, so the swap cannot move the field.
-        Item {
-          id: ring
-          anchors.fill: parent
-          // Traded for the card rather than switched off: the ring draws back
-          // as the list comes forward. `visible` still follows the fade so a
-          // ring at zero opacity stops being composited at all.
-          opacity: root.searching ? 0 : 1
-          scale: root.searching ? 0.94 : 1
-          visible: opacity > 0
-          Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
-          Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
-
-          // The dial the discs sit on. Without a stroke through their centers
-          // the eight read as scattered chips rather than one object.
-          Rectangle {
-            anchors.centerIn: parent
-            width: root.ringRadius * 2
-            height: width
-            radius: width / 2
-            color: "transparent"
-            border.width: Style.spacing.hairline
-            border.color: Util.alpha(Color.menu.text, 0.12)
-          }
-
-          // The comet. It rides the dial's own stroke rather than sitting
-          // outside it, so what moves is the ring lighting up along its
-          // length -- the wheel turning, not a marker sliding over it. The
-          // under-glow goes down first, so the crisp arc sits in its own light.
-          Shape {
-            anchors.fill: parent
-            preferredRendererType: Shape.CurveRenderer
-            // Nothing to point at until something is selected -- except during
-            // the opening lap, which is the comet with nothing to point at yet.
-            opacity: root.selected >= 0 || Math.abs(root.arcDrag) > 0.5 ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-
-            Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(root.cometColor, 0.16) }
-            Track { strokeWidth: Style.space(3); strokeColor: root.cometColor }
-          }
-
-          Repeater {
-            model: root.slices
-            delegate: Item {
-              id: slice
-              required property int index
-              required property var modelData
-              readonly property bool active: root.selected === index
-              // Where the streak is on this disc right now, and what that
-              // does to its glyph: full accent while selected, and the
-              // comet's hue washing over it as the trail crosses.
-              readonly property real sweep: root.sweepAt(root.sliceAngle(index) - 90)
-              readonly property color glyphColor: Qt.tint(Color.menu.text,
-                Util.alpha(root.cometColor, active ? 1 : slice.sweep))
-              // Tied to the disc rather than fixed: once the ring is full
-              // enough that the discs have to shrink, a fixed icon would be the
-              // thing that overflows them.
-              readonly property real glyphSize: Style.font.displayLarge * root.itemSize / root.baseItem
-
-              readonly property real angle: (root.sliceAngle(index) - 90) * Math.PI / 180
-              x: ring.width / 2 + root.ringRadius * Math.cos(angle) - width / 2
-              y: ring.height / 2 + root.ringRadius * Math.sin(angle) - height / 2
-              width: root.itemSize
-              height: root.itemSize
-
-              BorderSurface {
-                anchors.fill: parent
-                // A dial of discs reads as one mechanism; the same eight as
-                // rounded squares read as a grid arranged in a circle.
-                radius: width / 2
-                // A surface, not an outline: only a fill separates a slice
-                // from the blurred desktop behind it.
-                color: active
-                  ? root.selectedFill
-                  : root.surfaceFill
-                // A full weight ring against everyone else's hairline, in
-                // the comet's hue rather than the flat accent -- and every
-                // unselected one takes that hue as the streak crosses it and
-                // gives it back as the tail leaves.
-                borderSpec: active
-                  ? Border.flat(root.cometColor, Style.space(2))
-                  : Border.flat(Qt.tint(root.surfaceEdge,
-                                        Util.alpha(root.cometColor, slice.sweep * 0.9)),
-                                Style.spacing.hairline)
-                // Only the disc grows. Scaling the label with it would drift the
-                // whole ring of text every time selection moved.
-                scale: active ? root.selectedScale : 1
-
-                Behavior on color { ColorAnimation { duration: 90 } }
-                Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-
-                Text {
-                  anchors.centerIn: parent
-                  visible: !modelData.iconFile
-                  text: modelData.icon
-                  color: slice.glyphColor
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: slice.glyphSize
-                }
-                // Tailscale's and Dropbox's marks are shapes Omarchy draws
-                // itself, so there is no codepoint to set here.
-                PanelIcon {
-                  anchors.centerIn: parent
-                  file: modelData.iconFile || ""
-                  size: slice.glyphSize
-                  tint: slice.glyphColor
-                }
-              }
-
-              // Outside the disc rather than in it: a circle's usable width
-              // collapses away from its center, and "Bluetooth" does not fit
-              // under an icon in there. Pushed out along its own spoke rather
-              // than hung straight down, because the dial's stroke runs
-              // through every disc's center -- a label below the east or west
-              // disc sits exactly on the arc's path and gets washed out as it
-              // passes. Radially there is nothing for it to collide with, and
-              // they read as one radiating set. Keeping the arc per slice
-              // constant as the ring grows is what keeps neighbouring labels
-              // off each other at any count.
-              Text {
-                // Measured to the box's nearest edge rather than its center,
-                // so every label clears its disc by the same margin whatever
-                // its width and whatever angle it sits at -- to the center,
-                // a long label on a diagonal has its near corner back on top
-                // of the disc.
-                readonly property real reach: root.itemSize / 2 * root.selectedScale + root.labelGap
-                  + (Math.abs(Math.cos(parent.angle)) * width
-                     + Math.abs(Math.sin(parent.angle)) * height) / 2
-                x: parent.width / 2 + reach * Math.cos(parent.angle) - width / 2
-                y: parent.height / 2 + reach * Math.sin(parent.angle) - height / 2
-                text: modelData.label
-                color: active ? Color.accent : Color.menu.text
-                // Labels name the icon rather than compete with it, so they sit
-                // back until the slice is the one selected.
-                opacity: active ? 1 : 0.6
-                // The disc under it eases; without these the ring of text
-                // strobes while the discs glide.
-                Behavior on color { ColorAnimation { duration: 90 } }
-                Behavior on opacity { NumberAnimation { duration: 90 } }
-                font.family: Style.font.menuFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-          }
-        }
+        WheelRing { wheel: root }
 
         // A drilled ring is otherwise anonymous -- twelve discs that could be
         // Install's or Remove's. The chevron points at the way out: backspace.
@@ -1229,217 +967,7 @@ Item {
       // card behind them, because a box under a dial of discs is a second
       // surface language, and the jump between the two is exactly what the
       // wheel's geometry was there to avoid.
-      Item {
-        // Off the surface's center rather than the pill's edge: the pill is
-        // inside the dial's layer, and anchors don't cross between parents.
-        // Dead center is where the pill sits by construction.
-        anchors.top: parent.verticalCenter
-        anchors.topMargin: root.searchHeight / 2 + Style.spacing.panelGap
-        anchors.horizontalCenter: parent.horizontalCenter
-        // Grown from its top edge, which is pinned just under the pill, so the
-        // beads read as falling out of the field rather than swelling from
-        // their own middle. Rows carry MouseAreas, so a faded stack must go
-        // properly invisible or it keeps catching clicks over the ring.
-        transformOrigin: Item.Top
-        opacity: root.searching ? 1 : 0
-        scale: root.searching ? 1 : 0.96
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
-        Behavior on scale { NumberAnimation { duration: root.fadeDuration; easing.type: Easing.OutCubic } }
-        // The field's width, not the beads'. The margin they gave up when they
-        // stepped down a size is exactly where the rail goes.
-        width: root.searchWidth
-        height: resultList.height
-        // One pass over the whole stack, the way the dial shadows its discs in
-        // one: each bead lands with its own falloff, and the layer re-renders
-        // at the new size every time the query changes the row count. Layering
-        // does not block the rows' mouse input -- only how they are painted.
-        layer.enabled: true
-        layer.effect: MultiEffect {
-          autoPaddingEnabled: true
-          shadowEnabled: true
-          shadowColor: "#000000"
-          shadowBlur: 1.0
-          // Tighter than the dial's, which is cast by discs small enough to
-          // carry a wide falloff. On a bead this wide the same one reads as a
-          // skirt hanging off the bottom edge rather than as depth.
-          blurMax: 16
-          shadowOpacity: 0.4
-          shadowVerticalOffset: Style.space(3)
-        }
-
-        // Ahead of the rows, so their own areas still take the clicks that
-        // land on them and this catches only the gaps between the beads.
-        ClickShield {}
-
-        Column {
-          id: resultList
-          anchors.horizontalCenter: parent.horizontalCenter
-          width: root.resultWidth
-          // Wide enough that the beads read as separate objects on the scrim.
-          // At a hairline they fuse into one slab with lines ruled across it.
-          spacing: Style.spacing.md
-
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: root.results.length === 0
-            text: root.emptyText
-            color: Color.menu.text
-            opacity: 0.5
-            font.family: Style.font.menuFamily
-            font.pixelSize: Style.font.body
-          }
-
-          Repeater {
-            // The window, not the list: eight delegates exist however deep the
-            // ranked list runs behind them.
-            model: root.beads
-            delegate: BorderSurface {
-              id: resultCard
-              required property int index
-              required property var modelData
-              // `index` counts beads on screen; the selection counts rows in
-              // the list. Everything a row does has to cross that offset.
-              readonly property int row: root.resultTop + index
-              readonly property bool active: root.resultIndex === resultCard.row
-
-              width: root.resultWidth
-              height: root.resultHeight
-              radius: height / 2
-              // The disc's two fills, on a hairline either way. A full-weight
-              // ring works around a disc because a disc is small; drawn this
-              // wide it is a stroke long enough to outweigh the word inside
-              // it. Selection is carried by the accent, not by line weight.
-              color: active ? root.selectedFill : root.surfaceFill
-              borderSpec: Border.flat(active ? root.cometColor : root.surfaceEdge,
-                                      Style.spacing.hairline)
-
-              Behavior on color { ColorAnimation { duration: 90 } }
-
-              MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                // positionChanged, not entered: retyping a query re-lays the rows
-                // out under a cursor that has not moved, and `entered` fires on
-                // every row that slides beneath it -- which drags the selection
-                // around mid-keystroke and leaves you unsure what Return will run.
-                // Real pointer motion is the only thing that should claim it.
-                onPositionChanged: function (mouse) {
-                  if (root.hoverMoved(mapToItem(null, mouse.x, mouse.y))) root.resultIndex = resultCard.row
-                }
-                onClicked: root.run(root.results[resultCard.row])
-              }
-
-              Row {
-                id: resultRow
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.leftMargin: Style.spacing.rowPaddingX
-                anchors.right: parent.right
-                anchors.rightMargin: Style.spacing.rowPaddingX
-                spacing: Style.spacing.controlGap
-
-                // What the label and the breadcrumb share, once the icon and
-                // the two gaps are paid for. A window title is arbitrary text --
-                // a terminal's is a whole command line -- so without a budget
-                // one row draws straight through the edge of the card.
-                readonly property real textBudget:
-                  Math.max(0, width - Style.font.iconLarge - spacing * 2 - chevron.width)
-
-                Text {
-                  anchors.verticalCenter: parent.verticalCenter
-                  visible: (!modelData.appIcon || appImage.status === Image.Error) && !modelData.iconFile
-                  width: Style.font.iconLarge
-                  text: modelData.icon
-                  color: active ? Color.accent : Color.menu.text
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.iconLarge
-                }
-                // The same marks the ring loads, at row size.
-                PanelIcon {
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Style.font.iconLarge
-                  file: modelData.iconFile || ""
-                  size: Style.font.iconLarge
-                  tint: resultCard.active ? Color.accent : Color.menu.text
-                }
-                // Apps and windows name an icon file and keep a glyph behind
-                // it: a themed icon that fails to load used to leave a hole the
-                // size of itself. One of the three draws, and a Row skips the rest.
-                Image {
-                  id: appImage
-                  anchors.verticalCenter: parent.verticalCenter
-                  visible: !!modelData.appIcon && status !== Image.Error
-                  width: Style.font.iconLarge
-                  height: Style.font.iconLarge
-                  source: modelData.appIcon ? root.appLibrary.iconSource(modelData.appIcon) : ""
-                  sourceSize.width: Style.font.iconLarge
-                  sourceSize.height: Style.font.iconLarge
-                  fillMode: Image.PreserveAspectFit
-                  asynchronous: true
-                }
-                Text {
-                  id: labelText
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
-                  elide: Text.ElideRight
-                  text: modelData.label
-                  color: active ? Color.accent : Color.menu.text
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.body
-                }
-                Text {
-                  id: trailText
-                  anchors.verticalCenter: parent.verticalCenter
-                  // Whatever the label leaves, but never squeezed below a share
-                  // of its own -- a breadcrumb that elides to nothing is noise.
-                  width: Math.min(implicitWidth,
-                                  Math.max(resultRow.textBudget * 0.4,
-                                           resultRow.textBudget - labelText.implicitWidth))
-                  text: modelData.trail
-                  color: Color.menu.text
-                  opacity: 0.45
-                  // A breadcrumb reads from the left -- Install › Package --
-                  // so it loses its tail. A path reads from the right: which
-                  // of four `src` directories this is, is the part nearest the
-                  // name, and eliding that end says nothing at all.
-                  elide: modelData.path ? Text.ElideLeft : Text.ElideRight
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.caption
-                }
-                // A category is not a command: picking it turns the ring into
-                // its contents. The chevron is what says so before Return.
-                Text {
-                  id: chevron
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: modelData.node ? implicitWidth + parent.spacing : 0
-                  visible: !!modelData.node
-                  text: "\u203a"
-                  color: active ? Color.accent : Color.menu.text
-                  opacity: 0.5
-                  font.family: Style.font.menuFamily
-                  font.pixelSize: Style.font.body
-                }
-              }
-            }
-          }
-        }
-
-        // The same rail the files panel runs beside its own list, for the same
-        // reason: eight beads under a query that matched forty is otherwise a
-        // list with no bottom, and nothing on screen says the ninth exists. It
-        // rides in the width the beads gave up, so nothing moves to make room.
-        Rectangle {
-          readonly property int span: Math.max(1, root.results.length - root.resultCap)
-          visible: root.results.length > root.resultCap
-          anchors.right: parent.right
-          width: Style.space(2)
-          radius: width / 2
-          color: Util.alpha(Color.menu.text, 0.18)
-          height: resultList.height * root.resultCap / root.results.length
-          y: root.resultTop / span * (resultList.height - height)
-        }
-      }
+      WheelResults { wheel: root }
     }
   }
 }

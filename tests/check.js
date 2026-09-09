@@ -15,18 +15,16 @@ function method(source, name, scope) {
   vm.runInContext(source.match(new RegExp("^  function " + name + "\\([^]*?^  }", "m"))[0], scope)
   return scope[name]
 }
-// The key map is the one part of a panel with no function to call. Lift the
-// handler out whole -- its closing brace is at the indent of its own line --
-// and give it a Qt whose only requirement is that the names it compares are
-// distinct. Real Qt values would be a table to keep correct for no gain.
-function keymap(source, scope) {
-  const Qt = { callLater: fn => fn(), ShiftModifier: 1 << 25, ControlModifier: 1 << 26 }
+// A key map is a library like any other. It needs only a Qt whose names compare
+// distinctly; real Qt values would be a table to keep correct for no gain.
+function keymap(name, ...bound) {
+  const src = read(name).replace(/^\.pragma library/m, "")
+  const Qt = { ShiftModifier: 1 << 25, ControlModifier: 1 << 26 }
   let n = 1
-  for (const [, key] of source.matchAll(/Qt\.(Key_\w+)/g)) Qt[key] = Qt[key] || n++
-  vm.createContext(Object.assign(scope, { Qt }))
-  vm.runInContext("var onKey = " + source.match(/^(\s*)Keys\.onPressed: (function \(event\) \{[^]*?^\1\})/m)[2], scope)
+  for (const [, key] of src.matchAll(/Qt\.(Key_\w+)/g)) Qt[key] = Qt[key] || n++
+  const onKey = new Function("Qt", src + "\nreturn onKey")(Qt)
   return (key, modifiers = 0, text = "") =>
-    scope.onKey({ key: Qt[key], modifiers, text, accepted: false })
+    onKey(...bound, { key: Qt[key], modifiers, text, accepted: false })
 }
 const F = library("plugins/xpo.files/FilesIndex.js")
 const M = library("plugins/xpo.wheel/MenuIndex.js")
@@ -88,7 +86,8 @@ const calls = []
 const root = { editing: true, dirty: true, saving: "", opened: true,
   note: t => calls.push(t), enter: d => calls.push(d), home: "/home/test",
   focusedScreen: () => null, claimPending() {}, leaveEdit() { this.editing = false } }
-const scope = { root, preview: { focusEditor: () => calls.push("editor focus") },
+const scope = { root, ops: { note: t => calls.push(t) },
+  preview: { focusEditor: () => calls.push("editor focus") },
   keys: { forceActiveFocus() {} }, Qt: { callLater: fn => fn() } }
 const open = method(source, "open", scope)
 open('{"dir":"/home/test/other","select":"new.txt"}')
@@ -111,8 +110,9 @@ assert.equal(root.opened, false)
 assert.equal(hides, 1)
 console.log("ok: navigation preserves dirty/pending edits; self-close does not recurse")
 
+const opsSource = read("plugins/xpo.files/FilesOps.qml")
 const busy = { root: { note: text => calls.push(text) }, filer: { running: true } }
-method(source, "run", busy)(["cp"], {})
+method(opsSource, "run", busy)(["cp"], {})
 assert.equal(busy.root.op, undefined)
 assert.match(calls.at(-1), /still running/)
 const wheel = { root: { countUse() {}, dismiss() {}, shell: {
@@ -128,12 +128,13 @@ console.log("ok: busy operations report refusal; wheel paths summon the browser"
 const scrolls = []
 const browser = {
   rows: Array.from({ length: 100 }, (_, i) => ({ name: "row" + i })),
-  index: 40, listPage: 10, editing: false, naming: "", doomed: "",
+  index: 40, listPage: 10, editing: false, naming: "",
   move(step) { this.index = (this.index + step + this.rows.length) % this.rows.length }
 }
-const preview = { pageStep: 7, scrollBy: d => scrolls.push(d), scrollTo: f => scrolls.push("to" + f) }
+const preview = { pageStep: 7, panStep: 3, scrollBy: d => scrolls.push(d),
+  scrollTo: f => scrolls.push("to" + f), scrollAcross: d => scrolls.push("x" + d) }
 browser.goTo = method(source, "goTo", { root: browser })
-const key = keymap(source, { root: browser, preview })
+const key = keymap("plugins/xpo.files/FilesKeys.js", browser, { doomed: "" }, preview)
 key("Key_End");      assert.equal(browser.index, 99)
 key("Key_Home");     assert.equal(browser.index, 0)
 key("Key_PageUp");   assert.equal(browser.index, 0, "a page off the top clamps")
@@ -144,7 +145,8 @@ assert.deepEqual(scrolls, [], "no bare key reaches the preview")
 const shift = 1 << 25
 key("Key_PageDown", shift); key("Key_PageUp", shift)
 key("Key_Home", shift);     key("Key_End", shift)
-assert.deepEqual(scrolls, [7, -7, "to0", "to1"])
+key("Key_Right", shift);    key("Key_Left", shift)
+assert.deepEqual(scrolls, [7, -7, "to0", "to1", "x3", "x-3"])
 assert.equal(browser.index, 99, "no shifted key reaches the list")
 console.log("ok: browser bare keys drive the list, shift drives the preview")
 
@@ -155,8 +157,11 @@ const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
   get searching() { return this.query.length > 0 },
   dismiss: () => copied.push("dismissed") }
 dial.insert = method(wheelSource, "insert", { root: dial })
-const dialKey = keymap(wheelSource, { root: dial, MenuIndex: M,
-  Quickshell: { clipboardText: "pasted  text", execDetached: c => copied.push(c.at(-1)) } })
+dial.paste = method(wheelSource, "paste", { root: dial,
+  Quickshell: { clipboardText: "pasted  text" } })
+dial.takePath = method(wheelSource, "takePath", { root: dial,
+  Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
+const dialKey = keymap("plugins/xpo.wheel/MenuKeys.js", dial)
 const ctrl = 1 << 26
 // A printable key is only its text here: the handler falls through to event.text.
 const type = text => [...text].forEach(c => dialKey("", 0, c))

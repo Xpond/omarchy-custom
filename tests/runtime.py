@@ -10,7 +10,7 @@ import tempfile
 
 repo = Path(__file__).resolve().parents[1]
 wheel = (repo / "plugins/xpo.wheel/Wheel.qml").read_text()
-files = (repo / "plugins/xpo.files/Files.qml").read_text()
+ops = (repo / "plugins/xpo.files/FilesOps.qml").read_text()
 
 
 def block(source, pattern):
@@ -124,13 +124,15 @@ Scope {
     captured = base / "clipboard"
     selected = "/home/test/a '$file with spaces.txt"
     clipboard = '''
+  // FilesOps borrows the selection from its panel; here it is its own.
+  property var panel: root
   property bool editing: false
   property string home: "/home/test"
   property var sel: ({path: ''' + json.dumps(selected) + '''})
   property var op: null
   property string fileNote: ""
   function note(text) { root.fileNote = text }
-''' + block(files, r"  function run\(") + block(files, r"  function copyPath\(") + block(files, r"  Process {\n    id: filer") + '''
+''' + block(ops, r"  function run\(") + block(ops, r"  function copyPath\(") + block(ops, r"  Process {\n    id: filer") + '''
   Component.onCompleted: {
     root.copyPath()
     if (root.fileNote) { console.error("FAIL premature success"); Qt.exit(1) }
