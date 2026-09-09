@@ -86,6 +86,7 @@ Four package-owned QML files (~294 added lines total) plus Hyprland config.
 ```lua
 decoration = { blur = { enabled = true, size = 4, passes = 2 } }
 
+-- The one blurred surface. Everything else stands on it.
 hl.layer_rule({
   match = { namespace = "omarchy-panel-scrim" },
   blur = true,
@@ -93,19 +94,38 @@ hl.layer_rule({
   no_anim = true,
   animation = "none",
 })
+
+-- The wheel and the browser. no_anim only -- deliberately NOT blur: they sit
+-- over the scrim, so blurring them blurs an already blurred desktop a second
+-- time inside every card, and recomputes a fullscreen blur on every frame the
+-- ring spins. Both carried `blur = true, ignore_alpha = 0.05` while they drew
+-- their own backdrops; both must lose it now that they do not.
+hl.layer_rule({ match = { namespace = "omarchy-wheel" }, no_anim = true, animation = "none" })
+hl.layer_rule({ match = { namespace = "omarchy-files" }, no_anim = true, animation = "none" })
 ```
+
+`install.sh` checks these two rules exist but cannot check what is in them, so a
+machine that still has `blur = true` on either gets no warning — only cards that
+look over-frosted inside. This file is hand-kept Lua; nothing installs it.
 
 ### Why the scrim lives in the bar
 
 Panels are separate layer surfaces that unmap and remap as you tab between
-them. A scrim inside a panel blinks out mid-handoff and takes Hyprland's blur
-with it. One bar-owned surface stays mapped across the whole interaction.
+them — and so are the wheel, the browser and the clipboard, which unmap and
+remap as the wheel hands over to whatever you picked. A scrim inside any of
+them blinks out mid-handoff and takes Hyprland's blur with it. One bar-owned
+surface stays mapped across the whole interaction, and every one of those
+surfaces holds a count on it (`panelSurfaceVisible`) rather than drawing its
+own.
 
 Ordering is by **Wayland layer**, not by `layer_rule`'s `order` field:
 
 ```
 Overlay   omarchy-keyboard-panel   the card — opaque, stays sharp
-Top       omarchy-panel-scrim      the blurred wash
+Overlay   omarchy-wheel            the ring
+Overlay   omarchy-files            the browser card
+Overlay   omarchy-clipboard        the clipboard card
+Top       omarchy-panel-scrim      the blurred wash, held by all of the above
 Top       omarchy-bar
 ```
 
