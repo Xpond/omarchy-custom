@@ -10,6 +10,8 @@ Item {
   id: root
 
   property string omarchyPath: Quickshell.env("OMARCHY_PATH")
+  // Declared so the loader hands it over: it is how the bar is reached.
+  property var shell: null
   property bool opened: false
   property string filterText: ""
   property int selectedIndex: 0
@@ -321,9 +323,12 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    Rectangle {
-      anchors.fill: parent
-      color: root.scrim
+    // The backdrop is the bar's one scrim, held by every shell surface in
+    // turn. Drawn here instead it would unmap with this surface and take
+    // Hyprland's blur with it, flashing the sharp desktop mid-handover.
+    onVisibleChanged: {
+      var bar = root.shell && root.shell.bar
+      if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
     }
 
     MouseArea {

@@ -672,7 +672,13 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    Rectangle { anchors.fill: parent; color: Color.menu.scrim }
+    // The backdrop is the bar's one scrim, shared with the wheel and every
+    // panel, so a handover never takes the blur down with it. Wheel.qml holds
+    // the reasoning.
+    onVisibleChanged: {
+      var bar = root.shell && root.shell.bar
+      if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
+    }
 
     MouseArea { anchors.fill: parent; onClicked: root.close() }
 

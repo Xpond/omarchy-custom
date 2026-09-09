@@ -233,3 +233,14 @@ assert.equal(walk.left, 0, "nothing leaves while there is somewhere to go")
 walkKey("Key_Backspace"); assert.equal(walk.left, 1, "home has nowhere left but out")
 assert.equal(walk.dir, "/home/test", "and it does not climb past home on the way")
 console.log("ok: backspace shortens, then climbs, then leaves for the wheel")
+
+// One wash, owned by the bar, behind every shell surface. A plugin that paints
+// its own takes Hyprland's blur down with it when it unmaps -- which is the
+// flash that stood for eight sessions and survived two timing fixes, because
+// timing was never what was wrong. So neither may paint one, and both must hand
+// the bar their open state instead.
+for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) {
+  assert.doesNotMatch(read(f), /color:\s*Color\.menu\.scrim/, f + " paints its own scrim")
+  assert.match(read(f), /panelSurfaceVisible\(/, f + " never counts on the bar's")
+}
+console.log("ok: neither plugin paints a scrim; both count on the bar's")

@@ -167,9 +167,9 @@ done
 # whole update over a keybind is a hook that gets uninstalled.
 cfg=()
 grep -qs omarchy-wheel ~/.config/hypr/looknfeel.lua ||
-  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-wheel -- the wheel gets no blur")
+  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-wheel -- Hyprland fades its map and unmap")
 grep -qs omarchy-files ~/.config/hypr/looknfeel.lua ||
-  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-files -- the browser gets no blur")
+  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-files -- Hyprland fades its map and unmap")
 grep -qs "summon xpo.wheel" ~/.config/hypr/bindings.lua ||
   cfg+=("bindings.lua: nothing runs 'omarchy-shell -q shell summon xpo.wheel' -- the wheel has no key")
 (( ${#cfg[@]} )) && printf 'missing config:\n' && printf '  %s\n' "${cfg[@]}"

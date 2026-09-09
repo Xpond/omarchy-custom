@@ -803,9 +803,15 @@ Item {
     WlrLayershell.keyboardFocus: root.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
 
-    Rectangle {
-      anchors.fill: parent
-      color: Color.menu.scrim
+    // The wash and the blur behind this surface belong to the bar's scrim, not
+    // to this surface. A scrim drawn here unmaps when the surface does and
+    // takes Hyprland's blur with it, so for the frames between this going and
+    // whatever replaces it arriving, the desktop snaps sharp. The bar owns one
+    // wash for exactly that reason; this just holds a count on it, and the next
+    // surface takes its own before this one is let go.
+    onVisibleChanged: {
+      var bar = root.shell && root.shell.bar
+      if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
     }
 
     // The blurred desktop takes the comet's own color as the ring winds up,

@@ -81,8 +81,9 @@ Item {
   property bool tooltipShown: false
   property int tooltipRequest: 0
   property var activePopout: null
-  // Darkness of the wash behind an open panel. See PanelScrim below.
-  property real panelScrimAlpha: 0.32
+  // The wash behind every open shell surface -- panels, the wheel, the browser.
+  // One value because it is one surface: see PanelScrim below.
+  property color panelScrimColor: Color.menu.scrim
   // How long the scrim outlives the last panel closing. Must stay >= the
   // panel's closeFadeDuration (Ui/KeyboardPanel.qml) or the backdrop drops
   // out from under a card that is still animating away.
@@ -1094,7 +1095,7 @@ Item {
     // needs no_anim on this namespace for the same reason.
     Rectangle {
       anchors.fill: parent
-      color: Qt.rgba(0, 0, 0, root.panelScrimAlpha)
+      color: root.panelScrimColor
     }
   }
 

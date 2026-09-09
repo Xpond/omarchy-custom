@@ -510,9 +510,15 @@ GNOME Files, whose entry is also called "Files". `Wheel.qml` lists `xpo.files`
 among the surfaces `closeAll` sweeps, so `SUPER+W` closes it instead of falling
 through to `killactive`.
 
-Blur needs a layer rule in `~/.config/hypr/looknfeel.lua`, matching namespace
-`omarchy-files`. Without it the surface gets no blur at all and the sharp
-desktop reads straight through the scrim.
+The backdrop is not this surface's. The wash and the blur behind the card
+belong to one scrim owned by the bar, which the panels, the wheel and the
+clipboard hold a count on too — so opening the browser from the wheel changes
+what stands on the backdrop without the backdrop itself going anywhere. This
+surface only asks for that count when it opens (`Files.qml` `onOpenedChanged`)
+and lets it go when it closes; the bar holds the scrim 150 ms past the last
+release, which covers the ~55 ms a replacement surface takes to map. The layer
+rule for `omarchy-files` in `~/.config/hypr/looknfeel.lua` no longer carries
+blur — only `no_anim`, to stop Hyprland fading the map and unmap.
 
 Editing the plugin needs `omarchy-restart-shell` — QML components are cached, so
 `rescanPlugins` alone will not reload changed code.
@@ -539,9 +545,11 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
   256 KiB, valid UTF-8, not binary. Other encodings remain preview-only.
 - Only the first 500 lines of a file are ever shown, and only the first 400
   entries of a previewed folder.
-- **Opening the browser from the wheel flashes.** The wheel unmaps before this
-  surface maps, and for a frame or two the desktop shows through unblurred.
-  Fixing it was attempted twice and both fixes were worse: fading the wheel out
-  over the browser stacks two blurred scrims (measured: 14% darker, half the
-  contrast, for the length of the fade), and handing over on a handshake moved
-  the artifact rather than removing it. Reverted; the flash stands.
+- ~~**Opening the browser from the wheel flashes.**~~ Fixed. The flash was
+  never a timing problem — it was that each surface drew its own backdrop, so
+  the backdrop unmapped with the surface and took Hyprland's blur with it. Two
+  attempts to overlap the fades failed because they were treating the symptom.
+  The browser, the wheel and the clipboard now hold a count on the bar's one
+  scrim, the way the centered panels already did. Verified by sampling
+  `hyprctl layers` across a handover: `omarchy-panel-scrim` is present in every
+  sample, so there is no frame without the blur.

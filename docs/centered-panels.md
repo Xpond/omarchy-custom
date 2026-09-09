@@ -72,14 +72,14 @@ break the entire shell, which is far worse than losing the patch.
 
 ## 2. What changed
 
-Four package-owned QML files (~280 added lines total) plus Hyprland config.
+Four package-owned QML files (~294 added lines total) plus Hyprland config.
 
 | File | Change |
 |---|---|
 | `Ui/KeyboardPanel.qml` | `centerOnScreen` placement in `cardOrigin`; `slideX`/`slideY`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
-| `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher` (6 lines) |
+| `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one (18 lines) |
 
 `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
 
@@ -211,9 +211,18 @@ never done anything. Left alone — it predates this work.)
 work with non-legacy parsers."* Edit the Lua and `hyprctl reload`.
 
 **`ignore_alpha` must sit below the scrim's own alpha.** Hyprland skips blur on
-regions it considers too transparent. At `panelScrimAlpha 0.32` a default
-threshold suppressed the blur entirely while the dim still rendered — which
-looks exactly like a broken scrim rather than a blur problem.
+regions it considers too transparent. At a 0.32 scrim a default threshold
+suppressed the blur entirely while the dim still rendered — which looks exactly
+like a broken scrim rather than a blur problem.
+
+**Only the scrim surface is blurred.** Every other shell surface — the panels,
+`omarchy-wheel`, `omarchy-files`, `omarchy-clipboard` — draws a card over it
+and nothing behind. That is what makes a handover seamless: they unmap and
+remap as you tab between them and as the wheel opens what you picked, and blur
+bound to any of them blinks out mid-switch. Blurring one of them *as well as*
+the scrim is not free either — it blurs an already blurred desktop a second
+time inside the card, and recomputes a fullscreen blur on every frame the
+wheel's ring spins.
 
 **Every Omarchy shell layer surface sets `no_anim = true, animation = "none"`**
 (see `default/hypr/apps/omarchy-shell.lua`). Without it Hyprland runs its own
@@ -380,7 +389,7 @@ and look at it.
 
 | Knob | Value | Effect |
 |---|---|---|
-| `panelScrimAlpha` | `0.32` | backdrop darkness |
+| `panelScrimColor` | `Color.menu.scrim` | the one backdrop, behind panels, wheel, browser and clipboard alike |
 | `panelScrimHoldMs` | `150` | **must stay >= `closeFadeDuration`** or the backdrop drops out early |
 
 Blur strength lives in `~/.config/hypr/looknfeel.lua` (`size 4, passes 2`).

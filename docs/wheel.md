@@ -163,6 +163,16 @@ the Loader's `onLoaded`, which is *after* first binding evaluation — a
 but QML components are cached, so changed code keeps running the old version.
 Use `omarchy-restart-shell`.
 
+**The wheel does not own its backdrop.** The wash and the blur behind the ring
+are one scrim surface owned by the bar, which the centered panels, the browser
+and the clipboard hold a count on too. The wheel takes that count when it opens
+and drops it when it unmaps (`holdScrim`). This is the whole reason opening a
+panel from the wheel no longer flashes: the wheel's own surface goes, the
+panel's arrives, and the thing carrying the blur was never either of them.
+Drawing a scrim on the wheel instead — which is what it used to do — unmaps the
+blur along with the wheel, and the desktop snaps sharp for the frames in
+between. See `docs/centered-panels.md` for the scrim itself.
+
 **`SUPER+W` must be conditional.** The wheel is a layer surface, not a window,
 so a plain `killactive` with the wheel up closes whatever window sits behind
 the scrim. `bin/omarchy-wheel-close` asks the wheel to close first and falls
