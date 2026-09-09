@@ -12,9 +12,19 @@ Install, Remove, Update and the rest — is one search away instead of one more
 disc, because a ring you have to read is slower than a word you can type.
 
     plugins/xpo.wheel/
-      manifest.json   kind: "overlay", keepLoaded
-      Wheel.qml       surface, input model, ring and result UI
-      MenuIndex.js    JSONC parsing, flattening, search
+      manifest.json    kind: "overlay", keepLoaded
+      Wheel.qml        surface, geometry, state, and the comet
+      WheelRing.qml    the dial: discs, labels, and the stroke through them
+      WheelResults.qml the ring unrolled: the ranked list and its rail
+      PanelIcon.qml    a first-party panel's own mark, loaded from it
+      ClickShield.qml  a surface that stops a click reaching the scrim
+      MenuIndex.js     JSONC parsing, flattening, search
+      MenuKeys.js      the key map: which verb a key means
+
+The ring and the results take the dial as `wheel`, the way the browser's own
+components take their panel, so each one's single dependency is visible at the
+call site. The key maps are libraries rather than QML: they decide which verb a
+key means and the dial performs it, which is what lets a test press a key.
 
 ## Keys
 
@@ -206,7 +216,7 @@ against this machine's real menu files:
   children's, appears in `menuRows()`
 - every row has an action or a node
 - no node opens onto an empty ring
-- `Wheel.qml` calls only what `MenuIndex.js` defines
+- every call site in the plugin names something `MenuIndex.js` defines
 - the shipped bar and this machine's bar both give an even ring
 
 Run it after touching `MenuIndex.js`, and against a new Omarchy release — the

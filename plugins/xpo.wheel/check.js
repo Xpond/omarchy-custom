@@ -37,14 +37,19 @@ check(Object.keys(items).length > 0, "menu definitions load",
 const cond = M.parseConditions(
   execSync("bash", { input: M.conditionScript(items), encoding: "utf8", maxBuffer: 1 << 22 }), items)
 
-// Anything Wheel.qml reaches for has to exist here. A stale call site is
-// invisible until the wheel is opened with the right config.
+// Anything the plugin reaches for has to exist here. A stale call site is
+// invisible until the wheel is opened with the right config. Every file rather
+// than Wheel.qml alone: the ring, the results and the key map are their own
+// files now, and a check that names one of them would go stale the next time
+// something moves.
 // Imports stripped first: `import "MenuIndex.js" as MenuIndex` otherwise reads
 // as a call to a symbol named `js`.
-const wheel = fs.readFileSync(path.join(here, "Wheel.qml"), "utf8").replace(/^import .*$/gm, "")
-const missing = [...new Set([...wheel.matchAll(/MenuIndex\.(\w+)/g)].map(m => m[1]))]
+const callers = fs.readdirSync(here)
+  .filter(f => /\.(qml|js)$/.test(f) && f !== "MenuIndex.js" && f !== "check.js")
+  .map(f => fs.readFileSync(path.join(here, f), "utf8").replace(/^import .*$/gm, "")).join("\n")
+const missing = [...new Set([...callers.matchAll(/MenuIndex\.(\w+)/g)].map(m => m[1]))]
   .filter(n => M[n] === undefined)
-check(missing.length === 0, "Wheel.qml calls only what MenuIndex.js defines", missing.join(", "))
+check(missing.length === 0, "every call site names something MenuIndex.js defines", missing.join(", "))
 
 // An unreadable or never-run scan must not read as "every condition failed" --
 // that silently hides every conditional row, which is how it broke once.

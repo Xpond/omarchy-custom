@@ -8,12 +8,14 @@ file manager actually gets reached for.
 
     plugins/xpo.files/
       manifest.json     kind: "overlay", keepLoaded
-      Files.qml         state, keys, file operations, the surface itself
+      Files.qml         state, derivation, and the surface itself
+      FilesOps.qml      everything that writes: one process, one contract
       FilesHeader.qml   breadcrumb, path entry, filter and rename field
       FilesList.qml     the directory, one row per entry
       FilesPreview.qml  the scroller, and the editor inside it
       FilesHints.qml    the foot: the legend, and what a held file would do
       FilesIndex.js     snapshotting, filtering, path and text helpers
+      FilesKeys.js      the key map: which verb a key means
 
 Each component takes the panel as `panel` rather than reaching for a parent, so
 its one dependency is visible at the call site. `FilesPreview` owns its
@@ -404,7 +406,7 @@ Retyping a query re-lays the rows out under a cursor that has not moved, and
 `entered` fires on every row that slides beneath it — which drags the selection
 around mid-keystroke and leaves you unsure what `Return` will run. Real pointer
 motion is the only thing that should claim it. The same reasoning is written out
-at length in `Wheel.qml`.
+at length in `WheelResults.qml`, which hit it first.
 
 **A change handler can see a stale binding.** `showsCode` is a binding on
 `previewText`, and `onPreviewTextChanged` can run *before* that binding
