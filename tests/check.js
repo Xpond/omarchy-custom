@@ -115,7 +115,7 @@ const busy = { root: { note: text => calls.push(text) }, filer: { running: true 
 method(opsSource, "run", busy)(["cp"], {})
 assert.equal(busy.root.op, undefined)
 assert.match(calls.at(-1), /still running/)
-const wheel = { root: { countUse() {}, dismiss() {}, shell: {
+const wheel = { root: { countUse() {}, dismiss() {}, slices: [], path: [], shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
 } }, Qt: { callLater: fn => fn() }, MenuIndex: M }
@@ -200,7 +200,10 @@ console.log("ok: wheel query edits at the caret, and a path can be taken away")
 // A panel cannot tell how it was opened, so the wheel answers for it: only the
 // panel the wheel put on screen, and only while it is still there.
 const opened = {}
-const ring = { pluginId: "xpo.wheel", launched: "",
+const picked = []
+const ring = { pluginId: "xpo.wheel", launched: "", launchedAt: -1,
+  slices: [{}, {}, {}], get sliceCount() { return this.slices.length },
+  select: i => picked.push(i),
   shell: { isPluginOpen: id => opened[id] === true,
            hide: id => { opened[id] = false },
            summon: id => { opened[id] = true } } }
@@ -217,6 +220,90 @@ assert.equal(back(), "none", "a panel opened from the bar keeps its backspace")
 ring.launched = "omarchy.audio"
 assert.equal(back(), "none", "and one that has since gone is not owed a return")
 console.log("ok: only the panel the wheel opened answers backspace with a return")
+
+// `back` can only give back what `run` wrote down, and nothing covered that
+// write: taking it out left every test green while the bug came straight back.
+// Recorded off `slices`, so a slice picked with the pointer is written down the
+// same as one picked with the arrows.
+const ran = { countUse() {}, dismiss() {}, launchedAt: null,
+  slices: [{ plugin: "a" }, { plugin: "b" }, { plugin: "c" }] }
+const runPick = method(wheelSource, "run",
+  { root: ran, Qt: { callLater() {} }, MenuIndex: M })
+runPick(ran.slices[2])
+assert.equal(ran.launchedAt, 2, "the slice that was run is written down")
+runPick({ plugin: "off-ring" })
+assert.equal(ran.launchedAt, -1, "a pick that is on no ring writes down nothing")
+console.log("ok: running a slice records which slice it was")
+
+// A step back hands the ring over the way it was left. Without this the wheel
+// comes up with selected at -1 while the comet still rests on the slice that
+// launched, so the ring looks selected and the arrows do not step from it --
+// right and left jump to the east and west slices instead of to the neighbours.
+ring.launched = "omarchy.audio"; opened["omarchy.audio"] = true
+ring.launchedAt = 2; picked.length = 0
+assert.equal(back(), "wheel")
+assert.deepEqual(picked, [2], "the slice that launched is selected again")
+// A search result sits on no ring, so there is no slice to give back.
+picked.length = 0
+ring.launched = "omarchy.audio"; opened["omarchy.audio"] = true
+ring.launchedAt = -1
+assert.equal(back(), "wheel")
+assert.deepEqual(picked, [], "a search result restores no selection")
+// wheel.json is watched, so the ring can be shorter than when the panel went up.
+ring.launched = "omarchy.audio"; opened["omarchy.audio"] = true
+ring.launchedAt = 9
+assert.equal(back(), "wheel")
+assert.deepEqual(picked, [], "a stale index is dropped, not selected")
+console.log("ok: backspace gives the ring back the slice it was left on")
+
+// Left and right step one slice, from the first press onward. A fresh wheel has
+// nothing selected and rests at the top, so that is what the first step comes
+// off -- landing on the east or west slice instead skipped whatever sat between
+// it and the top. Nine slices at 40 degrees, odd, so slice 0 is the top one.
+function dialAt(count, selected) {
+  const seen = []
+  const w = { selected, sliceCount: count, searching: false,
+    sliceOrigin: count % 2 === 0 ? 90 % (360 / count) : 0,
+    get sliceStep() { return 360 / count },
+    select(i) { seen.push(i); this.selected = i },
+    rotate: null, nearestSlice: null }
+  w.nearestSlice = method(wheelSource, "nearestSlice", { root: w })
+  w.rotate = method(wheelSource, "rotate", { root: w })
+  return { wheel: w, seen, key: keymap("plugins/xpo.wheel/MenuKeys.js", w) }
+}
+let ring9 = dialAt(9, -1)
+ring9.key("Key_Right")
+assert.deepEqual(ring9.seen, [1], "right off a fresh ring steps to the next slice")
+ring9 = dialAt(9, -1)
+ring9.key("Key_Left")
+assert.deepEqual(ring9.seen, [8], "and left to the previous one, not to the west slice")
+// Then it keeps stepping, and wraps rather than stopping at either end.
+ring9 = dialAt(9, 0)
+for (let i = 0; i < 3; i++) ring9.key("Key_Right")
+assert.deepEqual(ring9.seen, [1, 2, 3], "every press after the first is one slice too")
+// Up and down still name a place rather than stepping.
+ring9 = dialAt(9, 3)
+ring9.key("Key_Up"); assert.equal(ring9.wheel.selected, 0, "up is the top slice")
+// An empty ring has nowhere to go, and must not select NaN on the way there.
+const empty = dialAt(0, -1)
+empty.key("Key_Right")
+assert.deepEqual(empty.seen, [], "an empty ring selects nothing at all")
+console.log("ok: the ring steps one slice a press, from the top when it is fresh")
+
+// The comet is a streak, and a streak is the gap the tail opens behind the
+// head. A ring standing still has none: the opening lap used to end with the
+// head parked on a slice, leaving it in a full comet ring that Enter would not
+// fire and the arrows would not step from. Selection lights a slice through
+// `active`, which does not come through here.
+const sweep = (deg, drag) => method(wheelSource, "sweepAt",
+  { root: { arcSpread: 17, arcHead: -90, arcDrag: drag } })(deg)
+// -90 is the head itself: the slice a parked comet used to hold at full.
+for (const deg of [-90, -50, 0, 90, 180])
+  assert.equal(sweep(deg, 0), 0, "a ring at rest lights " + deg)
+assert.ok(sweep(-90, 40) > 0.9, "a moving head still lights what it is on")
+assert.ok(sweep(-90, 8) < sweep(-90, 40), "and a slower ring lights it less")
+assert.equal(sweep(90, 40), 0, "nothing lights where the streak is not")
+console.log("ok: the comet lights what it crosses and gives it back at rest")
 
 // Backspace is one key with three jobs, taken in order: shorten the filter,
 // walk up a directory, leave for the wheel. Home is the floor, so the press

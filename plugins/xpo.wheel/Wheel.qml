@@ -35,6 +35,13 @@ Item {
   // The panel the last pick put on screen, and so the one whose backspace is a
   // step back to here rather than a key the panel keeps.
   property string launched: ""
+  // Which slice made that pick. `open()` clears the selection, which is right
+  // for a fresh summon and wrong for a step back -- backspace should hand the
+  // ring back the way it was left, close enough to carry on with the arrows.
+  // A home-ring index: `plugin` lives only on the ring catalogue, so the home
+  // ring is the only one a panel can be launched from, and the only one
+  // `open()` can come back to.
+  property int launchedAt: -1
 
   property string query: ""
   // Where the next character goes. Clamped on every query change, so clearing
@@ -313,12 +320,21 @@ Item {
   // What the trail crosses lights up from this, which is what stops the
   // streak looking like it passes behind the discs.
   function sweepAt(deg) {
+    // A streak is the gap the tail opens behind the head, so a ring standing
+    // still has none -- and what the trail lit on the way past, it gives back.
+    // Without this the opening lap ends with the head parked on a slice and
+    // that slice wearing a full comet ring for as long as the wheel is up:
+    // a highlight with no selection behind it, that Enter would not fire and
+    // that the arrows do not step from. Selection lights a slice through
+    // `active`, which owes nothing to this.
+    var moving = Math.min(1, Math.abs(root.arcDrag) / root.arcSpread)
+    if (moving <= 0) return 0
     var span = Math.abs(root.arcDrag) + root.arcSpread
     // Degrees behind the head, measured against the way the ring is turning.
     var off = ((deg - root.arcHead) % 360 + 540) % 360 - 180
     var behind = root.arcDrag >= 0 ? -off : off
     if (behind < -root.arcSpread || behind > span) return 0
-    return 1 - Math.max(0, behind) / span
+    return moving * (1 - Math.max(0, behind) / span)
   }
 
   // Opening spins the comet once around the ring. This has to step the target
@@ -398,6 +414,7 @@ Item {
     // Home: where the wheel opens must not depend on what was done last time.
     root.path = []
     root.launched = ""
+    root.launchedAt = -1
     // Only a press that actually opened the wheel earns the tap-to-hold grace;
     // a press onto an already-open wheel is the second tap, which closes it.
     root.justOpened = !wasOpen
@@ -511,10 +528,17 @@ Item {
   // did there, which is nothing.
   function back() {
     if (!root.launched || !root.shell || !root.shell.isPluginOpen(root.launched)) return "none"
+    // Read before the summon: `open()` clears it on its way through.
+    var at = root.launchedAt
     root.shell.hide(root.launched)
     // The same handoff run() makes, the other way round: the panel's layer
     // surface has to let the keyboard go before this one asks for it.
-    Qt.callLater(function () { root.shell.summon(root.pluginId, "{}") })
+    Qt.callLater(function () {
+      root.shell.summon(root.pluginId, "{}")
+      // Bounded rather than trusted: wheel.json is watched, so the ring can be
+      // shorter than it was when the panel went up.
+      if (at >= 0 && at < root.sliceCount) root.select(at)
+    })
     return "wheel"
   }
 
@@ -531,6 +555,10 @@ Item {
     if (!e) return
     root.countUse(e)
     if (e.node) { root.enter(e.node); return }
+    // Taken before the dismiss, and off `slices` rather than off `selected`,
+    // so a picked-by-pointer slice is recorded the same as a picked-by-arrow
+    // one. A search result is on no ring and gets -1, which asks for nothing.
+    root.launchedAt = root.slices.indexOf(e)
     root.dismiss(true)
     // Let this layer surface unmap and hand the keyboard back before the
     // target grabs it, or the panel opens without focus.
@@ -624,9 +652,19 @@ Item {
 
   function rotate(step) {
     var n = root.sliceCount
+    // An empty ring has nowhere to step to, and the modulo below would make
+    // the selection NaN rather than leave it alone.
+    if (!n) return
     root.charge = Math.min(1, root.charge + 0.16)
     root.huePhase += 0.012
-    root.select(root.selected < 0 ? (step > 0 ? 0 : n - 1) : (root.selected + step + n) % n)
+    // Nothing selected yet is not nowhere: the ring opens resting at the top,
+    // which is the slice the first step comes off. Landing on a cardinal
+    // instead skipped whatever sat between it and the top -- one press of
+    // right off a fresh wheel arrived two slices along. Asked by bearing so it
+    // names the same slice Up does; that is index 0 for every count the origin
+    // formula produces today, and stays right if the origin ever moves.
+    var from = root.selected < 0 ? root.nearestSlice(0) : root.selected
+    root.select((from + step + n) % n)
   }
 
   onQueryChanged: {

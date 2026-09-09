@@ -75,15 +75,19 @@ function onKey(wheel, event) {
     }
   } else {
     switch (event.key) {
-    // Arrows alone reach the whole ring: up/down jump to the top and
-    // bottom slice, left/right pick the side slice first and then step
-    // around, so anything off a cardinal is a cardinal plus a few steps.
-    // Found by bearing rather than fixed at 0/4/2/6 -- the ring is nine
-    // slices by default and any count once it is configured.
+    // Up and down jump: they name a place on the ring, the top slice and
+    // the bottom one. Found by bearing rather than fixed at 0 and 4 -- the
+    // ring is nine slices by default and any count once it is configured.
+    //
+    // Left and right step, always, including the first press. They used to
+    // jump to the east and west slice when nothing was selected yet, which
+    // read as the ring skipping a slice: from a wheel resting at the top,
+    // one press of right landed two slices along. Where they step from when
+    // nothing is selected is `rotate`'s to answer.
     case Qt.Key_Up:       wheel.select(wheel.nearestSlice(0)); event.accepted = true; return
     case Qt.Key_Down:     wheel.select(wheel.nearestSlice(180)); event.accepted = true; return
-    case Qt.Key_Right:    wheel.selected < 0 ? wheel.select(wheel.nearestSlice(90)) : wheel.rotate(1); event.accepted = true; return
-    case Qt.Key_Left:     wheel.selected < 0 ? wheel.select(wheel.nearestSlice(270)) : wheel.rotate(-1); event.accepted = true; return
+    case Qt.Key_Right:    wheel.rotate(1); event.accepted = true; return
+    case Qt.Key_Left:     wheel.rotate(-1); event.accepted = true; return
     case Qt.Key_Tab:      wheel.rotate(1); event.accepted = true; return
     case Qt.Key_Backtab:  wheel.rotate(-1); event.accepted = true; return
     }
