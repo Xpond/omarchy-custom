@@ -120,11 +120,11 @@ Item {
   // already open in the pane on the right. The panel steps aside only when
   // something is taking over, which is what the opener's exit code says: zero
   // means a viewer is coming, 3 that it declined and this keeps its place.
-  property string opening: ""
+  property var opening: null
   function activate(e) {
     if (!e || panel.editing) return
     if (e.isDir) { panel.enter(e.path); return }
-    root.opening = e.name
+    root.opening = e
     opener.command = ["omarchy-open-path", e.path]
     opener.running = true
   }
@@ -136,7 +136,16 @@ Item {
       // 3 is a terminal handler declining a file the pane is already showing, so
       // there is nothing to say. 4 is nothing owning it at all, and silence
       // there reads as a key that did nothing.
-      if (exitCode === 4) root.note("nothing here opens " + root.opening)
+      //
+      // Except when the file is empty, where 4 is not the useful half of the
+      // truth: the desktop sniffs content to name a type, so nothing at all
+      // resolves as inode/x-empty and no application claims that, whatever the
+      // extension says. "Nothing opens it" sends you looking for a handler you
+      // already have. What you want is to put something in it.
+      if (exitCode !== 4) return
+      root.note(root.opening.size === 0
+                ? root.opening.name + " is empty -- ctrl+e writes it"
+                : "nothing here opens " + root.opening.name)
     }
   }
 }

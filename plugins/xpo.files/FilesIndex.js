@@ -236,6 +236,10 @@ function looksBinary(text) {
 // Validate the bytes, not decoded U+FFFD: a replacement character can be real
 // text, while Qt also inserts it for invalid UTF-8 anywhere in the file.
 function isUtf8(data) {
+  // An empty file arrives as a buffer Uint8Array refuses to wrap, and throwing
+  // here took the rest of FileView.onLoaded with it -- which is how a file you
+  // had just made stopped being editable. No bytes is no bytes to be invalid.
+  if (!data || !data.byteLength) return true
   var bytes = new Uint8Array(data)
   for (var i = 0; i < bytes.length; i++) {
     var c = bytes[i]

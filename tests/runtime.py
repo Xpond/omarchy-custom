@@ -100,7 +100,8 @@ Scope {
   } }
 ''')
 
-    for name, content, expected in [("latin1", b"caf\xe9\n", False),
+    for name, content, expected in [("empty", b"", True),
+                                     ("latin1", b"caf\xe9\n", False),
                                      ("late-invalid", b"a" * 2048 + b"\xe9", False),
                                      ("unicode", "café हिन्दी 😀 �\n".encode(), True)]:
         target = base / name
