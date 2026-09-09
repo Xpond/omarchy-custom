@@ -5,12 +5,12 @@
 # Two halves, and only one of them wants root. The plugins are symlinked into
 # ~/.config/omarchy/plugins and registered in ~/.config/omarchy/shell.json,
 # all of it under $HOME and none of it touched by `omarchy update`. The patch
-# writes four package-owned files under /usr/share/omarchy/shell, and that is
+# writes five package-owned files under /usr/share/omarchy/shell, and that is
 # the only reason sudo appears in this script at all -- asked for per file, and
 # only when that file actually differs, so a re-run that finds everything in
 # place never prompts.
 #
-# `omarchy update` overwrites those four files, so this script is idempotent
+# `omarchy update` overwrites those five files, so this script is idempotent
 # and is wired to run automatically afterwards via
 # ~/.config/omarchy/hooks/post-update.d/, so an update repairs
 # itself instead of silently reverting the shell to stock.
@@ -24,7 +24,7 @@ set -uo pipefail
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
-       plugins/clipboard/Clipboard.qml)
+       plugins/clipboard/Clipboard.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
 
 # Both failure paths below leave the user with a broken shell, so both must be

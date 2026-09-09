@@ -36,7 +36,7 @@ docs/     this file
 
 The files being changed are **shared shell chrome**, not plugins.
 `omarchy plugin clone` cannot reach them, and `/usr/share/omarchy/` is
-package-owned, so **`omarchy update` overwrites all four** and the shell
+package-owned, so **`omarchy update` overwrites all five** and the shell
 silently reverts to stock. This happened on the 4.0.0.alpha → 4.0.2 update.
 The user ruled out cloning panels and ruled out changing panel styling, which
 is what put the work in shared chrome.
@@ -72,7 +72,7 @@ break the entire shell, which is far worse than losing the patch.
 
 ## 2. What changed
 
-Four package-owned QML files (~294 added lines total) plus Hyprland config.
+Five package-owned QML files (295 added lines total) plus Hyprland config.
 
 | File | Change |
 |---|---|
@@ -80,6 +80,7 @@ Four package-owned QML files (~294 added lines total) plus Hyprland config.
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
 | `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one (18 lines) |
+| `shell.qml` | `pluginShellFor` hands the host shell to `xpo.*` plugins instead of 4.0.3's per-id sandbox facade (5 lines) |
 
 `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
 
@@ -132,6 +133,42 @@ Top       omarchy-bar
 `order` was tried first and did not hold — the scrim came out above the panel
 and blurred the card along with the desktop. Layer separation is a protocol
 guarantee; `order` is a hint.
+
+### Why `shell.qml` is patched: the 4.0.3 plugin sandbox
+
+4.0.3 stopped handing plugins the host `ShellRoot`. A plugin now gets a
+`services/PluginShellApi.qml` facade, closed over its own id.
+
+Trust is decided by **which directory the plugin was scanned from**, nothing
+else — `PluginRegistry.parseScanOutput` sets `__isFirstParty` from the scan
+kind, and only `/usr/share/omarchy/shell/plugins` scans first-party. Our
+plugins are symlinked into `~/.config/omarchy/plugins`, so they scan third
+party. Symlinking them into the packaged directory instead does not work:
+that scan is `find … -type f` with no `-L`, so it neither descends a
+symlinked directory nor matches a symlinked file.
+
+The wheel exists to launch *other* plugins, so the sandbox took all of it at
+once — and silently, because a denied call just returns `false`:
+
+| Call | Sandboxed result |
+|---|---|
+| `shell.toggle("omarchy.menu", …)` | `false` — no panel ever opens |
+| `shell.summon("xpo.files", …)` | `false` — browser never opens |
+| `shell.isPluginOpen(other)` / `hide(other)` | `false` — close-others and Backspace-to-wheel dead |
+| `shell.appLibrary` | `null` — app launching dead |
+| `shell.bar.panelSurfaceVisible` | `undefined` — shared scrim never maps |
+| `shell.callIfLoaded` (`xpo.files`) | absent from the facade entirely |
+
+The one line in `pluginShellFor` returns the host shell for the `xpo.`
+namespace, which is this machine's own code. The two supported alternatives
+were both worse: declaring kind `"bar"` buys cross-plugin control through
+`barPluginMayControl`, but lies about what the wheel is and lists it as a bar
+replacement; routing through the `shell` IPC target restores `toggle` and
+`summon` but cannot restore `appLibrary` or the scrim at all.
+
+**Diagnosing a repeat:** the facade declares `pluginId`, the host shell does
+not. From inside a plugin, `root.shell.pluginId` naming your own plugin means
+you are sandboxed.
 
 ---
 

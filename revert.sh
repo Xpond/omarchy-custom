@@ -35,7 +35,7 @@ done
 rm -f ~/.local/bin/omarchy-open-path
 
 for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \
-         plugins/clipboard/Clipboard.qml; do
+         plugins/clipboard/Clipboard.qml shell.qml; do
   sudo cp "$REPO/patches/orig/$f" "$SHELL_DIR/$f"
   echo "restored $f"
 done

@@ -244,3 +244,25 @@ for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) 
   assert.match(read(f), /panelSurfaceVisible\(/, f + " never counts on the bar's")
 }
 console.log("ok: neither plugin paints a scrim; both count on the bar's")
+
+// 4.0.3 hands a plugin a facade scoped to its own id instead of the host
+// shell, which is nothing to an overlay built to launch other plugins.
+// centered-panels.md has the full symptom list. Run the patched function
+// rather than grep for it: a comment naming the namespace satisfies a regex
+// and restores nothing, and an upstream rebase can leave the line in a
+// function no longer on the injection path.
+const scoped = { sandboxed: true }
+const host = { createScopedPluginShell: () => scoped, pluginHasBarCapabilities: () => false }
+const shellFor = method(read("patches/shell/shell.qml"), "pluginShellFor", { shell: host })
+for (const id of ["xpo.wheel", "xpo.files"])
+  assert.equal(shellFor({ id, __isFirstParty: false }), host, id + " is sandboxed")
+// The grant is ours alone, and it is a prefix, not a substring: `notxpo.thing`
+// is somebody else's plugin.
+for (const id of ["third.party", "notxpo.thing"])
+  assert.equal(shellFor({ id, __isFirstParty: false }), scoped, id + " was handed the host shell")
+console.log("ok: xpo. plugins get the host shell, nobody else does")
+
+// revert.sh needs no assertion here: install.py walks every patches/orig/*.qml
+// and checks revert put it back, so shell.qml joined that the moment it existed.
+assert.match(read("install.sh"), /\bshell\.qml\b/, "install.sh does not carry shell.qml")
+console.log("ok: install.sh carries shell.qml")
