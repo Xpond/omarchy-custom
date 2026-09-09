@@ -42,9 +42,10 @@ beyond the trash; `yazi` is installed and does the rest properly.
 | `→` `Enter` | descend into a folder, or hand a file to the app that owns it |
 | `←` | go up one directory |
 | `Backspace` | delete a character, then go up one directory |
-| `Home` | jump back to `~` |
+| `Home` `End` | the first and last row |
+| `PageUp` `PageDown` | a page of rows, one kept for orientation |
 | `Shift+↑` `Shift+↓` | scroll the preview three lines |
-| `PageUp` `PageDown` | scroll the preview a page |
+| `Shift+PageUp` `Shift+PageDown` | scroll the preview a page |
 | `Shift+←` `Shift+→` | pan the preview sideways, for lines past the edge |
 | `Shift+Home` `Shift+End` | the top and the bottom of the preview |
 | `Ctrl+E` | edit the previewed file — see [Editing](#editing) |
@@ -60,10 +61,13 @@ beyond the trash; `yazi` is installed and does the rest properly.
 | `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
 | `Esc` | clear the field, then close |
 
-Shift is the one modifier that means "the other pane": held down, the arrows
-drive the preview instead of the list. The mouse works too — hover selects,
-click opens, a click outside the card closes it, and the wheel scrolls whichever
-pane is under the pointer.
+Shift is the one modifier that means "the other pane", and it is the whole
+rule: every bare key drives the list, every shifted one drives the preview.
+`Home` is the first row rather than the home directory, because `~` already
+opens path entry sitting there and is the character that says so.
+
+The mouse works too — hover selects, click opens, a click outside the card
+closes it, and the wheel scrolls whichever pane is under the pointer.
 
 ## Home is the floor
 

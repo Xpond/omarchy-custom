@@ -33,6 +33,9 @@ Item {
   property int selected: -1
 
   property string query: ""
+  // Where the next character goes. Clamped on every query change, so clearing
+  // the query anywhere carries the caret home without saying so.
+  property int queryAt: 0
   property var menuItems: ({})
   // Where the ring is pointed: [] is home, ["install"] the Install ring.
   property var path: []
@@ -542,6 +545,16 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
+  // Typing and pasting are the same act at two lengths. The caret's landing
+  // place is worked out before the query moves: assigning it first fires the
+  // clamp in onQueryChanged, which would eat the step.
+  function insert(text) {
+    if (!text) return
+    var at = root.queryAt + text.length
+    root.query = root.query.slice(0, root.queryAt) + text + root.query.slice(root.queryAt)
+    root.queryAt = at
+  }
+
   function moveResult(step) {
     var n = root.results.length
     if (n <= 0) return
@@ -577,7 +590,23 @@ Item {
     root.select(root.selected < 0 ? (step > 0 ? 0 : n - 1) : (root.selected + step + n) % n)
   }
 
-  onQueryChanged: { root.resultIndex = 0; root.resultTop = 0 }
+  onQueryChanged: {
+    root.resultIndex = 0; root.resultTop = 0
+    root.queryAt = Math.min(root.queryAt, root.query.length)
+  }
+
+  // The browser's carets blink at 530ms and say in a comment that the point is
+  // one beat everywhere. Relit on every move so a keystroke is never swallowed
+  // by the dark half of it.
+  property bool caretLit: true
+  Timer {
+    running: root.opened && root.searching
+    interval: 530
+    repeat: true
+    onTriggered: root.caretLit = !root.caretLit
+    onRunningChanged: root.caretLit = true
+  }
+  onQueryAtChanged: root.caretLit = true
   // The index is rebuilt when the late condition scan lands, which can shorten
   // the list under a standing selection without the query having changed.
   onResultsChanged: {
@@ -844,17 +873,35 @@ Item {
         // codes under " ", which the printable test at the end drops.
         if (event.modifiers & Qt.ControlModifier) {
           switch (event.key) {
+          // The readline kills, either side of the caret. With the caret at the
+          // end -- where it is unless you moved it -- ctrl+u still clears.
           case Qt.Key_U:
-            root.query = ""; event.accepted = true; return
+            root.query = root.query.slice(root.queryAt); root.queryAt = 0
+            event.accepted = true; return
+          case Qt.Key_K:
+            root.query = root.query.slice(0, root.queryAt); event.accepted = true; return
           case Qt.Key_W:
           case Qt.Key_Backspace:
             // The trailing space stays, so the next word does not need one.
-            root.query = root.query.replace(/\S+\s*$/, ""); event.accepted = true; return
+            var kept = root.query.slice(0, root.queryAt).replace(/\S+\s*$/, "")
+            root.query = kept + root.query.slice(root.queryAt)
+            root.queryAt = kept.length; event.accepted = true; return
+          case Qt.Key_A: root.queryAt = 0; event.accepted = true; return
+          case Qt.Key_E: root.queryAt = root.query.length; event.accepted = true; return
           case Qt.Key_V:
             // The field is one line and a clipboard is not: a pasted path or
             // error message arrives with newlines and runs, which would draw
             // straight through the pill.
-            root.query += String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim()
+            root.insert(String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim())
+            event.accepted = true; return
+          // A path is worth taking away as well as opening. Nothing here can
+          // report a clipboard failure once the wheel is down, so it goes the
+          // way every other verb does: pick, act, leave.
+          case Qt.Key_Y:
+            var hit = root.searching ? root.results[root.resultIndex] : null
+            if (!hit || !hit.path) return
+            Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", hit.path])
+            root.dismiss()
             event.accepted = true; return
           // The readline pair, on the one thing here that is a list -- the ring
           // is a compass rather than a column, so there they fall through.
@@ -873,8 +920,12 @@ Item {
           event.accepted = true; return
         }
         if (event.key === Qt.Key_Backspace) {
-          if (root.searching) root.query = root.query.slice(0, -1)
-          else root.up()
+          if (!root.searching) root.up()
+          else if (root.queryAt > 0) {
+            var at = root.queryAt - 1
+            root.query = root.query.slice(0, at) + root.query.slice(root.queryAt)
+            root.queryAt = at
+          }
           event.accepted = true; return
         }
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -884,8 +935,13 @@ Item {
         if (root.searching) {
           if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { root.moveResult(1); event.accepted = true; return }
           if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { root.moveResult(-1); event.accepted = true; return }
-          // Forty deep behind a window of eight: the far end is otherwise
-          // thirty-two presses away.
+          // Left and right carry the caret. Home and end stay on the list: it
+          // is the thing here with two ends, and stepping only wraps cheaply
+          // from the ends it is already standing on.
+          if (event.key === Qt.Key_Left) { root.queryAt = Math.max(0, root.queryAt - 1); event.accepted = true; return }
+          if (event.key === Qt.Key_Right) {
+            root.queryAt = Math.min(root.query.length, root.queryAt + 1); event.accepted = true; return
+          }
           if (event.key === Qt.Key_Home) { root.resultIndex = 0; root.showResult(); event.accepted = true; return }
           if (event.key === Qt.Key_End) {
             root.resultIndex = Math.max(0, root.results.length - 1)
@@ -906,9 +962,9 @@ Item {
           case Qt.Key_Backtab:  root.rotate(-1); event.accepted = true; return
           }
         }
-        // Anything else printable starts or extends the query.
+        // Anything else printable starts the query or lands in it at the caret.
         if (event.text && event.text.length === 1 && event.text >= " ") {
-          root.query += event.text
+          root.insert(event.text)
           event.accepted = true
         }
       }
@@ -1123,16 +1179,49 @@ Item {
 
           ClickShield {}
 
-          Text {
+          // Written in two halves with the caret between them, the shape the
+          // browser's chip already has, so the mark stands where the next
+          // character goes rather than always at the end. A glyph inside one
+          // Text could not blink without the line jumping as it went.
+          Row {
+            id: field
             anchors.centerIn: parent
-            width: parent.width - Style.spacing.rowPaddingX * 2
-            horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideLeft
-            text: root.searching ? root.query + "▏" : "Search"
-            color: Color.menu.text
+            spacing: 0
             opacity: root.searching ? 1 : 0.45
-            font.family: Style.font.menuFamily
-            font.pixelSize: Style.font.subtitle
+            readonly property real budget: root.searchWidth - Style.spacing.rowPaddingX * 2
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              // The end being typed is the end worth keeping, so a query past
+              // the pill loses its start.
+              width: Math.min(implicitWidth, field.budget - caret.width - tail.width)
+              elide: Text.ElideLeft
+              text: root.searching ? root.query.slice(0, root.queryAt) : "Search"
+              color: Color.menu.text
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.subtitle
+            }
+
+            Rectangle {
+              id: caret
+              anchors.verticalCenter: parent.verticalCenter
+              visible: root.searching
+              width: Style.space(2)
+              height: Style.font.subtitle
+              color: Color.accent
+              opacity: root.caretLit ? 0.85 : 0.0
+            }
+
+            Text {
+              id: tail
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.min(implicitWidth, field.budget - caret.width)
+              elide: Text.ElideRight
+              text: root.searching ? root.query.slice(root.queryAt) : ""
+              color: Color.menu.text
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.subtitle
+            }
           }
         }
       }

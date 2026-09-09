@@ -24,12 +24,15 @@ disc, because a ring you have to read is slower than a word you can type.
 | `↑` `↓` `←` `→` | jump to the slice at that compass point, then `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
 | `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
-| `Home` `End` | the first and last of the results, without walking the other thirty-eight |
+| `Home` `End` | the first and last of the forty results, from wherever you are |
 | type anything | search menu entries, apps, windows, themes and fonts |
-| `Backspace` | delete a character, then go up one level |
-| `Ctrl+W` `Ctrl+Backspace` | delete the last word of the query |
-| `Ctrl+U` | clear the query |
-| `Ctrl+V` | paste into the query, runs of whitespace collapsed to one space |
+| `Backspace` | delete the character before the caret, then go up one level |
+| `Ctrl+W` `Ctrl+Backspace` | delete the word before the caret |
+| `←` `→` | move the caret through the query |
+| `Ctrl+A` `Ctrl+E` | the start and the end of the query |
+| `Ctrl+U` `Ctrl+K` | cut to the start, or to the end |
+| `Ctrl+V` | paste at the caret, runs of whitespace collapsed to one space |
+| `Ctrl+Y` | copy the highlighted path and close |
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 

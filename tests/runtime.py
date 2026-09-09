@@ -80,6 +80,26 @@ Scope {
   } }
 ''')
 
+    # Clearing the query anywhere has to carry the caret home. Only the real
+    # onQueryChanged can fire that, so the binding itself is the fixture.
+    changed = block(wheel, r"  onQueryChanged: \{")
+    run("query-caret", '''
+  property string query: ""
+  property int queryAt: 0
+  property int resultIndex: 0
+  property int resultTop: 0
+''' + changed + '''
+  Timer { interval: 1; running: true; onTriggered: {
+    root.query = "firefox"; root.queryAt = 7
+    root.query = ""
+    if (root.queryAt !== 0) { console.error("FAIL caret left behind", root.queryAt); Qt.exit(1) }
+    root.query = "abc"; root.queryAt = 3
+    root.query = "a"
+    if (root.queryAt !== 1) { console.error("FAIL caret past the end", root.queryAt); Qt.exit(1) }
+    console.log("PASS"); Qt.quit()
+  } }
+''')
+
     for name, content, expected in [("latin1", b"caf\xe9\n", False),
                                      ("late-invalid", b"a" * 2048 + b"\xe9", False),
                                      ("unicode", "café हिन्दी 😀 �\n".encode(), True)]:

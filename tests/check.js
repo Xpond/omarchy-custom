@@ -15,6 +15,19 @@ function method(source, name, scope) {
   vm.runInContext(source.match(new RegExp("^  function " + name + "\\([^]*?^  }", "m"))[0], scope)
   return scope[name]
 }
+// The key map is the one part of a panel with no function to call. Lift the
+// handler out whole -- its closing brace is at the indent of its own line --
+// and give it a Qt whose only requirement is that the names it compares are
+// distinct. Real Qt values would be a table to keep correct for no gain.
+function keymap(source, scope) {
+  const Qt = { callLater: fn => fn(), ShiftModifier: 1 << 25, ControlModifier: 1 << 26 }
+  let n = 1
+  for (const [, key] of source.matchAll(/Qt\.(Key_\w+)/g)) Qt[key] = Qt[key] || n++
+  vm.createContext(Object.assign(scope, { Qt }))
+  vm.runInContext("var onKey = " + source.match(/^(\s*)Keys\.onPressed: (function \(event\) \{[^]*?^\1\})/m)[2], scope)
+  return (key, modifiers = 0, text = "") =>
+    scope.onKey({ key: Qt[key], modifiers, text, accepted: false })
+}
 const F = library("plugins/xpo.files/FilesIndex.js")
 const M = library("plugins/xpo.wheel/MenuIndex.js")
 
@@ -110,3 +123,71 @@ method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)({ path: "/home/test/ne
 assert.equal(calls.at(-1)[0], "xpo.files")
 assert.equal(calls.at(-1)[1].select, "new.txt")
 console.log("ok: busy operations report refusal; wheel paths summon the browser")
+
+// The browser's whole rule: bare keys drive the list, shift drives the preview.
+const scrolls = []
+const browser = {
+  rows: Array.from({ length: 100 }, (_, i) => ({ name: "row" + i })),
+  index: 40, listPage: 10, editing: false, naming: "", doomed: "",
+  move(step) { this.index = (this.index + step + this.rows.length) % this.rows.length }
+}
+const preview = { pageStep: 7, scrollBy: d => scrolls.push(d), scrollTo: f => scrolls.push("to" + f) }
+browser.goTo = method(source, "goTo", { root: browser })
+const key = keymap(source, { root: browser, preview })
+key("Key_End");      assert.equal(browser.index, 99)
+key("Key_Home");     assert.equal(browser.index, 0)
+key("Key_PageUp");   assert.equal(browser.index, 0, "a page off the top clamps")
+key("Key_PageDown"); assert.equal(browser.index, 10)
+browser.index = 95
+key("Key_PageDown"); assert.equal(browser.index, 99, "a page off the end clamps")
+assert.deepEqual(scrolls, [], "no bare key reaches the preview")
+const shift = 1 << 25
+key("Key_PageDown", shift); key("Key_PageUp", shift)
+key("Key_Home", shift);     key("Key_End", shift)
+assert.deepEqual(scrolls, [7, -7, "to0", "to1"])
+assert.equal(browser.index, 99, "no shifted key reaches the list")
+console.log("ok: browser bare keys drive the list, shift drives the preview")
+
+// The wheel's query edits at the caret, not at the end.
+const copied = []
+const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
+const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
+  get searching() { return this.query.length > 0 },
+  dismiss: () => copied.push("dismissed") }
+dial.insert = method(wheelSource, "insert", { root: dial })
+const dialKey = keymap(wheelSource, { root: dial, MenuIndex: M,
+  Quickshell: { clipboardText: "pasted  text", execDetached: c => copied.push(c.at(-1)) } })
+const ctrl = 1 << 26
+// A printable key is only its text here: the handler falls through to event.text.
+const type = text => [...text].forEach(c => dialKey("", 0, c))
+type("firefox")
+assert.equal(dial.query + "|" + dial.queryAt, "firefox|7")
+for (let i = 0; i < 4; i++) dialKey("Key_Left")
+assert.equal(dial.queryAt, 3)
+type("XY")
+assert.equal(dial.query + "|" + dial.queryAt, "firXYefox|5", "typing lands at the caret")
+dialKey("Key_Backspace"); dialKey("Key_Backspace")
+assert.equal(dial.query + "|" + dial.queryAt, "firefox|3", "backspace eats before the caret")
+dialKey("Key_K", ctrl)
+assert.equal(dial.query, "fir", "ctrl+k kills to the end")
+dialKey("Key_A", ctrl); assert.equal(dial.queryAt, 0)
+dialKey("Key_Left");    assert.equal(dial.queryAt, 0, "the caret stops at the start")
+dialKey("Key_E", ctrl); assert.equal(dial.queryAt, 3)
+dialKey("Key_Right");   assert.equal(dial.queryAt, 3, "the caret stops at the end")
+dialKey("Key_V", ctrl)
+assert.equal(dial.query, "firpasted text", "a pasted run of whitespace collapses")
+dialKey("Key_U", ctrl)
+assert.equal(dial.query + "|" + dial.queryAt, "|0", "ctrl+u from the end still clears")
+type("a b c")
+dialKey("Key_Left"); dialKey("Key_Left")
+dialKey("Key_W", ctrl)
+assert.equal(dial.query + "|" + dial.queryAt, "a  c|2", "ctrl+w takes the word before the caret")
+
+// Ctrl+Y takes a path away; anything else on the ring is not a path.
+dial.results = [{ label: "Firefox", appId: "firefox" }, { path: "/home/test/notes.md" }]
+dial.resultIndex = 0
+dialKey("Key_Y", ctrl); assert.deepEqual(copied, [], "an app row has no path to copy")
+dial.resultIndex = 1
+dialKey("Key_Y", ctrl)
+assert.deepEqual(copied, ["/home/test/notes.md", "dismissed"])
+console.log("ok: wheel query edits at the caret, and a path can be taken away")

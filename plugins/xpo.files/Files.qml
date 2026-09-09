@@ -256,6 +256,9 @@ Item {
   // As many lines as the pane is tall, as many characters as it is wide: the
   // listing is cut to the pane it is going into.
   readonly property int dirRows: Math.max(1, Math.floor(preview.paneHeight / root.lineHeight))
+  // A page of the list, one row kept for orientation the way the preview's
+  // page keeps a tenth of itself.
+  readonly property int listPage: Math.max(1, Math.floor(list.view.height / root.rowHeight) - 1)
   readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
     ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400) : []
@@ -404,6 +407,13 @@ Item {
     var n = root.rows.length
     if (n > 0) root.index = (root.index + step + n) % n
     list.view.positionViewAtIndex(root.index, ListView.Contain)
+  }
+
+  // Coarse moves land where they point rather than wrapping. A page that
+  // carried on past the end would leave you at the top of a directory you were
+  // walking down, which is the one place you already know how to reach.
+  function goTo(i) {
+    root.move(Math.max(0, Math.min(i, root.rows.length - 1)) - root.index)
   }
 
   // ------------------------------------------------------------------- edit
@@ -884,8 +894,9 @@ Item {
             case Qt.Key_Up:    preview.scrollBy(-root.lineHeight * 3); event.accepted = true; return
             case Qt.Key_Right: preview.scrollAcross(Style.space(60)); event.accepted = true; return
             case Qt.Key_Left:  preview.scrollAcross(-Style.space(60)); event.accepted = true; return
-            // The two ends the page keys walk towards. Bare Home is the way
-            // back to ~, so these are held the way the other pane's arrows are.
+            case Qt.Key_PageDown: preview.scrollBy(preview.pageStep); event.accepted = true; return
+            case Qt.Key_PageUp:   preview.scrollBy(-preview.pageStep); event.accepted = true; return
+            // The two ends the page keys walk towards.
             case Qt.Key_Home:  preview.scrollTo(0); event.accepted = true; return
             case Qt.Key_End:   preview.scrollTo(1); event.accepted = true; return
             }
@@ -907,9 +918,13 @@ Item {
           case Qt.Key_Up:    root.move(-1); event.accepted = true; return
           case Qt.Key_Tab:   root.move(1); event.accepted = true; return
           case Qt.Key_Backtab: root.move(-1); event.accepted = true; return
-          case Qt.Key_PageDown: preview.scrollBy(preview.pageStep); event.accepted = true; return
-          case Qt.Key_PageUp:   preview.scrollBy(-preview.pageStep); event.accepted = true; return
-          case Qt.Key_Home:  root.enter(root.home); event.accepted = true; return
+          case Qt.Key_PageDown: root.goTo(root.index + root.listPage); event.accepted = true; return
+          case Qt.Key_PageUp:   root.goTo(root.index - root.listPage); event.accepted = true; return
+          // Home is the first row, not the home directory: every bare key here
+          // drives the list. `~` still opens path entry sitting at home, which
+          // is the character that says so anyway.
+          case Qt.Key_Home:  root.goTo(0); event.accepted = true; return
+          case Qt.Key_End:   root.goTo(root.rows.length - 1); event.accepted = true; return
           case Qt.Key_F2:    root.beginRename(); event.accepted = true; return
           case Qt.Key_Delete: root.remove(); event.accepted = true; return
           case Qt.Key_Right:
