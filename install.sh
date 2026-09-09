@@ -12,7 +12,7 @@
 #
 # `omarchy update` overwrites those three files, so this script is idempotent
 # and is wired to run automatically afterwards via
-# ~/.config/omarchy/hooks/post-update.d/ (see hooks/), so an update repairs
+# ~/.config/omarchy/hooks/post-update.d/, so an update repairs
 # itself instead of silently reverting the shell to stock.
 #
 # When an update ships a NEW version of a patched file, the patch is rebased
@@ -43,17 +43,22 @@ alert() {
 # that file from the defaults, so registering has to be repeatable rather than
 # done once by hand. jq writes through a temp file: failing halfway into
 # shell.json costs the whole shell config.
-mkdir -p ~/.config/omarchy/plugins ~/.local/bin
+command -v jq >/dev/null || { alert "jq is required to register plugins"; exit 1; }
+mkdir -p ~/.config/omarchy/plugins ~/.local/bin || exit 1
+if [[ ! -e $CONF ]]; then
+  printf '{"plugins": []}\n' > "$CONF" || exit 1
+fi
+plugins_ok=1
 ids=()
 for p in "$REPO"/plugins/*/; do
   id=$(basename "$p")
-  ln -sfn "${p%/}" ~/.config/omarchy/plugins/"$id"
-  ids+=("$id")
-  if jq --arg id "$id" 'if any(.plugins[]?; .id == $id) then .
+  if ln -sfn "${p%/}" ~/.config/omarchy/plugins/"$id" &&
+     jq --arg id "$id" 'if any(.plugins[]?; .id == $id) then .
                         else .plugins = (.plugins // []) + [{id: $id}] end' \
-        "$CONF" > "$CONF.new"; then
-    mv "$CONF.new" "$CONF"
+        "$CONF" > "$CONF.new" && mv "$CONF.new" "$CONF"; then
+    ids+=("$id")
   else
+    plugins_ok=0
     rm -f "$CONF.new"
     alert "Could not register $id in shell.json"
   fi
@@ -62,8 +67,20 @@ done
 # Files.qml runs the opener by name, so it has to be somewhere on PATH.
 # ~/.local/bin is on Omarchy's. (omarchy-wheel-close is not here: the keybind
 # names it by absolute path, so putting it on PATH would install nothing.)
-ln -sfn "$REPO"/bin/omarchy-open-path ~/.local/bin/omarchy-open-path
-echo "plugins: ${ids[*]}"
+ln -sfn "$REPO"/bin/omarchy-open-path ~/.local/bin/omarchy-open-path || plugins_ok=0
+(( ${#ids[@]} )) && echo "plugins: ${ids[*]}"
+
+# `omarchy hook install` COPIES the file and names it by basename, so the hook
+# cannot carry logic (it would drift from the repo) and cannot find its own
+# checkout. Write a trampoline with this path baked in -- %q so a directory
+# with a space or a $ in it still execs.
+hook_dir=$(mktemp -d) || exit 1
+printf '#!/bin/bash\nexec %q\n' "$REPO/install.sh" > "$hook_dir/centered-panels" &&
+  omarchy hook install post-update "$hook_dir/centered-panels" || {
+    plugins_ok=0
+    alert "Could not install the post-update hook"
+  }
+rm -rf "$hook_dir"
 
 # ------------------------------------------------------------------- patches
 applied=()   # patch copied in
@@ -158,4 +175,4 @@ grep -qs "summon xpo.wheel" ~/.config/hypr/bindings.lua ||
 
 # Non-zero so the post-update hook prints "Hook failed" instead of passing
 # silently with a stock or juddering shell.
-(( ${#broken[@]} == 0 && render_ok == 1 ))
+(( plugins_ok == 1 && ${#broken[@]} == 0 && render_ok == 1 ))

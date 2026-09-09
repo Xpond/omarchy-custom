@@ -14,6 +14,10 @@ SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONF=~/.config/omarchy/shell.json
 
+# Remove first: even a later revert failure must not reinstall on the next update.
+rm -f ~/.config/omarchy/hooks/post-update.d/centered-panels
+echo "removed post-update hook"
+
 # Everything install.sh put under $HOME. The id has to leave shell.json along
 # with the link: an id listed for a plugin that is no longer there is an error
 # on every shell start.

@@ -184,7 +184,7 @@ Item {
         font.pixelSize: Style.font.subtitle
         renderType: Text.NativeRendering
         onTextChanged: if (panel.editing) panel.dirty = true
-        onCursorRectangleChanged: panel.revealCursor()
+        onCursorRectangleChanged: root.revealCursor()
       }
 
       Text {

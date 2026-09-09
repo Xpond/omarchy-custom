@@ -19,7 +19,7 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 
 ```bash
 ~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
-~/xpo/omarchy-custom/revert.sh    # restore pristine QML + hypr config
+~/xpo/omarchy-custom/revert.sh    # restore pristine QML; leave hypr config alone
 ```
 
 `install.sh` needs a sudo password, so it must be run from a terminal
@@ -29,7 +29,6 @@ re-running when nothing has changed prints `already up to date` and exits.
 ```
 orig/     pristine upstream files — the merge base and revert source, never edit
 shell/    patched copies, mirroring /usr/share/omarchy/shell/
-hooks/    the post-update hook that re-applies the patch automatically
 docs/     this file
 ```
 
@@ -43,12 +42,10 @@ The user ruled out cloning panels and ruled out changing panel styling, which
 is what put the work in shared chrome.
 
 **This is now self-repairing.** `omarchy update` runs `omarchy-hook
-post-update` right after migrations, and `hooks/centered-panels` is installed
-there:
-
-```bash
-omarchy hook install post-update ~/xpo/omarchy-custom/hooks/centered-panels
-```
+post-update` right after migrations, and `install.sh` installs a hook there
+with this checkout's path baked in. Rerun `install.sh` after moving the
+checkout. `revert.sh` removes the hook, so a later update cannot reinstall
+the patch behind you.
 
 The hook is a one-line trampoline into `install.sh` on purpose — `omarchy hook
 install` *copies* the file, so any logic living in the hook would drift from
@@ -145,8 +142,8 @@ hl.env("QSG_RENDER_LOOP", "threaded")
 and the var is simply never exported. That cost a full reboot to discover.
 (`hyprland.conf` *is* loaded — its binds work — so this is specifically the
 `env` keyword, not the file.) It lives in `looknfeel.lua` because that is
-parsed before `autostart.lua`, so the var is set before the shell launches,
-and because `revert.sh` already restores that file.
+parsed before `autostart.lua`, so the var is set before the shell launches.
+`revert.sh` leaves this user-maintained file alone.
 
 In-shell, that took the entry animation from ~12 rendered frames to ~44.
 

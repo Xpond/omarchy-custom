@@ -523,7 +523,7 @@ Item {
       // A path opens the browser where the path lives rather than launching
       // anything: picking `main.py` out of the wheel used to drop an editor on
       // the screen, and what you wanted was to see the file and where it sits.
-      else if (e.path && root.shell) root.shell.toggle("xpo.files", MenuIndex.pathPayload(e.path))
+      else if (e.path && root.shell) root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
       else if (e.action) Util.execDetached(e.action)
     })
   }
@@ -608,13 +608,29 @@ Item {
     id: fileScan
     command: ["fd", "--hidden", "--max-depth", "6", "--exclude", ".cache",
               "--exclude", ".git", "--exclude", "node_modules", ".", root.home]
-    stdout: StdioCollector { onStreamFinished: root.files = MenuIndex.parseFiles(text) }
+    property int epoch: 0
+    // A killed scan still finishes its stream, with a partial walk that would
+    // read as the whole of $HOME. Only the scan this epoch asked for counts.
+    stdout: StdioCollector {
+      onStreamFinished: if (fileScan.epoch === root.scanEpoch) root.files = MenuIndex.parseFiles(text)
+    }
+    onExited: if (epoch !== root.scanEpoch) Qt.callLater(root.scanFiles)
   }
 
   // Started by hand for the same reason conditionScan is: `running` bound to
   // the mode would restart the walk on every keystroke that keeps it.
-  onModeChanged: if (root.mode === "file" && !root.files && !fileScan.running) fileScan.running = true
-  onOpenedChanged: if (!root.opened) root.files = null
+  property int scanEpoch: 0
+  function scanFiles() {
+    if (!root.opened || root.mode !== "file" || root.files || fileScan.running) return
+    fileScan.epoch = root.scanEpoch
+    fileScan.running = true
+  }
+  onModeChanged: root.scanFiles()
+  onOpenedChanged: if (!root.opened) {
+    root.scanEpoch++
+    fileScan.running = false
+    root.files = null
+  }
 
   // Listed once at startup: installing a theme or a font is a rare, deliberate
   // act, and both commands cost a subprocess that opening the wheel shouldn't.
@@ -670,6 +686,7 @@ Item {
 
   // The ring, if the user has said what they want on it. Absent by default.
   FileView {
+    printErrors: false
     path: Quickshell.env("HOME") + "/.config/omarchy/wheel.json"
     watchChanges: true
     onFileChanged: reload()
@@ -1110,7 +1127,7 @@ Item {
             anchors.centerIn: parent
             width: parent.width - Style.spacing.rowPaddingX * 2
             horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
+            elide: Text.ElideLeft
             text: root.searching ? root.query + "▏" : "Search"
             color: Color.menu.text
             opacity: root.searching ? 1 : 0.45
@@ -1244,7 +1261,7 @@ Item {
 
                 Text {
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: !modelData.appIcon && !modelData.iconFile
+                  visible: (!modelData.appIcon || appImage.status === Image.Error) && !modelData.iconFile
                   width: Style.font.iconLarge
                   text: modelData.icon
                   color: active ? Color.accent : Color.menu.text
@@ -1259,12 +1276,13 @@ Item {
                   size: Style.font.iconLarge
                   tint: resultCard.active ? Color.accent : Color.menu.text
                 }
-                // Apps and windows name an icon file rather than carrying a
-                // glyph. Only one of the two is ever visible, and a Row skips
-                // what isn't.
+                // Apps and windows name an icon file and keep a glyph behind
+                // it: a themed icon that fails to load used to leave a hole the
+                // size of itself. One of the three draws, and a Row skips the rest.
                 Image {
+                  id: appImage
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: !!modelData.appIcon
+                  visible: !!modelData.appIcon && status !== Image.Error
                   width: Style.font.iconLarge
                   height: Style.font.iconLarge
                   source: modelData.appIcon ? root.appLibrary.iconSource(modelData.appIcon) : ""

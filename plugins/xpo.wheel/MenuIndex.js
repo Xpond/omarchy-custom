@@ -328,7 +328,7 @@ function liveRows(sources) {
     var appIcon = String(a.icon || a.id)
     iconByAppId[String(a.id).toLowerCase()] = appIcon
     out.push({
-      icon: "", appIcon: appIcon, label: name, trail: "App",
+      icon: "󰖯", appIcon: appIcon, label: name, trail: "App",
       appId: String(a.id), kind: KIND.app,
       // Deliberately not Comment. It is prose about what an app does, so
       // "files" matches Neovim ("Edit text files"). GenericName and Keywords
@@ -545,7 +545,9 @@ function fileRows(files, term, limit, home) {
   var q = String(term || "").trim().toLowerCase()
   if (!q) return []
   var terms = q.split(/\s+/)
-  var hits = []
+  // Rank and name length are integer keys. Keep only the first `limit` ties
+  // in each bucket: later ties cannot appear in the first `limit` results.
+  var buckets = [[], [], []]
   for (var i = 0; i < src.lower.length; i++) {
     var low = src.lower[i]
     var matched = true
@@ -555,10 +557,21 @@ function fileRows(files, term, limit, home) {
     if (!matched) continue
     var name = nameOf(low)
     var at = name.indexOf(q)
-    hits.push({ rank: at === 0 ? 0 : (at !== -1 ? 1 : 2), len: name.length, at: i })
+    var rank = at === 0 ? 0 : (at !== -1 ? 1 : 2)
+    var lengths = buckets[rank]
+    var ties = lengths[name.length]
+    if (!ties) ties = lengths[name.length] = []
+    if (ties.length < limit) ties.push(i)
   }
-  hits.sort(function (a, b) { return a.rank - b.rank || a.len - b.len })
   var out = []
-  for (var j = 0; j < hits.length && j < limit; j++) out.push(fileRow(src.paths[hits[j].at], home))
+  for (var r = 0; r < buckets.length; r++) {
+    for (var len = 0; len < buckets[r].length; len++) {
+      var entries = buckets[r][len] || []
+      for (var j = 0; j < entries.length; j++) {
+        if (out.length >= limit) return out
+        out.push(fileRow(src.paths[entries[j]], home))
+      }
+    }
+  }
   return out
 }

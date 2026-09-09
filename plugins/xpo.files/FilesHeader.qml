@@ -186,6 +186,7 @@ Item {
       visible: panel.editing || !!panel.fileNote
       text: !panel.editing ? panel.fileNote
             : panel.saveError ? "write failed"
+            : panel.fileNote ? panel.fileNote
             : savedFlash.running ? "saved"
             : panel.dirty ? "unsaved" : "editing"
       color: panel.saveError ? Color.menu.text : Color.accent

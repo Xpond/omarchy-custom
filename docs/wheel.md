@@ -253,9 +253,13 @@ anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
 theme/font, menu), **recency**, and finally **label length**, which floats
 "Screenshot" over "Stop Screenrecording".
 
-`search()` and `fileRows()` both scan the whole index and sort every hit before
-they truncate, so the depth they are asked for costs only the rows themselves.
-They are asked for 40, and the stack shows 8 of them: `resultTop` is the first
+`search()` sorts its matches. File mode has too many to sort: it buckets them
+by rank and name length as it scans, keeping only the first 40 of each tie,
+which is every row that could be read. Closing cancels the scan and rejects
+whatever it was about to say; reopening starts a fresh one. `Enter` on a path
+opens the browser there, whether or not the browser was already up.
+
+Both are asked for 40, and the stack shows 8: `resultTop` is the first
 row on screen and `showResult()` walks it by one whenever the selection steps
 past an edge, jumping outright when the selection wraps around an end. The
 `Repeater` is fed that window, so eight delegates exist however deep the list

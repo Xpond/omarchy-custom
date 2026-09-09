@@ -8,7 +8,6 @@ own outright, and patches to the parts of the packaged shell we don't.
       shell/    patched copies, mirroring /usr/share/omarchy/shell/
       orig/     pristine upstream copies — the revert source, never edit
     bin/        scripts the keybinds and the browser call
-    hooks/      omarchy post-update hooks
     docs/       the long-form writeups
     install.sh / revert.sh
 
@@ -42,11 +41,24 @@ blurred desktop instead of tucked against their bar widget, with `Escape` to
 close and `Ctrl+Left/Right` to move between them.
 See [`docs/centered-panels.md`](docs/centered-panels.md).
 
+## Requirements
+
+Tested with Omarchy **4.0.2**, Quickshell **0.3.1**, and Qt **6.11.2** on
+Hyprland. Other versions have not been verified.
+
+- Installation: Bash, Git, `jq`, `sudo`, and the Omarchy CLI.
+- File search: `fd`. File operations use standard GNU utilities and `gio`
+  (trash); path copying uses `wl-copy`.
+- Opening files: `xdg-mime`, `xdg-open`, and `setsid`.
+- Optional: Python 3 with Pygments for syntax colours, ImageMagick `identify`
+  for image dimensions, and `notify-send` for desktop installation alerts.
+  Without the first two, plain text previews and image previews still work.
+
 ## Use
 
 ```bash
 ./install.sh   # link the plugins, patch the packaged shell, restart it
-./revert.sh    # unlink the plugins, restore the pristine packaged QML
+./revert.sh    # remove plugins and hook, restore the pristine packaged QML
 ```
 
 `install.sh` links every directory under `plugins/` into
@@ -71,11 +83,13 @@ needs `omarchy-restart-shell` — QML components are cached, so `rescanPlugins`
 alone will not reload changed code.
 
 The patched shell files are **package-owned**, so `omarchy update` overwrites
-them. That is repaired automatically by a post-update hook:
+them. `install.sh` generates and installs a post-update hook pointing to this
+checkout, wherever you cloned it. Keep the checkout at that location; after
+moving it, rerun `install.sh`. `revert.sh` removes the hook too, so a later
+update does not reinstall the customization.
 
-```bash
-omarchy hook install post-update ~/xpo/omarchy-custom/hooks/centered-panels
-```
+A missing `shell.json` is created. Existing invalid JSON is preserved and
+registration failure returns a nonzero exit code.
 
 `install.sh` is idempotent. When an update ships a *new* version of a patched
 file it rebases the patch onto it with a three-way merge rather than clobbering
@@ -117,3 +131,15 @@ These edits live outside this repo, in `~/.config/hypr/`:
 `revert.sh` leaves them alone. There are `*.bak.centered-panel` copies in that
 directory from the first prototype run; they predate everything above, so treat
 them as history rather than as a restore point.
+
+## Checks
+
+```bash
+node tests/check.js
+python3 tests/install.py
+python3 tests/runtime.py
+node plugins/xpo.wheel/check.js
+```
+
+The first three use fixtures; the last checks this machine's real Omarchy menu.
+The runtime fixtures use Quickshell offscreen and do not change the clipboard.

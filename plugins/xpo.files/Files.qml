@@ -192,8 +192,9 @@ Item {
   // The file as it is on disk, held whole so editing has something truthful to
   // save. `previewText` is the cut of it that gets drawn.
   property string fullText: ""
+  property bool utf8: false
   readonly property string previewText: FilesIndex.head(root.fullText, root.previewLines)
-  onPreviewPathChanged: { root.fullText = ""; root.previewHtml = ""; root.saving = "" }
+  onPreviewPathChanged: { root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = "" }
 
   // Colour comes from pygments rather than from a tokeniser written here. One
   // process per settled selection buys every language it knows, correctly,
@@ -211,7 +212,7 @@ Item {
     + "p = sys.argv[1]\n"
     + "parts = open(p, errors='replace').read().split('\\n')\n"
     + "src = '\\n'.join(parts[:" + root.previewLines + "])\n"
-    + "if len(parts) > " + root.previewLines + ": src += '\\n\u2026'\n"
+    + "if len(parts) - (parts[-1] == '') > " + root.previewLines + ": src += '\\n\u2026'\n"
     + "try:\n"
     + "    lx = get_lexer_for_filename(p, stripnl=False)\n"
     + "except Exception:\n"
@@ -315,6 +316,13 @@ Item {
   // panel opens onto a path that no longer exists and shows an empty list with
   // no hint of why. Home is the one directory that is always there.
   function open(payloadJson) {
+    if (root.editing && (root.dirty || root.saving)) {
+      root.note("save or discard the current edit first")
+      preview.focusEditor()
+      return
+    }
+    if (root.editing) root.leaveEdit()
+    root.naming = ""
     var payload = {}
     try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) { payload = {} }
     root.enter(payload.dir ? String(payload.dir) : root.home)
@@ -349,8 +357,10 @@ Item {
 
   // Refused while an edit is unsaved, the click-outside shield included.
   function close() {
+    if (!root.opened) return
     if (root.editing && root.dirty) { root.leaveEdit(); return }
     root.opened = false
+    if (root.shell) root.shell.hide("xpo.files")
   }
 
   // Closing lets go of what the preview was holding -- the file's bytes, the
@@ -412,11 +422,13 @@ Item {
   // an ellipsis, and saving that back would delete the rest of the file. The
   // size test is what tells an empty file from a binary one, both of which
   // arrive here as no text at all.
-  readonly property bool editable: !!root.previewPath && root.fullText === root.previewText
+  readonly property bool editable: root.utf8 && !!root.previewPath && root.fullText === root.previewText
                                    && (!!root.fullText || root.settledSel.size === 0)
 
   function edit() {
+    if (root.previewPath && !root.utf8) { root.note("not UTF-8; preview only"); return }
     if (!root.editable || root.editing) return
+    root.fileNote = ""
     preview.editorText = root.fullText
     root.dirty = false
     root.saveError = false
@@ -433,6 +445,7 @@ Item {
   function save() {
     if (!root.editing || root.saving) return
     root.saveError = false
+    root.fileNote = ""
     root.saving = FilesIndex.endLine(preview.editorText)
     previewFile.setText(root.saving)
     verifySave.restart()
@@ -481,7 +494,7 @@ Item {
   // is the name is taken, anything else failed. `op` is what to say about it.
   property var op: null
   function run(command, about) {
-    if (filer.running) return
+    if (filer.running) { root.note("a file operation is still running"); return }
     root.op = about
     filer.command = command
     filer.running = true
@@ -632,8 +645,9 @@ Item {
   // to something else. Path as an argument, never spliced -- `guarded`'s rule.
   function copyPath() {
     if (!root.sel || root.editing) return
-    Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "files", root.sel.path])
-    root.note("copied " + FilesIndex.display(root.sel.path, root.home))
+    root.run(["sh", "-c", 'printf %s "$1" | wl-copy', "files", root.sel.path],
+             { done: "copied " + FilesIndex.display(root.sel.path, root.home),
+               fail: "copy path failed" })
   }
 
   // Trashed, not removed. gio puts it in the freedesktop trash, where it can be
@@ -727,6 +741,7 @@ Item {
     // leaves the old file rather than half of a new one.
     atomicWrites: true
     onLoaded: {
+      root.utf8 = FilesIndex.isUtf8(data())
       root.fullText = FilesIndex.looksBinary(text()) ? "" : text()
       // The read-back half of a save. Typing during the wait leaves it dirty.
       if (root.saving) {

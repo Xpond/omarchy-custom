@@ -233,12 +233,36 @@ function looksBinary(text) {
   return String(text || "").slice(0, 1024).indexOf("\u0000") !== -1
 }
 
+// Validate the bytes, not decoded U+FFFD: a replacement character can be real
+// text, while Qt also inserts it for invalid UTF-8 anywhere in the file.
+function isUtf8(data) {
+  var bytes = new Uint8Array(data)
+  for (var i = 0; i < bytes.length; i++) {
+    var c = bytes[i]
+    if (c < 0x80) continue
+    var n = c >= 0xc2 && c <= 0xdf ? 1
+          : c >= 0xe0 && c <= 0xef ? 2
+          : c >= 0xf0 && c <= 0xf4 ? 3 : 0
+    if (!n || i + n >= bytes.length) return false
+    var value = c & (0x7f >> (n + 1))
+    for (var j = 0; j < n; j++) {
+      var next = bytes[++i]
+      if ((next & 0xc0) !== 0x80) return false
+      value = (value << 6) | (next & 0x3f)
+    }
+    if (value < (n === 1 ? 0x80 : n === 2 ? 0x800 : 0x10000)
+        || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) return false
+  }
+  return true
+}
+
 // A preview is a glance -- but a scrollable one now, so it can afford rather
 // more than the screenful it used to be cut to. Rendering a 40,000-line file
 // into a Text item to show the top of it still costs the frame it is drawn on.
 function head(text, lines) {
   var parts = String(text || "").split("\n")
-  if (parts.length <= lines) return String(text || "")
+  var count = parts.length - (parts[parts.length - 1] === "" ? 1 : 0)
+  if (count <= lines) return String(text || "")
   return parts.slice(0, lines).join("\n") + "\n…"
 }
 

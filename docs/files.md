@@ -193,6 +193,9 @@ Files over **256 KB** are never read. A NUL byte in the first kilobyte is what
 marks a binary, rather than an extension list to maintain: `.frag` and `.qsb`
 sit either side of any list you would write by hand, and the bytes do not lie.
 
+Arriving from the wheel while an edit is unsaved does not move: the browser
+stays on the file and asks you to save or discard it first.
+
 ## Moving files
 
 `Ctrl+X` or `Ctrl+C` takes the selected entry, you walk to another directory,
@@ -318,7 +321,9 @@ bytes rather than at a picture of them. The heading says `editing`, `unsaved`,
 lines and marks the cut with `…`; saving that back would delete the rest of the
 file. `FileView` holds `fullText` — the file as it is on disk — `previewText` is
 the cut *of* it, and `editable` is the identity between them, so a file over 500
-lines, over 256 KB, or binary is not editable. Writes go out `atomicWrites`.
+lines, over 256 KB, binary, or not valid UTF-8 is not editable -- the bytes are
+what get checked, so a file that genuinely contains U+FFFD still edits. Writes
+go out `atomicWrites`.
 A save is then confirmed by reading the file back, because `FileView` will not
 tell you (see [Traps](#traps)), and `endLine()` adds the trailing newline `vim`
 would, since a file saved without one is a file `git` calls damaged.
@@ -524,8 +529,8 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
 - An image's pixel size comes from `identify`. Colour and dimensions are both
   niceties rather than dependencies: without ImageMagick there are no numbers,
   and the size and the date still stand.
-- **Only files the preview read whole are editable** — under 500 lines, under
-  256 KB, not binary. Anything larger is a job for a real editor.
+- **Only files the preview read whole are editable** — at most 500 lines and
+  256 KiB, valid UTF-8, not binary. Other encodings remain preview-only.
 - Only the first 500 lines of a file are ever shown, and only the first 400
   entries of a previewed folder.
 - **Opening the browser from the wheel flashes.** The wheel unmaps before this
