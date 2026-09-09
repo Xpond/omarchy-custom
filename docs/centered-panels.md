@@ -36,7 +36,7 @@ docs/     this file
 
 The files being changed are **shared shell chrome**, not plugins.
 `omarchy plugin clone` cannot reach them, and `/usr/share/omarchy/` is
-package-owned, so **`omarchy update` overwrites all three** and the shell
+package-owned, so **`omarchy update` overwrites all four** and the shell
 silently reverts to stock. This happened on the 4.0.0.alpha → 4.0.2 update.
 The user ruled out cloning panels and ruled out changing panel styling, which
 is what put the work in shared chrome.
@@ -72,13 +72,14 @@ break the entire shell, which is far worse than losing the patch.
 
 ## 2. What changed
 
-Three package-owned QML files (~260 added lines total) plus Hyprland config.
+Four package-owned QML files (~280 added lines total) plus Hyprland config.
 
 | File | Change |
 |---|---|
 | `Ui/KeyboardPanel.qml` | `centerOnScreen` placement in `cardOrigin`; `slideX`/`slideY`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
-| `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested` (9 lines) |
+| `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
+| `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher` (6 lines) |
 
 `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
 
@@ -156,7 +157,7 @@ verified as 0 layer surfaces while "open", against clock's 1), and it is now
 moot: the widget was dead weight on a desktop and has been turned off with
 `omarchy plugin disable omarchy.power`, which stops the panel being
 instantiated at all. If you re-enable it on a machine with a battery, expect
-the warning back; it is stock, package-owned, and not worth a fourth patched
+the warning back; it is stock, package-owned, and not worth another patched
 file.
 
 The `height` loops in `network/Panel.qml` are unrelated, intermittent, and

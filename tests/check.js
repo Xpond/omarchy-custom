@@ -196,3 +196,40 @@ dial.resultIndex = 1
 dialKey("Key_Y", ctrl)
 assert.deepEqual(copied, ["/home/test/notes.md", "dismissed"])
 console.log("ok: wheel query edits at the caret, and a path can be taken away")
+
+// A panel cannot tell how it was opened, so the wheel answers for it: only the
+// panel the wheel put on screen, and only while it is still there.
+const opened = {}
+const ring = { pluginId: "xpo.wheel", launched: "",
+  shell: { isPluginOpen: id => opened[id] === true,
+           hide: id => { opened[id] = false },
+           summon: id => { opened[id] = true } } }
+const back = method(read("plugins/xpo.wheel/Wheel.qml"), "back",
+  { root: ring, Qt: { callLater: fn => fn() } })
+assert.equal(back(), "none", "a wheel that opened nothing owes nothing")
+ring.launched = "omarchy.audio"; opened["omarchy.audio"] = true
+assert.equal(back(), "wheel")
+assert.equal(opened["omarchy.audio"], false, "the wheel takes the panel away itself")
+assert.equal(opened["xpo.wheel"], true)
+opened["omarchy.network"] = true
+ring.launched = ""
+assert.equal(back(), "none", "a panel opened from the bar keeps its backspace")
+ring.launched = "omarchy.audio"
+assert.equal(back(), "none", "and one that has since gone is not owed a return")
+console.log("ok: only the panel the wheel opened answers backspace with a return")
+
+// Backspace is one key with three jobs, taken in order: shorten the filter,
+// walk up a directory, leave for the wheel. Home is the floor, so the press
+// that cannot go up is the one that goes back.
+const walk = { home: "/home/test", dir: "/home/test/a/b", filter: "ab",
+  editing: false, naming: "", left: 0,
+  up() { this.dir = F.parentOf(this.dir) }, toWheel() { this.left++ } }
+const walkKey = keymap("plugins/xpo.files/FilesKeys.js", walk, { doomed: "" }, {})
+walkKey("Key_Backspace"); assert.equal(walk.filter, "a", "the filter goes first")
+walkKey("Key_Backspace"); assert.equal(walk.filter, "")
+walkKey("Key_Backspace"); assert.equal(walk.dir, "/home/test/a")
+walkKey("Key_Backspace"); assert.equal(walk.dir, "/home/test")
+assert.equal(walk.left, 0, "nothing leaves while there is somewhere to go")
+walkKey("Key_Backspace"); assert.equal(walk.left, 1, "home has nowhere left but out")
+assert.equal(walk.dir, "/home/test", "and it does not climb past home on the way")
+console.log("ok: backspace shortens, then climbs, then leaves for the wheel")

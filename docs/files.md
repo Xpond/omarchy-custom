@@ -43,7 +43,7 @@ beyond the trash; `yazi` is installed and does the rest properly.
 | `↑` `↓` `Tab` `Shift+Tab` `Ctrl+N` `Ctrl+P` | move the selection, wrapping at both ends |
 | `→` `Enter` | descend into a folder, or hand a file to the app that owns it |
 | `←` | go up one directory |
-| `Backspace` | delete a character, then go up one directory |
+| `Backspace` | delete a character, then go up one directory, then back to the wheel |
 | `Home` `End` | the first and last row |
 | `PageUp` `PageDown` | a page of rows, one kept for orientation |
 | `Shift+↑` `Shift+↓` | scroll the preview three lines |

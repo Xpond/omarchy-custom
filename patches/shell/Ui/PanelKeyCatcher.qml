@@ -1,4 +1,5 @@
 import QtQuick
+import qs.Commons
 
 // Drop-in key dispatcher for keyboard-driven panels. Wraps panel content
 // and emits semantic signals so each panel keeps its own state machine
@@ -50,6 +51,15 @@ Item {
 
     if (event.key === Qt.Key_Escape) {
       closeRequested(); event.accepted = true; return
+    }
+    // Escape is the way out; backspace is the way back, when there is anywhere
+    // to go back to. A panel cannot tell whether the wheel or its own bar
+    // button opened it, so it does not try -- it asks the wheel, which takes
+    // the panel away itself when the answer is yes and ignores it when not.
+    if (event.key === Qt.Key_Backspace) {
+      Util.execDetached("omarchy-shell -q shell call xpo.wheel back ''")
+      event.accepted = true
+      return
     }
     if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
       tabRequested((event.modifiers & Qt.ShiftModifier) || event.key === Qt.Key_Backtab ? -1 : 1)

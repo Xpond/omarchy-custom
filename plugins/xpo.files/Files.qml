@@ -403,6 +403,13 @@ Item {
 
   function up() { root.enter(FilesIndex.parentOf(root.dir)) }
 
+  // Home is the floor, so backspace there has nowhere left to climb. Whether it
+  // has anywhere to go is the wheel's to answer, and to act on: it closes this
+  // panel itself when the press is a step back to it.
+  function toWheel() {
+    if (root.shell) root.shell.callIfLoaded("xpo.wheel", "back", "")
+  }
+
   function move(step) {
     var n = root.rows.length
     if (n > 0) root.index = (root.index + step + n) % n

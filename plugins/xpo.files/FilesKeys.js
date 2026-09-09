@@ -88,11 +88,13 @@ function onKey(panel, ops, preview, event) {
     if (panel.filter) panel.filter = ""
     else panel.close()
     event.accepted = true; return
-  // Backspace edits the filter while there is one, because that is
-  // what it does in every field. Left is the way up that always works.
+  // Backspace edits the filter while there is one, because that is what
+  // it does in every field, then walks up. Home is the floor, so the
+  // press that cannot climb leaves instead. Left only ever climbs.
   case Qt.Key_Backspace:
     if (panel.filter) panel.filter = panel.filter.slice(0, -1)
-    else panel.up()
+    else if (panel.dir !== panel.home) panel.up()
+    else panel.toWheel()
     event.accepted = true; return
   case Qt.Key_Left:  panel.up(); event.accepted = true; return
   case Qt.Key_Down:  panel.move(1); event.accepted = true; return

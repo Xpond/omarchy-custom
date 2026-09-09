@@ -46,6 +46,11 @@ key means and the dial performs it, which is what lets a test press a key.
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
+`Backspace` inside a panel the wheel opened closes it and brings the wheel
+back. A panel cannot tell the wheel from its own bar button, so it does not
+try: it calls `xpo.wheel back`, and the wheel returns `none` for a panel it did
+not open, leaving the key to mean what it always did there.
+
 Mouse works too: the whole screen is a compass around center, so a flick in
 any direction selects that slice. Release of `SUPER+A` commits it. The scroll
 wheel steps the ring one slice per notch, or the result list while searching.

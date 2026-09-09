@@ -32,6 +32,9 @@ Item {
   property bool armed: false
   property bool justOpened: false
   property int selected: -1
+  // The panel the last pick put on screen, and so the one whose backspace is a
+  // step back to here rather than a key the panel keeps.
+  property string launched: ""
 
   property string query: ""
   // Where the next character goes. Clamped on every query change, so clearing
@@ -394,6 +397,7 @@ Item {
     root.query = ""
     // Home: where the wheel opens must not depend on what was done last time.
     root.path = []
+    root.launched = ""
     // Only a press that actually opened the wheel earns the tap-to-hold grace;
     // a press onto an already-open wheel is the second tap, which closes it.
     root.justOpened = !wasOpen
@@ -500,6 +504,20 @@ Item {
     spin.restart()
   }
 
+  // Backspace in a panel, answered for the panel: a panel is reached by the same
+  // call from the bar's own button and from a slice, so it cannot tell which
+  // one opened it. Only a panel this wheel opened, and that is still on screen,
+  // earns a return -- anything else keeps the key and it does what it always
+  // did there, which is nothing.
+  function back() {
+    if (!root.launched || !root.shell || !root.shell.isPluginOpen(root.launched)) return "none"
+    root.shell.hide(root.launched)
+    // The same handoff run() makes, the other way round: the panel's layer
+    // surface has to let the keyboard go before this one asks for it.
+    Qt.callLater(function () { root.shell.summon(root.pluginId, "{}") })
+    return "wheel"
+  }
+
   // One level up. At home the caller decides: Escape closes, Backspace doesn't.
   function up() {
     if (!root.path.length) return false
@@ -517,7 +535,7 @@ Item {
     // Let this layer surface unmap and hand the keyboard back before the
     // target grabs it, or the panel opens without focus.
     Qt.callLater(function () {
-      if (e.plugin && root.shell) root.shell.toggle(e.plugin, "{}")
+      if (e.plugin && root.shell) { root.shell.toggle(e.plugin, "{}"); root.launched = e.plugin }
       // Omarchy 4 configures Hyprland in Lua, and its dispatcher rejects the
       // legacy string form -- which is what both Quickshell's own activate()
       // and `hyprctl dispatch focuswindow` send, silently doing nothing.
@@ -526,7 +544,10 @@ Item {
       // A path opens the browser where the path lives rather than launching
       // anything: picking `main.py` out of the wheel used to drop an editor on
       // the screen, and what you wanted was to see the file and where it sits.
-      else if (e.path && root.shell) root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
+      else if (e.path && root.shell) {
+        root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
+        root.launched = "xpo.files"
+      }
       else if (e.action) Util.execDetached(e.action)
     })
   }
