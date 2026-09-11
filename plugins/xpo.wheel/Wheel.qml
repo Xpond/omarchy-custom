@@ -233,13 +233,25 @@ Item {
   property real charge: 0
 
   // How long the ring has been held at speed. The comet has to answer the
-  // first keypress, but the screen taking the wheel's color is a reward for a
-  // real spin rather than a flick, so this runs on its own much slower clock:
-  // a couple of seconds of spinning to fill, under one to drain.
+  // first keypress, but the mark being drawn is a reward for a real spin
+  // rather than a flick, so this runs on its own much slower clock: a couple
+  // of seconds of spinning to fill, under one to drain.
   property real hold: 0
-  // ...and dead for the first stretch of that, so several laps of the comet go
-  // past before anything happens at all.
-  readonly property real glow: Math.max(0, Math.min(1, (root.hold - 0.3) / 0.7))
+
+  // Interpolate the visible tip without changing the timer's accumulation.
+  property real markReveal: root.hold * 1.05
+  Behavior on markReveal { NumberAnimation { duration: 40 } }
+
+  // Continue from the drawing tip once it reaches the end. Pause the runner
+  // during drawing and draining, retaining its position if spinning resumes.
+  property real markPhase: 0
+  NumberAnimation on markPhase {
+    running: root.markReveal > 0
+    paused: running && root.markReveal < 1.05
+    loops: Animation.Infinite
+    from: 0; to: 1
+    duration: 1400
+  }
 
   // How far round the color wheel this spin has travelled. A fixed offset per
   // charge arrives at one color and sits there, which is what a long hold
@@ -247,7 +259,7 @@ Item {
   // about half a rotation of hue per second at the key-repeat rate.
   property real huePhase: 0
 
-  // One tick bleeds all three of those back out.
+  // Charge and hold decay together; the hue resets when charge runs out.
   Timer {
     interval: 40
     repeat: true
@@ -289,12 +301,12 @@ Item {
 
     var C = Math.sqrt(A * A + B * B)
     var h = Math.atan2(B, A) + turns * 2 * Math.PI
-    // Pulled toward a band that can actually hold color at every hue as the
-    // spin builds: a near-white or near-black accent has nowhere to put
-    // chroma, and a grey one has no chroma to rotate in the first place.
+    // Pulled toward a bright, coloured palette as the spin builds: a near-white
+    // or near-black accent has nowhere to put chroma, and a grey one has none
+    // to rotate in the first place.
     // At `amount` 0 both are the accent's own, so a ring at rest is exactly
     // the theme's color and winds back to it as the spin bleeds out.
-    L += (Math.min(0.78, Math.max(0.52, L)) - L) * amount
+    L += (0.78 - L) * amount
     C += (0.13 - C) * amount
 
     A = C * Math.cos(h)
@@ -852,30 +864,51 @@ Item {
       if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
     }
 
-    // The blurred desktop takes the comet's own color as the ring winds up,
-    // and gives it back as the spin bleeds out. Hyprland owns the blur itself
-    // -- its size and passes are global config, and driving them per frame
-    // would mean an hyprctl round trip on every step -- so what moves is the
-    // scrim laid over it.
-    //
-    // The falloff is a shader because every stock way of drawing it was
-    // visibly segmented: bloom.frag carries the reasoning and the curve.
-    // Uniforms bind by name, and these three floats pack tight after
-    // qt_Opacity with the color on the next 16 -- check `qsb --dump` if one
-    // is ever added, because std140 padding here fails silently.
-    ShaderEffect {
+    QuietPoints {
       anchors.fill: parent
-      visible: root.glow > 0
-      fragmentShader: Qt.resolvedUrl("bloom.frag.qsb")
-      // Center to furthest corner, in the half-heights the shader measures
-      // in. Blooms outward as the spin builds, so the reach is part of the
-      // readout, and lands on the screen's own corners at full spin -- short
-      // of them, the falloff's own edge shows as a circle.
-      readonly property real reach: Math.sqrt(surface.width * surface.width
-        + surface.height * surface.height) / surface.height
-        * (0.62 + 0.38 * root.glow)
-      readonly property real amount: root.glow * 0.09
-      readonly property real aspect: surface.width / surface.height
+      progress: root.markReveal
+      quietRadius: root.ringRadius + root.itemSize
+      tint: root.cometColor
+    }
+
+    // The stock mark's centrelines surround the wheel without changing its
+    // design. R stores path distance, GB the bevel normal, alpha the stroke mask.
+    Image {
+      id: logoMask
+      // Rebuild with scripts/generate-mark.py; see docs/wheel.md.
+      source: Qt.resolvedUrl("mark.png")
+      // Used only as a shader texture, with the comet supplying its colour.
+      visible: false
+    }
+
+    ShaderEffect {
+      anchors.centerIn: parent
+      // The outer stroke is 0.47 from centre; leave 2% of the height clear.
+      width: surface.height / (2 * 0.47) * 0.98
+      height: width
+      visible: root.hold > 0
+      fragmentShader: Qt.resolvedUrl("logo.frag.qsb")
+      // Match the wheel's diffuse shadow.
+      layer.enabled: visible
+      layer.effect: MultiEffect {
+        autoPaddingEnabled: true
+        shadowEnabled: true
+        shadowColor: "#000000"
+        shadowBlur: 1.0
+        blurMax: 32
+        shadowOpacity: 0.65
+        shadowHorizontalOffset: 2
+        shadowVerticalOffset: 5
+      }
+      property var source: logoMask
+      // Interpolated progress followed by a runner continuing along the path.
+      readonly property real reveal: root.markReveal
+      readonly property real feather: 0.02
+      // A tenth of the run stays hot behind the tip.
+      readonly property real head: 0.10
+      readonly property real phase: root.markReveal + root.markPhase
+      readonly property real pulse: 0.16
+      readonly property vector2d pixel: Qt.vector2d(1 / width, 1 / height)
       readonly property color tint: root.cometColor
     }
 

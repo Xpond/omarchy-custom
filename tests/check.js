@@ -353,3 +353,23 @@ console.log("ok: xpo. plugins get the host shell, nobody else does")
 // and checks revert put it back, so shell.qml joined that the moment it existed.
 assert.match(read("install.sh"), /\bshell\.qml\b/, "install.sh does not carry shell.qml")
 console.log("ok: install.sh carries shell.qml")
+
+// ShaderEffect uniforms bind by name. Compare the source declarations with
+// their QML bindings so a rename cannot silently break the mark.
+{
+  const frag = read("plugins/xpo.wheel/logo.frag")
+  const block = frag.match(/uniform buf \{([^]*?)\}/)[1]
+  const declared = new Set([
+    ...[...block.matchAll(/^\s*(?:float|vec[234]|mat[234])\s+(\w+)\s*;/gm)].map(m => m[1]),
+    // the mark itself, which sits outside the std140 block on its own binding
+    ...[...frag.matchAll(/uniform sampler2D\s+(\w+)\s*;/g)].map(m => m[1]),
+  ].filter(n => !n.startsWith("qt_")))   // Qt fills these two in itself
+  const qml = read("plugins/xpo.wheel/Wheel.qml")
+  const effect = qml.slice(qml.indexOf("ShaderEffect {")).match(/^[^]*?\n    \}/)[0]
+  assert.match(effect, /logo\.frag\.qsb/, "found the wrong ShaderEffect")
+  const bound = new Set([...effect.matchAll(/property\s+\w+\s+(\w+)\s*:/g)].map(m => m[1]))
+  assert.deepEqual([...bound].sort(), [...declared].sort(), "shader and QML disagree on uniforms")
+}
+// The generated mark is shipped alongside the shader.
+assert.ok(fs.existsSync(path.join(repo, "plugins/xpo.wheel/mark.png")), "mark.png is missing")
+console.log("ok: the mark's shader and its QML agree on every uniform")

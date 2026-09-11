@@ -16,6 +16,9 @@ disc, because a ring you have to read is slower than a word you can type.
       Wheel.qml        surface, geometry, state, and the comet
       WheelRing.qml    the dial: discs, labels, and the stroke through them
       WheelResults.qml the ring unrolled: the ranked list and its rail
+      QuietPoints.qml  stationary background points with three depth levels
+      logo.frag        path reveal, runner light, and bevel (compiled to .qsb)
+      mark.png         stroke mask, path distance, and bevel normals
       PanelIcon.qml    a first-party panel's own mark, loaded from it
       ClickShield.qml  a surface that stops a click reaching the scrim
       MenuIndex.js     JSONC parsing, flattening, search
@@ -84,6 +87,43 @@ is measured to the label box's nearest edge (`|cos|·width + |sin|·height`) so
 every label clears its disc by `labelGap` whatever its width and angle, and it
 is measured from the disc's *grown* radius so selecting a slice does not close
 the gap as the disc scales up.
+
+## Logo and background points
+
+Sustained spinning draws the Omarchy mark along its strokes over about 2.2s.
+`markReveal` interpolates the 40ms hold updates; when the drawing completes,
+`markPhase` continues the same light along the path on a 1.4s loop. Releasing
+the key drains the reveal and pauses the runner. The mark keeps its geometry,
+with rounded bevels, a satin finish, and the wheel's diffuse `MultiEffect`
+shadow. A fixed grazing upper-left light separates the bright shoulder from
+the dark underside; the runner adds a soft local reflection along the curved
+strokes. Revealed strokes are opaque so the desktop cannot dilute their colour;
+the runner changes surface lighting rather than opacity.
+
+The shared hue cycle approaches OKLCH lightness 0.78 as spin builds, even with
+a dark theme accent; the logo's satin highlight retains some of that colour.
+
+`QuietPoints.qml` fills cells of roughly 100×90px with stationary, jittered
+points: 228 at 1920×1080. Three sizes and brightness levels suggest depth;
+the nearest lights have faint halos and highlights. The field sits behind
+the logo and wheel, with lower brightness around the controls.
+
+The assets are shipped ready to load. To rebuild them from the repo root
+(NumPy, ImageMagick, and Qt Shader Tools are required):
+
+```bash
+python3 scripts/generate-mark.py 4
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o plugins/xpo.wheel/logo.frag.qsb plugins/xpo.wheel/logo.frag
+node tests/check.js
+omarchy restart shell
+```
+
+The generator preserves the stock icon's breaks and writes stroke coverage
+to alpha, distance along the path to R, and bevel normal XY to GB. It accepts
+an optional output path after the stroke width, so a rebuild can be compared
+before replacing the shipped asset. Restart the shell after editing:
+rescanning manifests can leave the old QML cached.
 
 ## Transitions
 
@@ -161,7 +201,7 @@ the Loader's `onLoaded`, which is *after* first binding evaluation — a
 
 **Editing a plugin needs a shell restart.** `rescanPlugins` re-walks manifests
 but QML components are cached, so changed code keeps running the old version.
-Use `omarchy-restart-shell`.
+Use `omarchy restart shell`.
 
 **The wheel does not own its backdrop.** The wash and the blur behind the ring
 are one scrim surface owned by the bar, which the centered panels, the browser
