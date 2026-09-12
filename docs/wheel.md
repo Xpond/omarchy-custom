@@ -16,9 +16,13 @@ disc, because a ring you have to read is slower than a word you can type.
       Wheel.qml        surface, geometry, state, and the comet
       WheelRing.qml    the dial: discs, labels, and the stroke through them
       WheelResults.qml the ring unrolled: the ranked list and its rail
+      Sky.qml          day/night palette, sun/moon positions and logo lighting
+      Fluid.qml        transparent fluid ShaderEffect and its uniform interface
+      fluid.frag       merging contours bent by the sun and moon (compiled to .qsb)
       QuietPoints.qml  stationary background points with three depth levels
       logo.frag        path reveal, runner light, and bevel (compiled to .qsb)
       mark.png         stroke mask, path distance, and bevel normals
+      LICENSE.hyprglaze MIT notice for the adapted fluid shader
       PanelIcon.qml    a first-party panel's own mark, loaded from it
       ClickShield.qml  a surface that stops a click reaching the scrim
       MenuIndex.js     JSONC parsing, flattening, search
@@ -95,9 +99,13 @@ Sustained spinning draws the Omarchy mark along its strokes over about 2.2s.
 `markPhase` continues the same light along the path on a 1.4s loop. Releasing
 the key drains the reveal and pauses the runner. The mark keeps its geometry,
 with rounded bevels, a satin finish, and the wheel's diffuse `MultiEffect`
-shadow. A fixed grazing upper-left light separates the bright shoulder from
-the dark underside; the runner adds a soft local reflection along the curved
-strokes. Revealed strokes are opaque so the desktop cannot dilute their colour;
+shadow. A grazing key light separates the bright shoulder from the dark
+underside; the runner adds a soft local reflection along the curved strokes.
+That key is not a fixed corner — it is the `key` uniform, pointed at whichever
+of the sun or the moon is up (see **The day**), so the mark is lit from the
+left at dawn, from overhead at noon and from the right at dusk. The bevel
+normals are baked into `mark.png`'s GB channels. Revealed strokes are opaque
+so the desktop cannot dilute their colour;
 the runner changes surface lighting rather than opacity.
 
 The shared hue cycle approaches OKLCH lightness 0.78 as spin builds, even with
@@ -108,22 +116,76 @@ points: 228 at 1920×1080. Three sizes and brightness levels suggest depth;
 the nearest lights have faint halos and highlights. The field sits behind
 the logo and wheel, with lower brightness around the controls.
 
-The assets are shipped ready to load. To rebuild them from the repo root
-(NumPy, ImageMagick, and Qt Shader Tools are required):
+## The day
+
+The scene sits above the shared blurred-desktop scrim: `Sky.qml` draws a
+translucent sky, `Fluid.qml` adds transparent contours, and `QuietPoints.qml`
+draws stars above them. The logo and controls sit in front. The fluid and
+stars fade around the controls to keep that area readable.
+
+All layers follow `markReveal`, appearing during a sustained spin and fading
+when it stops. `daylight` counts one day per unit on the existing 40ms timer,
+advancing by `0.0012 + 0.0045 * charge` per tick: roughly 7s per day at full
+spin. It continues through the release fade, pauses when charge and hold have
+drained, and resets on close. The value never wraps, so its interpolated
+motion keeps moving forward across midnight.
+
+The sun follows an ellipse: `elevation = sin(phase * 2π)` and
+`azimuth = -cos(phase * 2π)`. It rises on the left, passes overhead at noon,
+and sets on the right. The moon follows the same arc half a day later.
+`bodyPosition(side)` supplies the normalized screen positions used by both
+the radial glows and fluid deformation. One `Body` component draws both lights.
+
+Daylight follows positive elevation. The `dusk` curve spans both sides of the
+horizon, letting twilight colour and haze linger after sunset. Dawn progresses
+through violet, rose and pale gold; sunset falls from gold through copper into
+purple. Elevation selects within each palette; azimuth blends morning and
+evening smoothly. The sky stays translucent, with noon brightness held down
+for legibility.
+
+The logo shares the sky's lighting. `keyFacing` hands the direction from sun
+to moon, passing through frontal light at the horizon. `keyColor` tints the
+bevel highlight and diffuse light; moonlight is blue and its `keyStrength`
+is 72% of daylight. The mark keeps its own base colour and runner reflection.
+
+The fluid shader sums six slowly moving fields into merging contour lines.
+It samples that field through a local deformation around each sky light:
+the sun's influence is broader and stronger, the moon's smaller and gentler.
+Both fade with their body's visibility. The clear area around the controls
+stays fixed while the fluid bends. Between lines, the fluid adds at most
+2.5% tint, leaving the sky and desktop blur visible.
+
+Stars dim in daylight. Their `MultiEffect` blur follows `dusk`, softening them
+at twilight and sharpening them as night deepens. `blurMax: 16` makes that
+change visible on 1.8–6px points. The layer remains allocated throughout the
+reveal to avoid recreating its framebuffer and shader twice per cycle.
+
+The fluid shader is adapted from [slastra/hyprglaze](https://github.com/slastra/hyprglaze/blob/120c5082aba3ee2d675ed9be8f705d9239d1755c/shaders/fluid.frag).
+Its MIT notice is in `plugins/xpo.wheel/LICENSE.hyprglaze`. Only the shader
+math is used; the scene needs no daemon, audio capture, or window watcher.
+
+Assets are shipped ready to load. To rebuild the shaders from the repo root
+using Qt Shader Tools:
 
 ```bash
-python3 scripts/generate-mark.py 4
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o plugins/xpo.wheel/logo.frag.qsb plugins/xpo.wheel/logo.frag
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o plugins/xpo.wheel/fluid.frag.qsb plugins/xpo.wheel/fluid.frag
 node tests/check.js
 omarchy restart shell
 ```
 
-The generator preserves the stock icon's breaks and writes stroke coverage
-to alpha, distance along the path to R, and bevel normal XY to GB. It accepts
-an optional output path after the stroke width, so a rebuild can be compared
-before replacing the shipped asset. Restart the shell after editing:
+`tests/scene.js`, included by `tests/check.js`, checks both shaders' QML
+uniform interfaces and the sky's arc, day/night, haze and light directions.
+Render visual checks on a graphics backend: Qt's offscreen software renderer
+does not reproduce the shaders and star blur. Restart the shell after editing;
 rescanning manifests can leave the old QML cached.
+
+To rebuild `mark.png`, run `python3 scripts/generate-mark.py 4` with NumPy and
+ImageMagick available. The generator writes coverage to alpha, path distance
+to R, and bevel normal XY to GB. An optional output path after the stroke
+width allows comparison before replacing the shipped asset.
 
 ## Transitions
 

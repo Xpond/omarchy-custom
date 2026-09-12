@@ -22,7 +22,11 @@ layout(std140, binding = 0) uniform buf {
     float pulse;
     // One screen pixel in texture coordinates, for the contact edge.
     vec2 pixel;
+    // Sky light direction in baked-normal space: negative X left, Y above.
+    vec2 key;
     vec4 tint;
+    vec4 keyColor;
+    float keyStrength;
 };
 
 layout(binding = 1) uniform sampler2D source;
@@ -56,11 +60,13 @@ void main() {
     vec3 view = vec3(0.0, 0.0, 1.0);
     // A grazing key separates the lit shoulder from the shaded underside.
     // Keep a coloured body under the highlight so the far side stays visible.
-    vec3 key = normalize(vec3(-0.70, -0.70, 0.45));
-    float diffuse = max(dot(normal, key), 0.0);
-    float satin = pow(max(dot(normal, normalize(key + view)), 0.0), 14.0);
-    vec3 face = tint.rgb * (0.50 + 0.50 * diffuse);
-    face += mix(tint.rgb, vec3(1.0), 0.45) * satin * 0.70;
+    // Follow the visible sun or moon. Z preserves frontal light at handover.
+    vec3 lightDir = normalize(vec3(key, 0.45));
+    float diffuse = max(dot(normal, lightDir), 0.0);
+    float satin = pow(max(dot(normal, normalize(lightDir + view)), 0.0), 14.0);
+    // Leave room for the coloured highlight instead of clipping it to white.
+    vec3 face = tint.rgb * (0.50 + 0.35 * diffuse * keyStrength * mix(vec3(1.0), keyColor.rgb, 0.60));
+    face += keyColor.rgb * satin * 0.55 * keyStrength;
 
     // The travelling light brings out the curved face locally. A broad
     // reflection gives satin a soft lustre instead of a sharp chrome glint.

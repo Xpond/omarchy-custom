@@ -259,7 +259,15 @@ Item {
   // about half a rotation of hue per second at the key-repeat rate.
   property real huePhase: 0
 
-  // Charge and hold decay together; the hue resets when charge runs out.
+  // Shared sky/fluid clock: about 7s per day at full spin. It runs through
+  // the release fade, pauses once hold drains, and resets on close.
+  // Never wrap it: interpolation across midnight must keep moving forward.
+  property real daylight: 0
+  // Smooth the timer's 40ms steps, as with markReveal.
+  Behavior on daylight { NumberAnimation { duration: 40 } }
+
+  // Charge and hold decay together; the hue resets when charge runs out. Also
+  // the clock the sky keeps, which is why an idle wheel has no day running.
   Timer {
     interval: 40
     repeat: true
@@ -273,6 +281,7 @@ Item {
       // Back to the theme's own accent once the ring has stopped, so the next
       // spin starts from it rather than from wherever the last one ended.
       if (root.charge <= 0) root.huePhase = 0
+      root.daylight += 0.0012 + 0.0045 * root.charge
     }
   }
 
@@ -748,6 +757,8 @@ Item {
     root.scanEpoch++
     fileScan.running = false
     root.files = null
+    // Reset on close, after the scene has faded; charge can end before hold.
+    root.daylight = 0
   }
 
   // Listed once at startup: installing a theme or a font is a rare, deliberate
@@ -864,11 +875,31 @@ Item {
       if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
     }
 
+    Sky {
+      id: sky
+      anchors.fill: parent
+      phase: root.daylight
+      reveal: root.markReveal
+    }
+
+    Fluid {
+      anchors.fill: parent
+      phase: root.daylight
+      reveal: root.markReveal
+      quietRadius: root.ringRadius + root.itemSize
+      warm: sky.keyColor
+      cool: sky.mix(Qt.rgba(0.35, 0.32, 0.75, 1), sky.dayColor, sky.light)
+      sun: Qt.vector3d(sky.sunPosition.x, sky.sunPosition.y, sky.glow)
+      moon: Qt.vector3d(sky.moonPosition.x, sky.moonPosition.y, sky.moon)
+    }
+
     QuietPoints {
       anchors.fill: parent
       progress: root.markReveal
       quietRadius: root.ringRadius + root.itemSize
       tint: root.cometColor
+      daylight: sky.light
+      haze: sky.dusk
     }
 
     // The stock mark's centrelines surround the wheel without changing its
@@ -909,6 +940,10 @@ Item {
       readonly property real phase: root.markReveal + root.markPhase
       readonly property real pulse: 0.16
       readonly property vector2d pixel: Qt.vector2d(1 / width, 1 / height)
+      // Lit by the day it is standing in, rather than by a fixed corner.
+      readonly property vector2d key: sky.keyDirection
+      readonly property color keyColor: sky.keyColor
+      readonly property real keyStrength: sky.keyStrength
       readonly property color tint: root.cometColor
     }
 

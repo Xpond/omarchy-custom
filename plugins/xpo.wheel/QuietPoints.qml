@@ -1,16 +1,31 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 
 Item {
   id: field
   required property real progress
   required property real quietRadius
   required property color tint
+  // The night is when these are worth having: full sun washes them out, and
+  // the haze a low sun carries softens what is left before it takes them.
+  required property real daylight
+  required property real haze
 
   readonly property int columns: Math.max(1, Math.floor(width / 100))
   readonly property int rows: Math.max(1, Math.floor(height / 90))
   visible: progress > 0
   z: -1
+
+  // Twilight softens the stars. Keep the layer allocated throughout the
+  // reveal to avoid rebuilding its framebuffer and shader twice per day.
+  layer.enabled: visible
+  layer.effect: MultiEffect {
+    blurEnabled: true
+    blur: field.haze
+    // Enough blur to turn 1.8–6px points into visible halos at twilight.
+    blurMax: 16
+  }
 
   Repeater {
     model: field.columns * field.rows
@@ -45,6 +60,7 @@ Item {
       height: width
       opacity: rise * rise * (3 - 2 * rise) * ([0.26, 0.42, 0.62][depth] + warmth * 0.18)
                * (0.30 + 0.70 * outside * outside * (3 - 2 * outside))
+               * (1 - 0.85 * field.daylight)
 
       // A faint halo belongs only to the nearest lights.
       Repeater {
@@ -64,7 +80,7 @@ Item {
       Rectangle {
         anchors.fill: parent
         radius: width / 2
-        // The same upper-left light that catches the logo's stroke edges.
+        // Static upper-left glints give each point depth.
         gradient: Gradient {
           orientation: Gradient.Horizontal
           GradientStop { position: 0; color: Qt.lighter(field.tint, 1.6) }
