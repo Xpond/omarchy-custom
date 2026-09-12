@@ -14,7 +14,9 @@ disc, because a ring you have to read is slower than a word you can type.
     plugins/xpo.wheel/
       manifest.json    kind: "overlay", keepLoaded
       Wheel.qml        surface, geometry, state, and the comet
-      WheelRing.qml    the dial: discs, labels, and the stroke through them
+      WheelRing.qml    discs, labels, illumination and the disc mask
+      RingTrack.qml    ring shader bindings and the visible trail's clock
+      ring.frag       antialiased circle, fading trail and disc cutouts
       WheelResults.qml the ring unrolled: the ranked list and its rail
       Sky.qml          day/night palette, sun/moon positions and logo lighting
       Fluid.qml        transparent fluid ShaderEffect and its uniform interface
@@ -72,17 +74,30 @@ keystroke does not already do.
 
 ## The comet
 
-An accent arc rides the dial under the selected disc. It is drawn from two
-followers chasing one target (`arcTarget`) at different speeds -- `arcHead`
-over 90ms, `arcTail` over 300ms -- so the gap between them is a readout of how
-fast the ring is being turned, with no velocity tracking or timers anywhere.
-Step slowly and both settle on the selection, leaving a short arc bracketing
-the disc. Hold `←`/`→` at the 40Hz key repeat and the tail falls several
-slices behind, stretching the arc into a streak that runs around the ring and
-retracts when you let go. `select()` adds the shortest delta to `arcTarget`
-rather than assigning it, which keeps the target unwrapped so a lap past north
-runs forward instead of unwinding backwards; the drag is clamped at 300° since
-an arc past a full turn is just the circle again.
+`ring.frag` draws the resting circle and colored trail in one antialiased
+2px stroke. A live alpha mask cuts out each disc at its animated size, keeping
+the track hidden beneath translucent fills. The trail has softly fading ends
+and no exterior glow.
+
+For ordinary navigation, `arcHead` and `arcTail` follow the selection target
+at different speeds. Charge shortens the head's response from 90ms to 45ms
+and lengthens the tail's from 300ms to 460ms. Their separation controls trail
+length and disc illumination. `select()` accumulates the shortest angular
+delta, so crossing north continues forward. At rest, the arc brackets the
+selected disc.
+
+During sustained spin, `RingTrack.qml` advances the visible head at 180°/s:
+one lap every two seconds, independent of key repeat. The trail reaches at
+most 240°, leaving a third of the ring clear. The resting circle fades away,
+leaving only the head and fading tail. Selection still updates immediately;
+on release the trail rejoins it along the shortest arc over 300ms, while the
+resting circle and even selection bracket return.
+
+Disc lighting eases across both ends of the trail and leaves a 260ms
+afterglow. As charge builds, individual passes blend into a dim shared glow
+with a gentle moving highlight. Selection's fill, border weight, scale and
+label emphasis diminish during fast spinning and return as it slows, so the
+comet carries the motion without the discs flashing on every key repeat.
 
 The dial's stroke runs through every disc's **center**, so slice labels sit
 outside the ring on their own spokes rather than hung under their discs -- a
@@ -96,17 +111,18 @@ the gap as the disc scales up.
 
 Sustained spinning draws the Omarchy mark along its strokes over about 2.2s.
 `markReveal` interpolates the 40ms hold updates; when the drawing completes,
-`markPhase` continues the same light along the path on a 1.4s loop. Releasing
-the key drains the reveal and pauses the runner. The mark keeps its geometry,
-with rounded bevels, a satin finish, and the wheel's diffuse `MultiEffect`
+`markPhase` continues the same light along the path on a 1.4s loop, with a tail
+spanning 12% of the path. Only the head and fading tail are visible;
+the completed path and its contact shadow
+clear behind them. Releasing the key drains the reveal and pauses the runner.
+The mark keeps its geometry, with rounded bevels, a satin finish, and the wheel's diffuse `MultiEffect`
 shadow. A grazing key light separates the bright shoulder from the dark
 underside; the runner adds a soft local reflection along the curved strokes.
 That key is not a fixed corner — it is the `key` uniform, pointed at whichever
 of the sun or the moon is up (see **The day**), so the mark is lit from the
 left at dawn, from overhead at noon and from the right at dusk. The bevel
-normals are baked into `mark.png`'s GB channels. Revealed strokes are opaque
-so the desktop cannot dilute their colour;
-the runner changes surface lighting rather than opacity.
+normals are baked into `mark.png`'s GB channels. The head retains its material
+shading while the tail fades in opacity along the path.
 
 The shared hue cycle approaches OKLCH lightness 0.78 as spin builds, even with
 a dark theme accent; the logo's satin highlight retains some of that colour.
@@ -172,12 +188,16 @@ using Qt Shader Tools:
   -o plugins/xpo.wheel/logo.frag.qsb plugins/xpo.wheel/logo.frag
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o plugins/xpo.wheel/fluid.frag.qsb plugins/xpo.wheel/fluid.frag
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o plugins/xpo.wheel/ring.frag.qsb plugins/xpo.wheel/ring.frag
 node tests/check.js
 omarchy restart shell
 ```
 
-`tests/scene.js`, included by `tests/check.js`, checks both shaders' QML
+`tests/scene.js`, included by `tests/check.js`, checks the shaders' QML
 uniform interfaces and the sky's arc, day/night, haze and light directions.
+`tests/trails.js` checks disc-light continuity, trail length, visible speed,
+and the transition between spinning and selection.
 Render visual checks on a graphics backend: Qt's offscreen software renderer
 does not reproduce the shaders and star blur. Restart the shell after editing;
 rescanning manifests can leave the old QML cached.

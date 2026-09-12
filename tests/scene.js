@@ -5,17 +5,19 @@ const plugin = path.resolve(__dirname, "../plugins/xpo.wheel")
 const read = name => fs.readFileSync(path.join(plugin, name), "utf8")
 const wheel = read("Wheel.qml")
 
-// Both ShaderEffects bind uniforms by name, including required QML properties.
-for (const name of ["logo", "fluid"]) {
+// ShaderEffects bind uniforms by name, including required QML properties.
+const effects = {
+  logo: wheel.slice(wheel.indexOf("ShaderEffect {")).match(/^[^]*?\n    \}/)[0],
+  fluid: read("Fluid.qml"),
+  ring: read("RingTrack.qml").split("ShaderEffect {")[1],
+}
+for (const [name, effect] of Object.entries(effects)) {
   const frag = read(name + ".frag")
   const block = frag.match(/uniform buf \{([^]*?)\}/)[1]
   const declared = new Set([
     ...[...block.matchAll(/^\s*(?:float|vec[234]|mat[234])\s+(\w+)\s*;/gm)].map(m => m[1]),
     ...[...frag.matchAll(/uniform sampler2D\s+(\w+)\s*;/g)].map(m => m[1]),
   ].filter(n => !n.startsWith("qt_")))
-  const effect = name === "logo"
-    ? wheel.slice(wheel.indexOf("ShaderEffect {")).match(/^[^]*?\n    \}/)[0]
-    : read("Fluid.qml")
   assert.ok(effect.includes(name + ".frag.qsb"), "found the wrong ShaderEffect")
   const bound = new Set([...effect.matchAll(/property\s+\w+\s+(\w+)\b/g)].map(m => m[1]))
   assert.deepEqual([...bound].sort(), [...declared].sort(), name + " shader and QML disagree on uniforms")

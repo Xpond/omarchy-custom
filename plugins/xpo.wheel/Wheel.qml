@@ -201,11 +201,9 @@ Item {
   readonly property int resultWidth: root.searchWidth - Style.space(28)
   readonly property int resultHeight: Style.spacing.popupRowHeight + Style.spacing.xs * 2
 
-  // Where the arc is headed on the dial, and the two followers chasing it. The
-  // head nearly keeps up and the tail drags well behind, so the gap between
-  // them reads out how fast the ring is being turned: nothing while stepping,
-  // a long streak while an arrow is held down. Unwrapped rather than kept in
-  // 0..360, so a lap past north keeps running forward.
+  // Input followers determine selection, trail length and disc illumination.
+  // Keep angles unwrapped so crossing north continues in the same direction.
+  // RingTrack gives the visible head a slower clock during sustained spin.
   property real arcTarget: -90
   // Both durations ride the charge: the head closes on the target quicker
   // while the tail lets go slower, so a held arrow sharpens the point and
@@ -218,18 +216,18 @@ Item {
   // wider than one hides behind it; half a slice's share of the ring, less a
   // hair, lights the dial on either side of the selected disc instead.
   readonly property real arcSpread: root.sliceStep / 2 * 0.85
-  // Clamped: a held arrow drags the tail more than a lap behind, and an arc
-  // past a full turn is just the circle again -- it stops reading as motion.
-  // Clamping from the head keeps the point and loses the far end of the tail.
+  // Bound follower separation for disc illumination. The visible trail has
+  // its own shorter limit and follows RingTrack's clock during sustained spin.
   readonly property real arcDrag: Math.max(-300, Math.min(300, root.arcHead - root.arcTail))
-  readonly property real arcFrom: Math.min(root.arcHead, root.arcHead - root.arcDrag) - root.arcSpread
-  readonly property real arcSpan: Math.abs(root.arcDrag) + root.arcSpread * 2
+  // Keep a third of the ring clear at speed, trimming the tail rather than the head.
+  readonly property real arcFrom: root.arcDrag >= 0 ? root.arcHead + root.arcSpread - root.arcSpan : root.arcHead - root.arcSpread
+  readonly property real arcSpan: Math.min(240, Math.abs(root.arcDrag) + root.arcSpread * 2)
   // How hard the ring is being turned, 0 at rest and 1 saturated. Every step
   // adds a bite and the bleed takes it back out faster than a person can
   // press: stepping by hand never accumulates, while an arrow held at the
   // 40Hz key-repeat rate fills it in about a quarter second and a release
-  // empties it in half of one. The comet's hue and its speed both read from
-  // this one number, so the two cannot drift apart.
+  // empties it in half of one. Charge drives hue, trail length and the
+  // transition from individual selection highlights to sustained spin.
   property real charge: 0
 
   // How long the ring has been held at speed. The comet has to answer the
@@ -336,26 +334,22 @@ Item {
   readonly property color cometColor: root.charge <= 0 ? Color.accent
     : root.cometAt(root.huePhase * root.charge, root.charge)
 
-  // How hard the comet is sitting over a given bearing: 1 right at the head,
-  // falling off to 0 at the end of the tail, 0 anywhere the streak is not.
-  // What the trail crosses lights up from this, which is what stops the
-  // streak looking like it passes behind the discs.
+  // Disc illumination follows the input head, easing to zero at both ends.
+  // WheelRing smooths these passes into a shared glow at sustained speed.
   function sweepAt(deg) {
-    // A streak is the gap the tail opens behind the head, so a ring standing
-    // still has none -- and what the trail lit on the way past, it gives back.
-    // Without this the opening lap ends with the head parked on a slice and
-    // that slice wearing a full comet ring for as long as the wheel is up:
-    // a highlight with no selection behind it, that Enter would not fire and
-    // that the arrows do not step from. Selection lights a slice through
-    // `active`, which owes nothing to this.
+    // Clear the sweep at rest: the opening lap must not leave a disc looking
+    // selected when Enter would do nothing. Selection has its own emphasis.
     var moving = Math.min(1, Math.abs(root.arcDrag) / root.arcSpread)
     if (moving <= 0) return 0
     var span = Math.abs(root.arcDrag) + root.arcSpread
-    // Degrees behind the head, measured against the way the ring is turning.
-    var off = ((deg - root.arcHead) % 360 + 540) % 360 - 180
-    var behind = root.arcDrag >= 0 ? -off : off
-    if (behind < -root.arcSpread || behind > span) return 0
-    return moving * (1 - Math.max(0, behind) / span)
+    // Wrap ahead of the leading edge, where light is zero: wrapping at 180
+    // cuts a long tail off halfway around the ring.
+    var offset = (root.arcHead - deg) * (root.arcDrag >= 0 ? 1 : -1)
+    var behind = ((offset + root.arcSpread) % 360 + 360) % 360 - root.arcSpread
+    if (behind > span) return 0
+    var rise = Math.min(1, (behind + root.arcSpread) / root.arcSpread)
+    var fall = 1 - Math.max(0, behind) / span
+    return moving * rise * rise * (3 - 2 * rise) * fall * fall * (3 - 2 * fall)
   }
 
   // Opening spins the comet once around the ring. This has to step the target
@@ -935,10 +929,10 @@ Item {
       // Interpolated progress followed by a runner continuing along the path.
       readonly property real reveal: root.markReveal
       readonly property real feather: 0.02
-      // A tenth of the run stays hot behind the tip.
+      // Drawing and looping use slightly different tail lengths.
       readonly property real head: 0.10
       readonly property real phase: root.markReveal + root.markPhase
-      readonly property real pulse: 0.16
+      readonly property real pulse: 0.12
       readonly property vector2d pixel: Qt.vector2d(1 / width, 1 / height)
       // Lit by the day it is standing in, rather than by a fixed corner.
       readonly property vector2d key: sky.keyDirection

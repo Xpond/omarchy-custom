@@ -290,21 +290,6 @@ empty.key("Key_Right")
 assert.deepEqual(empty.seen, [], "an empty ring selects nothing at all")
 console.log("ok: the ring steps one slice a press, from the top when it is fresh")
 
-// The comet is a streak, and a streak is the gap the tail opens behind the
-// head. A ring standing still has none: the opening lap used to end with the
-// head parked on a slice, leaving it in a full comet ring that Enter would not
-// fire and the arrows would not step from. Selection lights a slice through
-// `active`, which does not come through here.
-const sweep = (deg, drag) => method(wheelSource, "sweepAt",
-  { root: { arcSpread: 17, arcHead: -90, arcDrag: drag } })(deg)
-// -90 is the head itself: the slice a parked comet used to hold at full.
-for (const deg of [-90, -50, 0, 90, 180])
-  assert.equal(sweep(deg, 0), 0, "a ring at rest lights " + deg)
-assert.ok(sweep(-90, 40) > 0.9, "a moving head still lights what it is on")
-assert.ok(sweep(-90, 8) < sweep(-90, 40), "and a slower ring lights it less")
-assert.equal(sweep(90, 40), 0, "nothing lights where the streak is not")
-console.log("ok: the comet lights what it crosses and gives it back at rest")
-
 // Backspace is one key with three jobs, taken in order: shorten the filter,
 // walk up a directory, leave for the wheel. Home is the floor, so the press
 // that cannot go up is the one that goes back.
@@ -355,3 +340,4 @@ assert.match(read("install.sh"), /\bshell\.qml\b/, "install.sh does not carry sh
 console.log("ok: install.sh carries shell.qml")
 
 require("./scene.js")
+require("./trails.js")

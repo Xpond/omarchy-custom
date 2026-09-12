@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Shapes
 import qs.Commons
 import qs.Ui
 
@@ -12,20 +11,9 @@ Item {
   // The wheel, for the slices and the comet. Passed rather than reached for,
   // the way the browser's own components take their panel.
   property var wheel: null
-
-  // Both arcs are the same sweep at two weights, and only the dial draws them.
-  component Track: ShapePath {
-    fillColor: "transparent"
-    capStyle: ShapePath.RoundCap
-    PathAngleArc {
-      centerX: wheel.ringBox / 2
-      centerY: wheel.ringBox / 2
-      radiusX: wheel.ringRadius
-      radiusY: wheel.ringRadius
-      startAngle: wheel.arcFrom
-      sweepAngle: wheel.arcSpan
-    }
-  }
+  // Repeated passes merge into quiet illumination as sustained spin builds.
+  property real spin: Math.max(0, Math.min(1, (wheel.charge - 0.35) / 0.5))
+  Behavior on spin { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
 
   anchors.fill: parent
   // Traded for the card rather than switched off: the ring draws back
@@ -37,32 +25,19 @@ Item {
   Behavior on opacity { NumberAnimation { duration: wheel.fadeDuration; easing.type: Easing.OutCubic } }
   Behavior on scale { NumberAnimation { duration: wheel.fadeDuration; easing.type: Easing.OutCubic } }
 
-  // The dial the discs sit on. Without a stroke through their centers
-  // the eight read as scattered chips rather than one object.
-  Rectangle {
-    anchors.centerIn: parent
-    width: wheel.ringRadius * 2
-    height: width
-    radius: width / 2
-    color: "transparent"
-    border.width: Style.spacing.hairline
-    border.color: Util.alpha(Color.menu.text, 0.12)
+  Item { id: discCutouts; anchors.fill: parent }
+  ShaderEffectSource {
+    id: maskTexture
+    sourceItem: discCutouts
+    hideSource: true
+    live: true
   }
 
-  // The comet. It rides the dial's own stroke rather than sitting
-  // outside it, so what moves is the ring lighting up along its
-  // length -- the wheel turning, not a marker sliding over it. The
-  // under-glow goes down first, so the crisp arc sits in its own light.
-  Shape {
+  RingTrack {
     anchors.fill: parent
-    preferredRendererType: Shape.CurveRenderer
-    // Nothing to point at until something is selected -- except during
-    // the opening lap, which is the comet with nothing to point at yet.
-    opacity: wheel.selected >= 0 || Math.abs(wheel.arcDrag) > 0.5 ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-
-    Track { strokeWidth: Style.space(9); strokeColor: Util.alpha(wheel.cometColor, 0.16) }
-    Track { strokeWidth: Style.space(3); strokeColor: wheel.cometColor }
+    wheel: root.wheel
+    discMask: maskTexture
+    spin: root.spin
   }
 
   Repeater {
@@ -72,12 +47,16 @@ Item {
       required property int index
       required property var modelData
       readonly property bool active: wheel.selected === index
-      // Where the streak is on this disc right now, and what that
-      // does to its glyph: full accent while selected, and the
-      // comet's hue washing over it as the trail crosses.
-      readonly property real sweep: wheel.sweepAt(wheel.sliceAngle(index) - 90)
+      property real emphasis: active ? 1 - root.spin * 0.9 : 0
+      Behavior on emphasis { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+      readonly property real targetLight: wheel.sweepAt(wheel.sliceAngle(index) - 90)
+      property real light: targetLight
+      Behavior on light {
+        NumberAnimation { duration: slice.targetLight > slice.light ? 70 : 260; easing.type: Easing.OutCubic }
+      }
+      readonly property real sweep: root.spin * 0.24 + light * (1 - root.spin * 0.85)
       readonly property color glyphColor: Qt.tint(Color.menu.text,
-        Util.alpha(wheel.cometColor, active ? 1 : slice.sweep))
+        Util.alpha(wheel.cometColor, Math.max(slice.emphasis, slice.sweep)))
       // Tied to the disc rather than fixed: once the ring is full
       // enough that the discs have to shrink, a fixed icon would be the
       // thing that overflows them.
@@ -89,31 +68,40 @@ Item {
       width: wheel.itemSize
       height: wheel.itemSize
 
+      // Cut the track out beneath the actual animated disc, independently
+      // of its translucent fill. Reparent only the mask's visual geometry.
+      Rectangle {
+        parent: discCutouts
+        x: slice.x + (slice.width - width) / 2
+        y: slice.y + (slice.height - height) / 2
+        width: slice.width * disc.scale
+        height: width
+        radius: width / 2
+        color: "black"
+        antialiasing: true
+      }
+
       BorderSurface {
+        id: disc
         anchors.fill: parent
         // A dial of discs reads as one mechanism; the same eight as
         // rounded squares read as a grid arranged in a circle.
         radius: width / 2
         // A surface, not an outline: only a fill separates a slice
         // from the blurred desktop behind it.
-        color: active
-          ? wheel.selectedFill
-          : wheel.surfaceFill
-        // A full weight ring against everyone else's hairline, in
-        // the comet's hue rather than the flat accent -- and every
-        // unselected one takes that hue as the streak crosses it and
-        // gives it back as the tail leaves.
-        borderSpec: active
-          ? Border.flat(wheel.cometColor, Style.space(2))
-          : Border.flat(Qt.tint(wheel.surfaceEdge,
-                                Util.alpha(wheel.cometColor, slice.sweep * 0.9)),
-                        Style.spacing.hairline)
+        color: Qt.rgba(
+          wheel.surfaceFill.r + (wheel.selectedFill.r - wheel.surfaceFill.r) * slice.emphasis,
+          wheel.surfaceFill.g + (wheel.selectedFill.g - wheel.surfaceFill.g) * slice.emphasis,
+          wheel.surfaceFill.b + (wheel.selectedFill.b - wheel.surfaceFill.b) * slice.emphasis,
+          wheel.surfaceFill.a + (wheel.selectedFill.a - wheel.surfaceFill.a) * slice.emphasis)
+        // Selection settles into a full ring at rest; at speed it barely
+        // changes weight, letting the comet carry the motion.
+        borderSpec: Border.flat(Qt.tint(wheel.surfaceEdge,
+          Util.alpha(wheel.cometColor, Math.max(slice.emphasis, slice.sweep * 0.9))),
+          Style.spacing.hairline + (Style.space(2) - Style.spacing.hairline) * slice.emphasis)
         // Only the disc grows. Scaling the label with it would drift the
         // whole ring of text every time selection moved.
-        scale: active ? wheel.selectedScale : 1
-
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        scale: 1 + (wheel.selectedScale - 1) * slice.emphasis
 
         Text {
           anchors.centerIn: parent
@@ -156,14 +144,10 @@ Item {
         x: parent.width / 2 + reach * Math.cos(parent.angle) - width / 2
         y: parent.height / 2 + reach * Math.sin(parent.angle) - height / 2
         text: modelData.label
-        color: active ? Color.accent : Color.menu.text
+        color: Qt.tint(Color.menu.text, Util.alpha(Color.accent, slice.emphasis))
         // Labels name the icon rather than compete with it, so they sit
         // back until the slice is the one selected.
-        opacity: active ? 1 : 0.6
-        // The disc under it eases; without these the ring of text
-        // strobes while the discs glide.
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Behavior on opacity { NumberAnimation { duration: 90 } }
+        opacity: 0.6 + 0.4 * slice.emphasis
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.caption
       }
