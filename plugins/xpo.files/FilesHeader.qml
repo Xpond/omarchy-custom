@@ -2,14 +2,7 @@ import QtQuick
 import qs.Commons
 import "FilesIndex.js" as FilesIndex
 
-// Where you are, spelled as the trail you walked rather than as one string:
-// the leaf at full strength, everything behind it dimmed to context. One line,
-// because the path is the only thing that has to be legible at a glance and a
-// second row of chrome would push the list down.
-//
-// The right end is the preview's heading, over the column it describes. It used
-// to sit inside the preview under a rule of its own, which made the card look
-// like it had two headers and drew a line across the page for no one.
+// Breadcrumb, active filter/name, item count, and preview metadata on one line.
 Item {
   id: root
 
@@ -39,6 +32,16 @@ Item {
     opacity: caretLit ? 0.85 : 0.0
   }
 
+  component Separator: Text {
+    text: "/"
+    color: Color.menu.text
+    opacity: 0.22
+    leftPadding: Style.spacing.sm
+    rightPadding: Style.spacing.sm
+    font.family: Style.font.menuFamily
+    font.pixelSize: Style.font.subtitle
+  }
+
   // Path, query, count: one left-flowing group. Right-aligning the
   // count instead put it directly above the preview's own size and
   // date, where two dim figures in a column read as two facts about one
@@ -63,15 +66,8 @@ Item {
           required property string modelData
           spacing: 0
 
-          Text {
+          Separator {
             visible: index > 0
-            text: "/"
-            color: Color.menu.text
-            opacity: 0.22
-            leftPadding: Style.spacing.sm
-            rightPadding: Style.spacing.sm
-            font.family: Style.font.menuFamily
-            font.pixelSize: Style.font.subtitle
           }
 
           Text {
@@ -93,15 +89,7 @@ Item {
         visible: panel.pathMode
         spacing: 0
 
-        Text {
-          text: "/"
-          color: Color.menu.text
-          opacity: 0.22
-          leftPadding: Style.spacing.sm
-          rightPadding: Style.spacing.sm
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.subtitle
-        }
+        Separator {}
 
         Text {
           text: panel.typedLeaf
@@ -171,10 +159,7 @@ Item {
     }
   }
 
-  // The preview's own heading, on the same line as the path and over
-  // the column it describes. It used to sit inside the preview under a
-  // rule of its own, which made the card look like it had two headers
-  // and drew a line across the page for no one.
+  // Preview heading, aligned over the preview column.
   Row {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter

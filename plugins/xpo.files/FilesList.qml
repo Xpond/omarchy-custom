@@ -6,9 +6,8 @@ import "FilesIndex.js" as FilesIndex
 // standing on. Rows are the panel's only pointer target: the preview beside
 // them is a reading surface, not a second list.
 Item {
-  id: root
-
   property var panel: null
+  property var operations: null
   // The scroller, so the panel can keep the selection in view after a jump.
   property alias view: list
 
@@ -56,7 +55,7 @@ Item {
         onPositionChanged: function (mouse) {
           if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) panel.index = entry.index
         }
-        onClicked: panel.ops.activate(entry.modelData)
+        onClicked: operations.activate(entry.modelData)
       }
 
       Row {

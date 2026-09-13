@@ -1,8 +1,6 @@
 .pragma library
 
-// Menu definitions ship as JSONC. Strip line comments and trailing commas --
-// the same two transforms the shell's own parser makes -- then parse. A broken
-// or missing file yields an empty map rather than taking the wheel down.
+// Match the shell's JSONC parsing; malformed input leaves the wheel usable.
 function parse(raw) {
   try {
     return JSON.parse(String(raw || "")
@@ -13,8 +11,6 @@ function parse(raw) {
   }
 }
 
-// User entries extend and override defaults by id, which is the same contract
-// the extensions file documents for itself.
 function merge(defaults, user) {
   var out = {}
   for (var a in defaults) out[a] = defaults[a]
@@ -22,8 +18,7 @@ function merge(defaults, user) {
   return out
 }
 
-// Dotted ids carry the hierarchy, so an entry's breadcrumb is just the labels
-// of its ancestor ids: "trigger.capture.qr" -> ["Trigger", "Capture"].
+// Dotted ids encode the menu hierarchy.
 function trailOf(items, id) {
   var parts = String(id).split(".")
   var trail = []
@@ -34,14 +29,10 @@ function trailOf(items, id) {
   return trail
 }
 
-// What a row is, and the last tie-break in search(): two rows matching equally
-// well under labels of the same length come back in this order.
+// Search kind precedence.
 var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4 }
 
-// What a row is across opens, for the use counter. A menu row carries both an
-// id and an action, and the id is the stable half -- an action's text changes
-// whenever Omarchy retunes a command. Windows deliberately answer "": their
-// address is new on every launch, and they already sort on live focus order.
+// Prefer stable ids for use counts; windows already sort by live focus.
 function keyOf(e) {
   if (e.plugin) return e.plugin
   if (e.id) return e.id
@@ -49,7 +40,6 @@ function keyOf(e) {
   return e.action || ""
 }
 
-// The breadcrumb of an open ring, current node included.
 function crumb(items, path) {
   var out = []
   for (var i = 0; i < path.length; i++) {
@@ -59,7 +49,6 @@ function crumb(items, path) {
   return out.join(" \u203a ")
 }
 
-// One name per line, blanks dropped -- the shape every `omarchy <x> list` has.
 function lines(raw) {
   var out = []
   var parts = String(raw || "").split("\n")
@@ -70,21 +59,17 @@ function lines(raw) {
   return out
 }
 
-// Single-quote for the shell: theme and font names carry spaces.
+// Shell-quote theme and font names.
 function quote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'"
 }
 
-// How long ago a window was focused, smaller being more recent. The order the
-// wheel observed itself wins. A window it has not seen focused -- every one of
-// them, for a moment after the shell restarts -- sorts behind those, by
-// Hyprland's own cached history, which is right at the instant it was fetched.
+// Prefer observed focus order, then Hyprland's cached history.
 function recencyOf(order, address, cachedHistory) {
   var seen = order.indexOf(address)
   return seen >= 0 ? seen : order.length + (Number(cachedHistory) || 0)
 }
 
-// Themes and fonts are one shape: a name the CLI takes as an argument.
 function styleRows(out, names, icon, trail, command) {
   for (var i = 0; i < names.length; i++) {
     var name = String(names[i])
@@ -96,11 +81,7 @@ function styleRows(out, names, icon, trail, command) {
   }
 }
 
-// The shell plugins the wheel opens, in ring order. Every icon here is one the
-// widget itself already draws -- a glyph where it has one, otherwise its own
-// `iconFile` component, which is the only honest answer for Tailscale's and
-// Dropbox's marks. Nothing is chosen by eye: a plausible-looking codepoint is
-// how you end up drawing a mark that is not the product's.
+// Shell panels in ring order; branded marks use their own QML components.
 var PANELS = [
   { plugin: "omarchy.audio", icon: "󰕾", label: "Audio" },
   { plugin: "omarchy.network", icon: "󰖩", label: "Network" },
@@ -113,30 +94,22 @@ var PANELS = [
   { plugin: "omarchy.power", icon: "󰂄", label: "Power" }
 ]
 
-// Overlays rather than bar widgets, so nothing in the bar layout vouches for
-// them. They are on the ring unconditionally.
+// Overlays are available independently of the bar layout.
 var OVERLAYS = [
   { plugin: "omarchy.clipboard", icon: "", label: "Clipboard" }
 ]
 
-// Ours: searchable without a disc. Outside panels(), so the default ring keeps
-// the even count that fills 3 and 9 o'clock. Searching as a slice is what puts
-// it over GNOME Files, whose entry is also called "Files": an app loses to a
-// slice on `kind` before a use count is consulted.
+// Searchable without adding another default ring slice.
 var EXTRAS = [
   { plugin: "xpo.files", icon: "󰉋", label: "Files",
     keywords: "file manager browser folder directory explorer nautilus" }
 ]
 
-// The ring the user asked for, as a list of ids. Null when there is no config
-// or it names no ring, which falls the wheel back to the bar's widgets.
 function ringIds(raw) {
   var cfg = parse(raw)
   return (cfg.slices && cfg.slices.length) ? cfg.slices : null
 }
 
-// Every widget id the bar carries, whichever section it sits in. Null when the
-// file names no layout, which lets the caller fall back to another one.
 function barWidgets(raw) {
   var cfg = parse(raw)
   var layout = (cfg.bar && cfg.bar.layout) || null
@@ -150,10 +123,7 @@ function barWidgets(raw) {
   return ids
 }
 
-// The default ring: a widget earns a slice by being in the bar, which is a
-// list the user already curates, so adding a widget to the bar adds it to the
-// wheel. Order comes from PANELS rather than from the bar, so a slice does not
-// move when the bar is rearranged. Overridden entirely by wheel.json.
+// Bar membership chooses default slices; PANELS keeps their order stable.
 function panels(barIds) {
   var out = []
   for (var i = 0; i < PANELS.length; i++)
@@ -161,10 +131,7 @@ function panels(barIds) {
   return out.concat(OVERLAYS)
 }
 
-// `when` says whether a row exists on this machine. 144 of them in the stock
-// menu, so they go out as one script rather than 144 subprocesses: a line
-// prints its id when its condition holds, and silence is a failure. Bash, not
-// sh -- they use [[ ]] and compgen.
+// Evaluate all Bash-only `when` expressions in one process.
 function conditionScript(items) {
   var out = []
   for (var id in items)
@@ -175,10 +142,7 @@ function conditionScript(items) {
 
 var NO_CONDITIONS = { when: {}, full: {}, ready: false }
 
-// No output at all means the script never ran, not that every condition failed:
-// on any machine some of these are negations that hold. Answering "nothing
-// passed" would hide every conditional row in the menu, so an empty read stays
-// not-ready and the menu stays whole.
+// Empty output signals evaluation failure; keep conditional rows visible.
 function parseConditions(raw, items) {
   var ls = lines(raw)
   if (!ls.length) return NO_CONDITIONS
@@ -188,17 +152,11 @@ function parseConditions(raw, items) {
   return cond
 }
 
-// Before the first evaluation lands nothing is known, and hiding everything
-// conditional would gut the menu -- so unknown means visible.
 function passes(e, id, cond) {
   return !e.when || !cond.ready || cond.when[id] === true
 }
 
-// The submenus that still have something under them. Trigger > Hardware is six
-// rows on a laptop and none on a desktop, and drilling into an empty ring is
-// worse than never being offered. Walked up from each surviving leaf, stopping
-// at the first ancestor that failed, so a hidden branch does not vouch for its
-// parent.
+// Mark ancestors of surviving actions so empty submenus stay hidden.
 function populated(items, cond) {
   var out = {}
   for (var id in items) {
@@ -215,23 +173,13 @@ function populated(items, cond) {
   return out
 }
 
-// Survived its own `when`, and if a submenu, something survived under it.
 function shows(items, id, e, cond) {
   if (!passes(e, id, cond)) return false
   return e.action || e.provider || !cond.ready || cond.full[id] === true
 }
 
-// A menu entry as a ring slice or a search row. An action runs; a submenu
-// carries the id the ring drills into.
-//
-// Except a provider, whose rows the menu generates at runtime -- the app list,
-// the installed fonts -- and which the wheel has no way to render. Those hand
-// the whole route back to Omarchy's own menu rather than being dropped, so
-// every menu stays one search away, including any provider a later Omarchy
-// adds that this file has never heard of.
+// Providers hand off to Omarchy; nodes carry the id the ring drills into.
 function entryOf(id, e) {
-  // `id` rides along so check.js can observe what the index emitted rather
-  // than re-derive it and agree with itself.
   var s = { id: id, icon: e.icon || "󰍜", label: e.label || id }
   if (e.action) s.action = e.action
   else if (e.provider) s.action = "omarchy-menu summon " + id
@@ -239,8 +187,6 @@ function entryOf(id, e) {
   return s
 }
 
-// The direct children of a node, in file order -- which is the order the
-// Omarchy menu itself lists them in. `parent` is "" for the root.
 function childrenOf(items, parent, cond) {
   var prefix = parent ? parent + "." : ""
   var depth = parent ? parent.split(".").length + 1 : 1
@@ -254,8 +200,6 @@ function childrenOf(items, parent, cond) {
   return out
 }
 
-// Ids to slices. A panel id names one of PANELS or OVERLAYS; anything else is a
-// menu id. An id that names nothing is dropped, not drawn as a blank disc.
 function ringOf(items, ids, cond) {
   var byPlugin = {}
   var catalogue = panels(null).concat(EXTRAS)
@@ -270,14 +214,10 @@ function ringOf(items, ids, cond) {
   return out
 }
 
-// What the ring shows: the chosen slices at the root, a node's children below.
 function ringSlices(items, path, cond, ring) {
   return path.length ? childrenOf(items, path.join("."), cond) : ring
 }
 
-// Panels carry their target directly rather than a ring index: the ring's
-// contents depend on how deep you have drilled, so an index means nothing by
-// the time a result is picked.
 function panelRows(panels) {
   var out = []
   for (var i = 0; i < panels.length; i++) {
@@ -289,11 +229,7 @@ function panelRows(panels) {
   return out
 }
 
-// Every menu entry, leaves and submenus alike: a submenu holds nothing to run,
-// but searching "install" has to find Install, not only what is filed under it.
-// Kept apart from the live half because flattening 320 entries costs three
-// times what everything else does, and it only changes when the menu files load
-// or the conditions come back -- not on every open.
+// Cache flattened menu rows separately from sources that change on every open.
 function menuRows(items, cond) {
   var out = []
   for (var id in items) {
@@ -311,14 +247,9 @@ function menuRows(items, cond) {
   return out
 }
 
-// Everything that can differ between one open and the next:
-// { apps, windows, focusOrder, themes, fonts }.
 function liveRows(sources) {
   var out = []
-  // `sources.apps` is the shell app library's own row list, so each element
-  // wraps the desktop entry. An app carries an icon NAME rather than a glyph
-  // -- a non-empty `appIcon` is what tells the row to draw an image -- and it
-  // launches by desktop id, not by command.
+  // App rows launch by desktop id and carry icon names.
   var apps = sources.apps
   var iconByAppId = {}
   for (var j = 0; j < apps.length; j++) {
@@ -330,26 +261,14 @@ function liveRows(sources) {
     out.push({
       icon: "󰖯", appIcon: appIcon, label: name, trail: "App",
       appId: String(a.id), kind: KIND.app,
-      // Deliberately not Comment. It is prose about what an app does, so
-      // "files" matches Neovim ("Edit text files"). GenericName and Keywords
-      // are the fields an author fills in to be found BY.
       keywords: [name, a.genericName || "",
                  a.keywords && a.keywords.join ? a.keywords.join(" ") : ""]
                 .join(" ").toLowerCase(),
-      // The id is a filename, so its pieces are packaging: as a prefix "sys"
-      // reaches Print Settings through "system-config-printer". search()
-      // matches it WHOLE instead, which keeps "nvim" -> Neovim and "printer"
-      // -> Print Settings. Dotted tail only; the rest is reverse-DNS.
+      // Search only the dotted id tail as whole words.
       ident: String(a.id).split(".").pop().replace(/[_-]/g, " ").toLowerCase()
     })
   }
-  // A window is carried by address, not by its toplevel object, so a row can
-  // outlive the window without holding it alive. Quickshell reports that
-  // address bare and Hyprland only matches it as hex. The icon comes from the
-  // app's desktop entry rather than the app id -- Brave's window says
-  // `brave-browser` while its entry draws `brave-desktop` -- and an app with
-  // no entry at all leaves `appIcon` empty, which falls the row back to the
-  // glyph instead of a grey blank.
+  // Store window addresses, and resolve icons through matching desktop entries.
   var windows = sources.windows
   for (var w = 0; w < windows.length; w++) {
     var t = windows[w]
@@ -365,40 +284,13 @@ function liveRows(sources) {
       keywords: (title + " " + appId).toLowerCase()
     })
   }
-  // Both are buried behind pickers in the menu -- style.theme shells out to a
-  // second overlay -- so flattening them here is what makes them reachable.
   styleRows(out, sources.themes, "󰸌", "Theme", "omarchy theme set ")
   styleRows(out, sources.fonts, "󰛖", "Font", "omarchy font set ")
   return out
 }
 
-// Every term must appear somewhere in the entry, so terms narrow rather than
-// widen. Rows then sort on four keys in order:
-//
-//   rank    a label that starts with the query, then one that merely contains
-//           it, then a hit that only matched a breadcrumb, alias or app id.
-//   kind    KIND above. "firefox" matches the app and the menu's install,
-//           remove and set-default rows identically; the app is what was meant.
-//   uses    how often this row has been picked before, most-used first. Under
-//           `kind` rather than over it, so habit breaks ties inside a kind --
-//           which of forty themes -- and never reorders the kinds themselves:
-//           that an app beats a row offering to install it is a fact about the
-//           query, while a use count is only a guess.
-//   recency for windows, Hyprland's focus history -- the one you were last in
-//           comes first. Zero, and inert, for everything else.
-//   len     shorter labels win, which floats "Screenshot" over "Stop
-//           Screenrecording" among menu entries.
-//
-// An open window is never a weak hit: matching one at all counts as rank 0.
-// A window title is written by the program, so the query lands mid-string
-// ("...Omarchy Plugins - Brave") where a menu label has it at the front, and
-// without this the window you are looking at sorts below seven rows offering
-// to install the thing.
-// A term matches a word that STARTS with it, never a substring inside one --
-// otherwise "sys" reaches Files through "filesystem". Non-alphanumerics become
-// spaces and the whole is padded, so "starts a word" is a plain indexOf.
-// The punctuation-stripped form rides along too, because splitting alone turns
-// "Wi-Fi" into "wi" and "fi" and nobody types either.
+// Every term must start a word. Sort by label rank, kind, use, recency, then length.
+// Windows always rank as direct hits; squashed text keeps "wifi" matching "Wi-Fi".
 function words(text) {
   var low = String(text || "").toLowerCase()
   return " " + low.replace(/[^a-z0-9]+/g, " ").trim()
@@ -413,8 +305,6 @@ function wholeWord(padded, term) {
   return padded.indexOf(" " + term + " ") !== -1
 }
 
-// For asking whether a NAME begins with the query: "wifi" and "wi-fi" squash
-// alike, so either finds Wi-Fi and both count as a hit on the front.
 function squash(text) {
   return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "")
 }
@@ -423,8 +313,6 @@ function search(index, query, limit, uses) {
   var counts = uses || {}
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
-  // Split on punctuation, not just spaces, so a typed "wi-fi" is the same two
-  // terms the haystack was built from.
   var terms = q.split(/[^a-z0-9]+/)
   var spaced = q.replace(/[^a-z0-9]+/g, " ").trim()
   var squashed = squash(q)
@@ -441,13 +329,9 @@ function search(index, query, limit, uses) {
       matched = false; break
     }
     if (!matched) continue
-    // Where the query landed IN THE NAME: at its front, at the front of a
-    // later word, or nowhere -- which means it only matched something the row
-    // is filed under rather than what it is called.
     var rank = e.kind === KIND.window ? 0
              : squash(e.label).indexOf(squashed) === 0 ? 0
              : startsWord(words(e.label), spaced) ? 1 : 2
-    // Negated so every key in the comparator below sorts ascending.
     hits.push({ rank: rank, uses: -(counts[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
   hits.sort(function (a, b) {
@@ -462,19 +346,13 @@ function search(index, query, limit, uses) {
   return out
 }
 
-// A leading sigil aims the query at one source instead of at everything. With
-// no sigil the query searches the whole index, which is what it has always
-// done. One entry today: the point of the table is that the next source --
-// emoji, clipboard, the two that have been waiting on this decision -- is a
-// line here rather than a branch in three places.
+// Leading sigils select a search source.
 var MODES = { "/": "file" }
 
 function modeOf(query) {
   return MODES[String(query || "").charAt(0)] || ""
 }
 
-// The query with its sigil taken off, which is what the mode's source is
-// actually asked for. Unchanged when there is no mode.
 function termOf(query) {
   var q = String(query || "")
   return modeOf(q) ? q.slice(1) : q
@@ -482,13 +360,7 @@ function termOf(query) {
 
 var NO_FILES = { paths: [], lower: [] }
 
-// fd's own output: one absolute path per line, a directory carrying a trailing
-// slash -- which is how a row knows which of the two marks to wear without a
-// second walk to ask.
-//
-// Folded to lower case once here rather than per keystroke. Matching eighty
-// thousand paths case-insensitively is the only work file mode does, and doing
-// the folding inside that loop is most of its cost.
+// fd marks directories with trailing slashes; fold case once per scan.
 function parseFiles(raw) {
   var paths = lines(raw)
   var lower = []
@@ -496,17 +368,11 @@ function parseFiles(raw) {
   return { paths: paths, lower: lower }
 }
 
-// Where a path's own name starts and ends, ignoring a directory's trailing
-// slash. Two callers, and getting the slash wrong in either one names every
-// directory "".
 function nameOf(path) {
   var end = path.charAt(path.length - 1) === "/" ? path.length - 1 : path.length
   return path.slice(path.lastIndexOf("/", end - 1) + 1, end)
 }
 
-// The name is what was searched for; the directory above it is what tells two
-// `main.py`s apart. Shown relative to home, because everything scanned is
-// under it.
 function fileRow(path, home) {
   var isDir = path.charAt(path.length - 1) === "/"
   var bare = isDir ? path.slice(0, -1) : path
@@ -520,10 +386,6 @@ function fileRow(path, home) {
   }
 }
 
-// Where a picked path opens: the browser, standing in the directory the path
-// lives in with the path itself selected. A file is not a command and the wheel
-// is not an editor -- "open" for a file here means "show me it, where it
-// lives", which is the one thing a browser does better than a launcher.
 function pathPayload(path) {
   var p = String(path)
   if (p.charAt(p.length - 1) === "/") return JSON.stringify({ dir: p.slice(0, -1) })
@@ -531,22 +393,13 @@ function pathPayload(path) {
   return JSON.stringify({ dir: p.slice(0, cut) || "/", select: p.slice(cut + 1) })
 }
 
-// Every term somewhere in the path, the same narrowing search() does. Rows are
-// then ordered by where the match landed -- at the front of the name, inside
-// it, or only in some directory above it -- and then by the shorter name,
-// which is what floats `Wheel.qml` over `WheelSettingsDialog.qml`.
-//
-// Paths stay raw strings until a row wins. Building eighty thousand row objects
-// to hand back eight is the whole reason this does not reuse search(), and a
-// use count is not consulted at all: what you open from a launcher is whatever
-// you are working on this week, which is a worse predictor than the query.
+// Rank paths by name position and length; materialize rows only for winners.
 function fileRows(files, term, limit, home) {
   var src = files || NO_FILES
   var q = String(term || "").trim().toLowerCase()
   if (!q) return []
   var terms = q.split(/\s+/)
-  // Rank and name length are integer keys. Keep only the first `limit` ties
-  // in each bucket: later ties cannot appear in the first `limit` results.
+  // Later ties cannot enter the first `limit` results.
   var buckets = [[], [], []]
   for (var i = 0; i < src.lower.length; i++) {
     var low = src.lower[i]

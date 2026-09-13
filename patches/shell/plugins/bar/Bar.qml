@@ -90,17 +90,11 @@ Item {
   property bool tooltipShown: false
   property int tooltipRequest: 0
   property var activePopout: null
-  // The wash behind every open shell surface -- panels, the wheel, the browser.
-  // One value because it is one surface: see PanelScrim below.
+  // One wash behind every open shell surface.
   property color panelScrimColor: Color.menu.scrim
-  // How long the scrim outlives the last panel closing. Must stay >= the
-  // panel's closeFadeDuration (Ui/KeyboardPanel.qml) or the backdrop drops
-  // out from under a card that is still animating away.
+  // Keep at least as long as KeyboardPanel.closeFadeDuration.
   property int panelScrimHoldMs: 150
-  // Panels whose layer surface is actually mapped, not merely logically open.
-  // A panel's surface takes ~100ms to create, and the scrim's does not, so
-  // keying the scrim off `open` put the blurred backdrop on screen a tenth of
-  // a second before the card it belongs to.
+  // Count mapped surfaces so the scrim does not arrive before their cards.
   property int visiblePanelSurfaces: 0
 
   function panelSurfaceVisible(shown) {
@@ -674,9 +668,7 @@ Item {
     return slot ? String(slot.moduleName || "") : ""
   }
 
-  // Direction (-1/+1) of the most recent panel switch, read once by the
-  // incoming KeyboardPanel to pick which side it slides in from, then
-  // cleared by that read. 0 means "not a directional switch".
+  // Single-use direction for the incoming panel animation.
   property int lastSwitchDirection: 0
 
   function switchPanelFrom(owner, direction) {
@@ -1265,20 +1257,11 @@ Item {
     }
   }
 
-  // One full-screen wash owned by the bar, rather than one per panel. Panels
-  // are separate layer surfaces that unmap and remap as you tab between them,
-  // so a scrim living inside a panel blinks out mid-handoff and takes
-  // Hyprland's blur with it -- the backdrop visibly snaps sharp and back.
-  //
-  // Paint only: `mask` keeps it out of hit-testing, so outside-clicks still
-  // land on the panel's own dismissal surface above it.
+  // Bar ownership keeps the backdrop stable across panel handoffs.
   component PanelScrim: PanelWindow {
     id: scrimWindow
 
-    // `shown` trails `wanted` on the way out. A closing panel drops out of
-    // the count immediately but still has its fade and retreat to play, so
-    // releasing the scrim on that edge would pull the backdrop out from under
-    // a card still on screen -- which reads as the card lagging behind.
+    // Delay release until the closing card's fade completes.
     readonly property bool wanted: root.visiblePanelSurfaces > 0
     property bool shown: false
 
@@ -1303,11 +1286,7 @@ Item {
     mask: Region { width: 0; height: 0 }
 
     WlrLayershell.namespace: "omarchy-panel-scrim"
-    // Top, not Overlay. Panels are Overlay surfaces, and layer-shell orders
-    // Top strictly below Overlay -- so the card is guaranteed to sit above the
-    // scrim and stay unblurred. Putting both on Overlay and trying to separate
-    // them with a layer_rule `order` does not do this: the scrim came out on
-    // top and blurred the panel along with the desktop.
+    // Top sits strictly below Overlay panels and cannot blur their cards.
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
@@ -1318,11 +1297,7 @@ Item {
       right: true
     }
 
-    // Constant alpha, never animated. Fading it would change the layer
-    // surface's alpha every frame, making Hyprland recompute a fullscreen
-    // blur every frame -- and crossing ignore_alpha (0.05) partway would pop
-    // the blur in rather than bringing it with the scrim. The Hyprland side
-    // needs no_anim on this namespace for the same reason.
+    // Constant alpha avoids recomputing full-screen blur every frame.
     Rectangle {
       anchors.fill: parent
       color: root.panelScrimColor

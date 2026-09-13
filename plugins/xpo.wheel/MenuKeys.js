@@ -1,17 +1,9 @@
 .pragma library
 
-// The wheel's whole key map, in one function rather than in the dial it drives.
-// It decides which verb a key means; the wheel performs it. That is what lets
-// `tests/check.js` press a key without a running shell.
+// Keep the key map pure enough to exercise without a running shell.
 function onKey(wheel, event) {
-  // Editing the query the way any text field does. Ahead of the plain
-  // Backspace below, which ignores modifiers and would take
-  // Ctrl+Backspace one character at a time; these also arrive as control
-  // codes under " ", which the printable test at the end drops.
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
-    // The readline kills, either side of the caret. With the caret at the
-    // end -- where it is unless you moved it -- ctrl+u still clears.
     case Qt.Key_U:
       wheel.query = wheel.query.slice(wheel.queryAt); wheel.queryAt = 0
       event.accepted = true; return
@@ -19,7 +11,6 @@ function onKey(wheel, event) {
       wheel.query = wheel.query.slice(0, wheel.queryAt); event.accepted = true; return
     case Qt.Key_W:
     case Qt.Key_Backspace:
-      // The trailing space stays, so the next word does not need one.
       var kept = wheel.query.slice(0, wheel.queryAt).replace(/\S+\s*$/, "")
       wheel.query = kept + wheel.query.slice(wheel.queryAt)
       wheel.queryAt = kept.length; event.accepted = true; return
@@ -29,8 +20,6 @@ function onKey(wheel, event) {
     case Qt.Key_Y:
       if (!wheel.takePath()) return
       event.accepted = true; return
-    // The readline pair, on the one thing here that is a list -- the ring
-    // is a compass rather than a column, so there they fall through.
     case Qt.Key_N:
       if (wheel.searching) { wheel.moveResult(1); event.accepted = true }
       return
@@ -39,7 +28,6 @@ function onKey(wheel, event) {
       return
     }
   }
-  // One step at a time: the query, then the menu tree, then the screen.
   if (event.key === Qt.Key_Escape) {
     if (wheel.searching) wheel.query = ""
     else if (!wheel.up()) wheel.dismiss()
@@ -61,9 +49,6 @@ function onKey(wheel, event) {
   if (wheel.searching) {
     if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { wheel.moveResult(1); event.accepted = true; return }
     if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { wheel.moveResult(-1); event.accepted = true; return }
-    // Left and right carry the caret. Home and end stay on the list: it
-    // is the thing here with two ends, and stepping only wraps cheaply
-    // from the ends it is already standing on.
     if (event.key === Qt.Key_Left) { wheel.queryAt = Math.max(0, wheel.queryAt - 1); event.accepted = true; return }
     if (event.key === Qt.Key_Right) {
       wheel.queryAt = Math.min(wheel.query.length, wheel.queryAt + 1); event.accepted = true; return
@@ -75,15 +60,7 @@ function onKey(wheel, event) {
     }
   } else {
     switch (event.key) {
-    // Up and down jump: they name a place on the ring, the top slice and
-    // the bottom one. Found by bearing rather than fixed at 0 and 4 -- the
-    // ring is nine slices by default and any count once it is configured.
-    //
-    // Left and right step, always, including the first press. They used to
-    // jump to the east and west slice when nothing was selected yet, which
-    // read as the ring skipping a slice: from a wheel resting at the top,
-    // one press of right landed two slices along. Where they step from when
-    // nothing is selected is `rotate`'s to answer.
+    // Up/down choose by bearing; left/right step around any ring size.
     case Qt.Key_Up:       wheel.select(wheel.nearestSlice(0)); event.accepted = true; return
     case Qt.Key_Down:     wheel.select(wheel.nearestSlice(180)); event.accepted = true; return
     case Qt.Key_Right:    wheel.rotate(1); event.accepted = true; return
@@ -92,7 +69,6 @@ function onKey(wheel, event) {
     case Qt.Key_Backtab:  wheel.rotate(-1); event.accepted = true; return
     }
   }
-  // Anything else printable starts the query or lands in it at the caret.
   if (event.text && event.text.length === 1 && event.text >= " ") {
     wheel.insert(event.text)
     event.accepted = true

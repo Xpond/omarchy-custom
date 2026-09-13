@@ -1,8 +1,6 @@
 import QtQuick
 
-// The mark a first-party panel draws in the bar, loaded from the panel that
-// owns it. Tailscale's and Dropbox's are QML components rather than glyphs, so
-// there is no character to fall back to and no honest answer but to load them.
+// Load first-party panel marks that have no glyph equivalent.
 Loader {
   property string omarchyPath
   property string file

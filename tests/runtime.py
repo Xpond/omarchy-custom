@@ -52,7 +52,8 @@ Scope {
         command = ["sh", "-c", "sleep " + seconds + '; printf "/epoch-%s/file\\n" "$1"', "scan"]
         return (p[:p.index("    command:")] + "    command: " + json.dumps(command)[:-1]
                 + ", String(epoch)]\n" + p[p.index("    property int epoch:"):])
-    handlers = wheel[wheel.index("  property int scanEpoch:"):wheel.index("  // Listed once at startup:")]
+    handlers = wheel[wheel.index("  property int scanEpoch:"):wheel.index(
+        '  Process {\n    running: true\n    command: ["omarchy", "theme", "list"]')]
     run("scan-close-reopen", '''
   property bool opened: true
   property string mode: ""

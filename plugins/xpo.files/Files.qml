@@ -9,25 +9,7 @@ import qs.Ui
 import "FilesIndex.js" as FilesIndex
 import "FilesKeys.js" as FilesKeys
 
-// A directory browser that lives where the rest of the shell lives: one
-// overlay card, keyboard first, wearing the same [menu] tokens the wheel and
-// the clipboard do.
-//
-// It answers where is it, what is in it, and open it -- and then the things you
-// reach for once you are already looking at the file: edit it (ctrl+e), move or
-// copy it (ctrl+x, ctrl+c, ctrl+v), rename it (f2), make a file or a folder
-// beside it (ctrl+shift+n), name it to something else (ctrl+y), throw it away
-// (del). Each earns its place the same way: you are looking at the thing, and
-// acting on it should not cost you a terminal.
-//
-// Every one that writes can cost you data when it is wrong, so none of them are
-// quiet. Nothing is overwritten -- a taken name comes back as exit 17 and is
-// reported, never resolved by inventing one. A delete goes to the trash and is
-// asked twice in red. An edit only ever saves a file that was read whole, and
-// the save is confirmed by reading it back.
-//
-// There is still no undo beyond the trash; yazi is installed and does the rest
-// properly.
+// Keyboard-first browser rooted at $HOME. Writes never overwrite; deletes use trash.
 Item {
   id: root
 
@@ -38,14 +20,7 @@ Item {
   property bool opened: false
   // Absolute, and without a trailing slash except at the root itself.
   property string dir: Quickshell.env("HOME")
-  // A leading / or ~ turns the field from a name filter into a path. The
-  // directory being listed becomes whatever complete directory you have typed
-  // so far, and the tail you are still typing filters it -- so the list is a
-  // completion of the path as you write it.
-  //
-  // Both prefixes mean the same place, because home is the only root this
-  // panel has: `/xpo/omarchy` and `~/xpo/omarchy` are the same path. A leading
-  // slash is how you say "from the top" and the top here is $HOME.
+  // A leading / or ~ enters path completion; both are rooted at $HOME.
   property string filter: ""
   readonly property bool pathMode: root.filter.charAt(0) === "/"
                                    || root.filter.charAt(0) === "~"
@@ -55,24 +30,18 @@ Item {
     ? root.typedPath.slice(0, root.typedPath.lastIndexOf("/") + 1) : ""
   readonly property string typedLeaf: root.pathMode
     ? root.typedPath.slice(root.typedPath.lastIndexOf("/") + 1) : ""
-  // What the list is actually showing, which is the typed directory while a
-  // path is being written and `dir` the rest of the time. Jailed either way.
+  // The typed directory in path mode, jailed to $HOME either way.
   readonly property string listedDir: root.pathMode
     ? FilesIndex.within(root.typedDir, root.home) : root.dir
   property int index: 0
   property bool showHidden: false
-  // Name, newest, biggest. The listing prints a size and a date beside every
-  // name; a browser that cannot order by them is asking you to read the rows.
   property string order: "name"
   function cycleOrder() {
     root.order = FilesIndex.nextOrder(root.order)
     root.index = 0
   }
 
-  // Resolved when the panel opens and held while it is up, the way the wheel
-  // does it. Hyprland moves focus with the pointer, so a live binding would
-  // walk the surface onto another monitor while you are reading it. Matched by
-  // name, because this Quickshell's HyprlandMonitor carries no `screen`.
+  // Freeze the focused screen on open; pointer focus can otherwise move it.
   property var openScreen: null
   function focusedScreen() {
     var m = Hyprland.focusedMonitor
@@ -83,9 +52,7 @@ Item {
     return null
   }
 
-  // Hover claims the selection only on real cursor movement, for the reason
-  // Wheel.qml sets out at length: Qt synthesises a hover move whenever a row
-  // shifts under a stationary pointer, and a filtered list shifts constantly.
+  // Ignore Qt's synthetic hover moves when filtered rows shift under the pointer.
   property point hoverAt: Qt.point(-1, -1)
   function hoverMoved(pt) {
     if (root.editing) return false
@@ -94,22 +61,14 @@ Item {
     return true
   }
 
-  // Snapshotted rather than bound -- FolderListModel does not filter
-  // directories and sorts on one field. See FilesIndex.snapshot.
+  // FolderListModel cannot combine directory filtering with our ranking.
   property var entries: []
-  // What is actually narrowing the list: the tail of a path while one is being
-  // typed, the whole field when it is a plain name filter. The count reads off
-  // the same property, so "/Projects/" says 10 items rather than 10 of 10.
   readonly property string query: root.pathMode ? root.typedLeaf : root.filter
   readonly property var rows: FilesIndex.filtered(root.entries, root.query, root.order)
   readonly property var sel: root.index >= 0 && root.index < root.rows.length
     ? root.rows[root.index] : null
 
-  // What the preview is looking at: the selection once it has stopped moving.
-  // The list answers the arrow key on the frame it arrives; the preview does
-  // not, and following every row passed over meant reading a file, slicing five
-  // hundred lines out of it and laying them out for nothing. The same 60ms the
-  // highlighter already waits.
+  // Debounce preview work while the selection is moving.
   property var settledSel: null
   Timer {
     id: settle
@@ -119,20 +78,11 @@ Item {
   readonly property var crumbs: FilesIndex.crumbs(root.listedDir, root.home)
 
   // ------------------------------------------------------------- surfaces
-  //
-  // One ground for the whole card. The two columns are told apart by the space
-  // between them and by the rules that run under their headings -- not by a
-  // second fill or a second frame, which turn a card into two cards and make
-  // the preview look like a window that got dropped inside this one.
   readonly property color edge: Util.alpha(Color.menu.text, 0.13)
   readonly property color hoverFill: Util.alpha(Color.menu.text, 0.05)
   readonly property color activeFill: Util.alpha(Color.accent, 0.14)
 
-  // Both columns are sized in characters of the font they render, because that
-  // is the unit their contents actually come in: a name is about so many
-  // letters long, a line of code is about so many columns wide. A percentage of
-  // the display instead gives the preview a wider box than any line will fill,
-  // and the void on its right is the width nobody asked for.
+  // Size both columns in the characters they render.
   TextMetrics {
     id: nameMetrics
     font.family: Style.font.menuFamily
@@ -140,9 +90,6 @@ Item {
     text: "0"
   }
 
-  // The preview reads a step larger than the file names beside it. It is the
-  // only thing on this card you read rather than scan, and 12px of monospace
-  // set solid is what "smooshed" means.
   TextMetrics {
     id: codeMetrics
     font.family: Style.font.menuFamily
@@ -153,26 +100,16 @@ Item {
   readonly property int listWidth: Math.round(nameMetrics.advanceWidth * 34)
     + Style.font.iconLarge + Style.spacing.rowPaddingX * 2 + Style.spacing.md
   readonly property int previewWidth: Math.round(codeMetrics.advanceWidth * 100)
-  // Two characters of air between the numbers and the code, so the gutter is a
-  // margin rather than a column of digits crowding the first token of a line.
   readonly property int gutterGap: Math.round(codeMetrics.advanceWidth * 2)
 
   readonly property int rowHeight: Style.spacing.popupRowHeight + Style.spacing.md
-  // Fixed, and shared by the gutter and the body, so line 240 in the numbers
-  // sits on line 240 of the file. It is also the unit a keypress scrolls by.
-  // 1.75 is the leading a long block of code is comfortable at; below about
-  // 1.5 the descenders of one line start crowding the caps of the next.
+  // Shared by gutter, body, and keyboard scrolling to keep line numbers aligned.
   readonly property int lineHeight: Math.round(Style.font.subtitle * 1.75)
 
-  // Anything bigger is not a preview, it is a download. Read as text only
-  // after the size says it is worth opening at all.
   readonly property int previewLimit: 262144
   readonly property int previewLines: 500
   readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir
                                      && FilesIndex.isImage(root.settledSel.name)
-  // The pane caps its own decode at the size it draws, so the Image reports the
-  // size it painted, never the size on disk -- measured, not asked. A nicety
-  // rather than a dependency: no `identify`, no numbers, size and date stand.
   property string imageDims: ""
   Process {
     id: measurer
@@ -181,27 +118,18 @@ Item {
       onStreamFinished: root.imageDims = text.split("\n")[0].trim()
     }
   }
-  // Rendered rather than dumped: Qt draws Markdown itself, so headings are
-  // headings and `**bold**` is bold. Line numbers and a no-wrap column are
-  // right for code and wrong for prose, so both go away for these.
   readonly property bool showsMarkdown: !!root.settledSel && !root.settledSel.isDir
                                         && FilesIndex.isMarkdown(root.settledSel.name)
   readonly property string previewPath:
     (root.settledSel && !root.settledSel.isDir && !root.showsImage
      && root.settledSel.size <= root.previewLimit) ? root.settledSel.path : ""
-  // The file as it is on disk, held whole so editing has something truthful to
-  // save. `previewText` is the cut of it that gets drawn.
+  // Keep the full file for safe editing; only the preview is truncated.
   property string fullText: ""
   property bool utf8: false
   readonly property string previewText: FilesIndex.head(root.fullText, root.previewLines)
   onPreviewPathChanged: { root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = null }
 
-  // Colour comes from pygments rather than from a tokeniser written here. One
-  // process per settled selection buys every language it knows, correctly,
-  // against a hand-rolled pass that would get shell quoting wrong on its first
-  // day. One interpreter does the lexer lookup and the formatting together --
-  // naming the lexer with `pygmentize -N` was a second Python start, and a
-  // shell to pipe them a third.
+  // Highlight only the settled selection, in one Pygments process.
   property string previewHtml: ""
   readonly property string highlightScript:
     "import sys\n"
@@ -239,32 +167,22 @@ Item {
     }
   }
 
-  // Arrowing through a directory should not spawn a process per row.
   onPreviewTextChanged: {
     root.previewHtml = ""
     highlighter.running = false
     if (root.previewText && !root.showsMarkdown) highlightSoon.restart()
   }
 
-  // A folder's contents rendered in the same scroller a file's are. A second
-  // ListView would only be a second set of scrolling rules to keep in step
-  // with the first -- but where a file is one column of lines, a folder is a
-  // set of columns, filled down the pane and then across it.
+  // Fill folder previews down the pane, then across it.
   property var dirEntries: []
   readonly property bool showsDir: !!root.settledSel && root.settledSel.isDir
                                    && root.dirEntries.length > 0
-  // As many lines as the pane is tall, as many characters as it is wide: the
-  // listing is cut to the pane it is going into.
   readonly property int dirRows: Math.max(1, Math.floor(preview.paneHeight / root.lineHeight))
-  // A page of the list, one row kept for orientation the way the preview's
-  // page keeps a tenth of itself.
   readonly property int listPage: Math.max(1, Math.floor(list.view.height / root.rowHeight) - 1)
   readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
     ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400) : []
-  // A line of text sits at the top of its line box; a list row sits in the
-  // middle of a taller one. Without this the first file in the preview floats
-  // above the first file in the list.
+  // Align the first preview line with the centered text in the first list row.
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
     root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
@@ -272,27 +190,20 @@ Item {
       ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
                             Style.font.menuFamily, Style.font.subtitle)
       : ""
-  // Arming a delete follows the selection: arrow away and it is disarmed, so a
-  // second Del can never land on a row you did not aim it at.
+  // Changing selection disarms delete.
   onSelChanged: { settle.restart(); ops.doomed = "" }
-  // Cleared here rather than left for the model to overwrite: the child model
-  // only reports Ready, so between two folders the old folder's contents would
-  // otherwise sit under the new folder's name.
+  // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
     preview.resetScroll()
     root.dirEntries = []
     root.imageDims = ""
     measurer.running = false
-    // Asked of the selection, not of `showsImage` -- the stale-binding trap
-    // written out under `showsCode`.
     if (root.settledSel && !root.settledSel.isDir && FilesIndex.isImage(root.settledSel.name)) {
       measurer.command = ["identify", "-format", "%w×%h\n", root.settledSel.path]
       measurer.running = true
     }
   }
 
-  // Name on the left, facts on the right. What a preview pane owes you before
-  // you have read a byte of it is which file this is and how old.
   readonly property string metaLine:
     !root.settledSel ? ""
     : root.settledSel.isDir ? FilesIndex.countLabel(childFolder.count, childFolder.count, "", root.showHidden)
@@ -301,9 +212,7 @@ Item {
       + (root.settledSel.modified
          ? "  ·  " + Qt.formatDateTime(root.settledSel.modified, "d MMM yyyy") : "")
 
-  // The preview's fallback line, for everything that cannot draw itself: an
-  // empty directory, a filtered-out one, or a file whose bytes are no use on
-  // screen. Empty when something IS being shown.
+  // Empty while the preview has content of its own.
   readonly property string previewNote:
     root.editing ? ""
     : !root.settledSel ? (root.query ? "No match" : "Empty")
@@ -312,12 +221,7 @@ Item {
     : (root.showsImage && preview.imageStatus !== Image.Error) ? ""
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
 
-  // A payload may name where to start; everything else opens at home.
-  //
-  // Deliberately not "where you last were": a remembered directory is only
-  // valid until something moves, renames, unmounts or deletes it, and then the
-  // panel opens onto a path that no longer exists and shows an empty list with
-  // no hint of why. Home is the one directory that is always there.
+  // Payloads may choose a start; otherwise use the stable home directory.
   function open(payloadJson) {
     if (root.editing && (root.dirty || root.saving !== null)) {
       ops.note("save or discard the current edit first")
@@ -332,20 +236,13 @@ Item {
     root.pending = payload.select ? String(payload.select) : ""
     root.openScreen = root.focusedScreen()
     root.opened = true
-    // Reopening where you last were reloads nothing, so nothing announces the
-    // rows and only this call claims the name.
+    // Rows may already be loaded, so claim directly as well as onRowsChanged.
     Qt.callLater(function () { keys.forceActiveFocus(); root.claimPending() })
   }
 
-  // A name to land on once the directory has been read, which is how the wheel
-  // hands a file over: the browser opens where the file lives with the file
-  // itself selected, so the preview is showing it before you have touched a
-  // key. Cleared on arrival, so it claims the selection once and never again.
+  // A one-shot selection requested by the wheel handoff.
   property string pending: ""
-  // Cleared only once the name is found. Reopening at the directory already
-  // shown changes nothing -- same `dir`, same rows -- so `onRowsChanged` never
-  // fires and only `open`'s direct call gets here; clearing on a miss would
-  // throw the name away a frame before its rows arrive.
+  // Keep misses until asynchronous rows arrive.
   function claimPending() {
     if (!root.pending) return
     for (var i = 0; i < root.rows.length; i++) {
@@ -358,7 +255,6 @@ Item {
     }
   }
 
-  // Refused while an edit is unsaved, the click-outside shield included.
   function close() {
     if (!root.opened) return
     if (root.editing && root.dirty) { root.leaveEdit(); return }
@@ -366,15 +262,10 @@ Item {
     if (root.shell) root.shell.hide("xpo.files")
   }
 
-  // Closing lets go of what the preview was holding -- the file's bytes, the
-  // folder's entries, the image -- and cancels a settle that would otherwise
-  // read a directory for a panel nobody is looking at. Every open starts at
-  // home, so none of it would have been reused.
+  // Drop preview state and pending work when the panel closes.
   onOpenedChanged: {
     if (root.opened) {
-      // Closing drops the settled selection, so an open landing on the row it
-      // left on has no change to react to and would sit at "Empty" over a file
-      // that is right there.
+      // Rebuild a preview even when reopening on the same row.
       settle.restart()
     } else {
       settle.stop()
@@ -382,30 +273,22 @@ Item {
       root.editing = false
       root.dirty = false
       root.discarding = false
-      // A name half typed belongs to the file it was typed at. Left standing, the
-      // next open is in rename mode over row 0, one Return from the wrong file.
       root.naming = ""
     }
   }
   function toggle() { root.opened ? root.close() : root.open("{}") }
 
-  // Moving house: the filter belongs to the directory it was typed in, and
-  // carrying it into the next one hides everything on arrival.
   function enter(next) {
     var path = String(next).replace(/\/+$/, "")
     root.dir = FilesIndex.within(path || "/", root.home)
     root.filter = ""
     root.index = 0
-    // Walking somewhere yourself abandons a name that never turned up. `open`
-    // sets its own after calling this.
     root.pending = ""
   }
 
   function up() { root.enter(FilesIndex.parentOf(root.dir)) }
 
-  // Home is the floor, so backspace there has nowhere left to climb. Whether it
-  // has anywhere to go is the wheel's to answer, and to act on: it closes this
-  // panel itself when the press is a step back to it.
+  // At home, hand Backspace navigation to the wheel.
   function toWheel() {
     if (root.shell) root.shell.callIfLoaded("xpo.wheel", "back", "")
   }
@@ -416,29 +299,17 @@ Item {
     list.view.positionViewAtIndex(root.index, ListView.Contain)
   }
 
-  // Coarse moves land where they point rather than wrapping. A page that
-  // carried on past the end would leave you at the top of a directory you were
-  // walking down, which is the one place you already know how to reach.
   function goTo(i) {
     root.move(Math.max(0, Math.min(i, root.rows.length - 1)) - root.index)
   }
 
   // ------------------------------------------------------------------- edit
   //
-  // The one thing here that writes. Modal, because every printable key in this
-  // panel lands in the filter and nothing can type into a file and into a
-  // search box at once: while `editing` the whole keyboard goes to the editor
-  // and only escape and ctrl+s are kept.
-  //
-  // Plain source, because what the preview draws is a rendering -- pygments
-  // HTML, or Qt's markdown -- and editing a rendering saves the rendering.
+  // Editing is modal so printable keys cannot also reach the filter.
   property bool editing: false
   property bool dirty: false
   property bool saveError: false
-  // Only a file read whole: `head` cuts past 500 lines and marks the cut with
-  // an ellipsis, and saving that back would delete the rest of the file. The
-  // size test is what tells an empty file from a binary one, both of which
-  // arrive here as no text at all.
+  // Never edit a truncated or non-UTF-8 preview; saving it would lose data.
   readonly property bool editable: root.utf8 && !!root.previewPath && root.fullText === root.previewText
                                    && (!!root.fullText || root.settledSel.size === 0)
 
@@ -454,13 +325,8 @@ Item {
     preview.focusEditor()
   }
 
-  // Written and then read back: `FileView` emits neither `saved` nor
-  // `saveFailed` for a `setText`, and a write that fails on permissions only
-  // logs a warning nothing in QML hears. The disk is the only thing that can
-  // say. A reload in the same tick as the write is swallowed, hence the wait.
-  // The text on its way to disk, and null when none is. A string alone cannot
-  // say both: emptying a file saves "", which read as "nothing in flight" and
-  // skipped the whole read-back below.
+  // FileView does not report write failure, so verify from disk after a delay.
+  // null means idle; "" is a valid save in flight.
   property var saving: null
   function save() {
     if (!root.editing || root.saving !== null) return
@@ -473,8 +339,7 @@ Item {
 
   Timer { id: verifySave; interval: 150; onTriggered: previewFile.reload() }
 
-  // Escape leaves a clean editor at once and asks twice for a dirty one, the
-  // shape the filter already has.
+  // Escape asks twice before discarding a dirty edit.
   property bool discarding: false
   function leaveEdit() {
     if (root.dirty && !root.discarding) { root.discarding = true; discardArmed.restart(); return }
@@ -487,18 +352,8 @@ Item {
 
   Timer { id: discardArmed; interval: 2000; onTriggered: root.discarding = false }
   Timer { id: savedFlash; interval: 1500 }
-
-
   // ---------------------------------------------------------- rename, delete
-  //
-  // The filter chip becomes the name field: it is already a text box with a
-  // caret in it, sitting where the name reads, and a second one would be a
-  // second thing to learn. With a real caret, because renaming is mostly
-  // changing a few characters in the middle of a name you already have and a
-  // field you can only type at the end of makes you retype all of it.
-  //
-  // Two verbs share it, being the same act: naming a file that is already there,
-  // and naming one that is not. "rename", "new", or "" for neither.
+  // Rename and create share the header's editable name field.
   property string naming: ""
   property string renameTo: ""
   property int renameAt: 0
@@ -506,16 +361,11 @@ Item {
   function beginRename() {
     if (!root.sel || root.editing) return
     root.renameTo = root.sel.name
-    // On the stem, before the extension, because that is the part being
-    // changed nine times out of ten.
     var dot = root.renameTo.lastIndexOf(".")
     root.renameAt = dot > 0 ? dot : root.renameTo.length
     root.naming = "rename"
   }
 
-  // The one gap the "browser, not a manager" line left that a browser trips
-  // over: you have walked to where the thing belongs, and making it there is the
-  // last reason to open a terminal.
   function beginNew() {
     if (root.editing) return
     root.renameTo = ""
@@ -546,9 +396,7 @@ Item {
       case Qt.Key_K: root.renameTo = t.slice(0, at); return
       case Qt.Key_A: root.renameAt = 0; return
       case Qt.Key_E: root.renameAt = t.length; return
-      // A name is text like any other, and a path is the likeliest thing to be
-      // on the clipboard while you are renaming. Separators come out: what
-      // goes in this field is a name.
+      // Pasted paths become plain names.
       case Qt.Key_V:
         var clip = String(Quickshell.clipboardText || "").replace(/[\s\/]+/g, " ").trim()
         root.renameTo = t.slice(0, at) + clip + t.slice(at)
@@ -567,16 +415,11 @@ Item {
     var verb = root.naming
     var name = root.renameTo.trim()
     root.naming = ""
-    // A new thing is whatever its name says it is: a dot in it is an extension,
-    // and an extension is what a file has. A trailing mark overrides that either
-    // way -- `/` for the folder whose name holds a dot, `.` for the file with no
-    // extension -- and neither can be part of a name, so neither costs anything.
+    // `/` forces a folder and `.` forces a file; otherwise infer from extension.
     var slashed = verb === "new" && name.slice(-1) === "/"
     var dotted = verb === "new" && !slashed && name.slice(-1) === "."
     if (slashed || dotted) name = name.slice(0, -1).trim()
     if (!name) return
-    // A name is a name. Anything with a separator in it is a move being asked
-    // for in the wrong field, and moving is what ctrl+x is for.
     if (name.indexOf("/") !== -1) { ops.note("a name cannot hold a /"); return }
     if (verb === "new") {
       var folder = slashed || (!dotted && name.indexOf(".") < 0)
@@ -590,10 +433,6 @@ Item {
     ops.run(ops.guarded("mv", e.path, ops.inHere(name)),
              { name: name, land: true, done: "renamed to " + name, fail: "rename failed" })
   }
-
-
-
-
   FilesOps { id: ops; panel: root }
   readonly property alias held: ops.held
   readonly property alias fileNote: ops.fileNote
@@ -601,8 +440,6 @@ Item {
   readonly property alias doomedName: ops.doomedName
   readonly property alias danger: ops.danger
 
-  // The list is rebuilt when the directory changes, when it finishes reading,
-  // and when hidden files are toggled -- all three arrive as one of these two.
   FolderListModel {
     id: folder
     folder: "file://" + root.listedDir
@@ -610,9 +447,7 @@ Item {
     showDotAndDotDot: false
     showHidden: root.showHidden
     sortField: FolderListModel.Name
-    // Both, and both gated: a load raises count on its way to Ready, and a
-    // file appearing under an open panel raises it after. Ungated, every
-    // directory was snapshotted twice and flashed empty in between.
+    // Ready gates both initial loads and later count changes.
     onStatusChanged: if (status === FolderListModel.Ready) root.entries = FilesIndex.snapshot(folder)
     onCountChanged: if (status === FolderListModel.Ready) root.entries = FilesIndex.snapshot(folder)
   }
@@ -637,13 +472,12 @@ Item {
     id: previewFile
     path: root.previewPath
     printErrors: false
-    // Through a temporary and renamed into place, so a write that dies half way
-    // leaves the old file rather than half of a new one.
+    // Preserve the old file if a write stops partway.
     atomicWrites: true
     onLoaded: {
       root.utf8 = FilesIndex.isUtf8(data())
       root.fullText = FilesIndex.looksBinary(text()) ? "" : text()
-      // The read-back half of a save. Typing during the wait leaves it dirty.
+      // Typing during save verification leaves the editor dirty.
       if (root.saving !== null) {
         root.saveError = root.fullText !== root.saving
         root.dirty = root.saveError || FilesIndex.endLine(preview.editorText) !== root.saving
@@ -654,8 +488,6 @@ Item {
     onLoadFailed: root.fullText = ""
   }
 
-  // Clamped rather than left pointing past the end: typing narrows the list
-  // under a standing selection without the selection having moved.
   onRowsChanged: {
     if (root.index >= root.rows.length) root.index = 0
     root.claimPending()
@@ -672,9 +504,7 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    // The backdrop is the bar's one scrim, shared with the wheel and every
-    // panel, so a handover never takes the blur down with it. Wheel.qml holds
-    // the reasoning.
+    // Share the bar scrim so panel handoffs do not flash the desktop.
     onVisibleChanged: {
       var bar = root.shell && root.shell.bar
       if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
@@ -684,35 +514,19 @@ Item {
 
     BorderSurface {
       anchors.centerIn: parent
-      // As wide as its two columns need and no wider; as tall as the screen
-      // will comfortably give, because a directory listing always wants more
-      // rows and a preview always wants more lines.
       width: Math.min(root.listWidth + root.previewWidth + Style.spacing.huge
                       + Style.spacing.lg * 2 + Style.spacing.panelPadding * 2,
                       surface.width * 0.92)
       height: Math.min(Style.space(900), surface.height * 0.80)
-      // Far past `Style.cornerRadius`, which follows Hyprland's own rounding
-      // and is a square corner on plenty of setups. This panel is the one
-      // surface here that cannot be a capsule, so its radius is what has to
-      // carry the resemblance to the ring it was opened from.
       radius: Style.space(24)
-      // Nearly opaque rather than fully. Text over a moving desktop is what
-      // reads as unsharp, so the blur comes through only far enough to stop
-      // the panel being a slab and make it the same membrane the discs are --
-      // the wheel's own 0.85 would put the wallpaper into the file names.
       color: Util.alpha(Color.menu.background, 0.94)
       borderSpec: Border.flat(root.edge, Style.spacing.hairline)
 
-      // Ahead of the rows so their own areas still take what lands on them,
-      // and only the padding around them reaches the dismiss handler.
       MouseArea { anchors.fill: parent; onClicked: {} }
 
       Item {
         id: keys
         anchors.fill: parent
-        // Even padding, except at the foot: the hints are chrome rather than
-        // content, and a full column of air under one line of 10px type is the
-        // space that reads as a mistake.
         anchors.margins: Style.spacing.panelPadding
         anchors.bottomMargin: Style.spacing.xl
         focus: true
@@ -743,6 +557,7 @@ Item {
           FilesList {
             id: list
             panel: root
+            operations: ops
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
             width: root.listWidth
           }
@@ -760,7 +575,6 @@ Item {
 
         Rectangle {
           id: footRule
-          // The same air above the words as below them.
           anchors {
             bottom: hints.top; bottomMargin: Style.spacing.xl
             left: parent.left; right: parent.right

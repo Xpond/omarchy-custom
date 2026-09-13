@@ -740,10 +740,7 @@ ShellRoot {
     if (!manifest || manifest.__isFirstParty) return shell
     var key = String(manifest.id || "")
     if (!key) return null
-    // The `xpo.` namespace is this machine's own code, symlinked in from a
-    // local checkout. 4.0.3 scopes every plugin scanned outside the packaged
-    // plugins directory to its own id, which leaves an overlay built to launch
-    // OTHER plugins with nothing it may call -- see centered-panels.md.
+    // Local xpo plugins need the host shell to launch other plugins.
     if (key.indexOf("xpo.") === 0) return shell
     return shell.createScopedPluginShell(manifest, key, true, shell.pluginHasBarCapabilities(manifest))
   }

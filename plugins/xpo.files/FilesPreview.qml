@@ -2,13 +2,7 @@ import QtQuick
 import qs.Commons
 import "FilesIndex.js" as FilesIndex
 
-// What the selection is, without opening it. A directory shows what is inside,
-// an image shows itself, and text shows its top; anything else has only its
-// name and size to give, and says so rather than drawing a screen of mojibake.
-//
-// This owns the scroller and the editor inside it, so the panel asks for
-// movement rather than reaching into a Flickable: scrollBy, keepPlace, and the
-// editor verbs are the whole of the surface between them.
+// Preview and edit the selected entry through one shared scroller.
 Item {
   id: root
 
@@ -17,13 +11,8 @@ Item {
 
   readonly property real pageStep: scroller.height * 0.9
   readonly property real panStep: Style.space(60)
-  // The scroller's own box, not this Item's: the two differ by the margins the
-  // text is inset by, and the directory listing lays its columns out in
-  // characters that have to fit the narrower one.
   readonly property real paneWidth: scroller.width
   readonly property real paneHeight: scroller.height
-  // An id belongs to the document it is written in, so the panel's fallback
-  // note cannot reach `scrollerImage` and is handed what it asks of it.
   readonly property int imageStatus: scrollerImage.status
   property alias editorText: editor.text
   readonly property string lineNumbers:
@@ -42,17 +31,12 @@ Item {
 
   function resetScroll() { scroller.contentY = 0; scroller.contentX = 0 }
 
-  // The two ends, as the fraction `keepPlace` already thinks in.
   function scrollTo(fraction) {
     scroller.contentY = fraction * Math.max(0, scroller.contentHeight - scroller.height)
     scroller.contentX = 0
   }
 
-  // Where you were reading, kept across the switch between the rendering and
-  // the source. The two have nothing like the same height, so the offset cannot
-  // be carried but the fraction of the way down can. Applied when the scroller
-  // re-measures: at the moment the mode flips, contentHeight is still the
-  // other mode's.
+  // Preserve relative scroll position while rendered and editable heights change.
   property real pendingAt: -1
   function keepPlace() {
     root.pendingAt = Util.clamp(scroller.contentY
@@ -63,8 +47,6 @@ Item {
     scroller.contentY = root.pendingAt * Math.max(0, scroller.contentHeight - scroller.height)
     scroller.contentX = 0
     root.pendingAt = -1
-    // The caret lands on the line you were reading, so the first thing you
-    // type goes where you were looking.
     if (panel.editing)
       editor.cursorPosition = editor.positionAt(0, Math.max(0, scroller.contentY - panel.dirTopPad + 2))
   }
@@ -87,16 +69,9 @@ Item {
     else if (left + r.width > scroller.contentX + scroller.width)
       root.scrollAcross(left + r.width - scroller.contentX - scroller.width + Style.space(40))
   }
-
-
-  // No wrapping: a wrapped line is one the numbers beside it stop
-  // agreeing with, and code read at the wrong margins is worse than
-  // code read short. What runs off the edge is reachable by
-  // dragging, or by Shift and an arrow.
+  // Keep code unwrapped so line numbers stay aligned.
   Flickable {
     id: scroller
-    // Neither the numbers nor the prose should start hard against
-    // the edge the column was cut at.
     anchors {
       top: parent.top; bottom: parent.bottom
       left: parent.left; leftMargin: Style.spacing.lg
@@ -104,10 +79,7 @@ Item {
     }
     visible: panel.showsDir || !!panel.previewBody || panel.editing
     contentWidth: panel.showsDir ? folderView.width : content.width
-    // The content sits `dirTopPad` down the scroller, so its height
-    // is not the height of what is being scrolled: uncounted, the
-    // last line of the file cannot be reached. Counted twice, so the
-    // closing line gets the air the opening one stands in.
+    // Include both vertical insets so the last line remains reachable.
     contentHeight: (panel.showsDir ? folderView.height : content.height)
                    + panel.dirTopPad * 2
     onContentHeightChanged: root.takePlace()
@@ -115,10 +87,6 @@ Item {
     boundsBehavior: Flickable.StopAtBounds
     clip: true
 
-    // The folder, in columns, starting where the pane starts. It is
-    // the width of the facts that fills a pane, not the position of
-    // the block: centred, the space between the two columns of the
-    // card read as a channel of dead ground.
     Row {
       id: folderView
       visible: panel.showsDir
@@ -145,8 +113,6 @@ Item {
     Row {
       id: content
       visible: !panel.showsDir
-      // The same nudge the folder gets, so arrowing from a folder to
-      // a file does not step the preview up the page.
       y: panel.dirTopPad
       spacing: panel.gutterGap
 
@@ -158,11 +124,7 @@ Item {
         color: Color.menu.text
         opacity: 0.32
         font.family: Style.font.menuFamily
-        // TextEdit carries no lineHeight, so an edited file is set at
-        // the font's own leading -- which follows its size, so the
-        // gutter has to be set at the size it is numbering or the two
-        // drift apart down the page. The preview's fixed rhythm does
-        // that job itself, and lets the numbers be smaller there.
+        // Match the gutter rhythm to editable text or fixed-height preview code.
         font.pixelSize: panel.editing ? Style.font.subtitle : Style.font.bodySmall
         renderType: Text.NativeRendering
         lineHeightMode: panel.editing ? Text.ProportionalHeight : Text.FixedHeight
@@ -192,8 +154,6 @@ Item {
         text: panel.previewBody
         color: Color.menu.text
         opacity: 0.92
-        // Prose wraps to the pane and flows; code keeps its own line
-        // breaks and scrolls sideways past the edge.
         width: panel.showsMarkdown ? scroller.width : implicitWidth
         wrapMode: panel.showsMarkdown ? Text.Wrap : Text.NoWrap
         textFormat: panel.showsMarkdown ? Text.MarkdownText
@@ -201,12 +161,7 @@ Item {
                     : Text.PlainText
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.subtitle
-        // Hinted against the pixel grid rather than distance-field
-        // sampled. It is what makes small monospace look set rather
-        // than printed slightly out of focus.
         renderType: Text.NativeRendering
-        // A rendered heading is taller than a line of body text and
-        // has to be allowed to be; only code wants a fixed rhythm.
         lineHeightMode: panel.showsMarkdown ? Text.ProportionalHeight
                                            : Text.FixedHeight
         lineHeight: panel.showsMarkdown ? 1.0 : panel.lineHeight
@@ -214,8 +169,6 @@ Item {
     }
   }
 
-  // The only thing that tells you there is more below, and where in
-  // it you are standing.
   Rectangle {
     anchors.right: parent.right
     visible: scroller.visible && scroller.contentHeight > scroller.height + 1
@@ -231,8 +184,7 @@ Item {
   Image {
     id: scrollerImage
     anchors.fill: parent
-    // A format Qt has no plugin for, or a corrupt file, must fall
-    // through to the note rather than leaving an empty frame.
+    // Unsupported or corrupt images fall through to the preview note.
     visible: panel.showsImage && status !== Image.Error
     source: panel.showsImage ? "file://" + panel.settledSel.path : ""
     fillMode: Image.PreserveAspectFit

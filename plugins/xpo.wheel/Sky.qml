@@ -7,20 +7,16 @@ import QtQuick.Shapes
 Item {
   id: sky
 
-  // One day per phase unit; never wrap it, so interpolation stays smooth.
+  // One day per phase unit; leave it unwrapped for smooth interpolation.
   required property real phase
-  // Follows the mark's sustained-spin reveal and release fade.
   required property real reveal
 
   // The sun rises on the left, passes overhead, and sets on the right.
   readonly property real elevation: Math.sin(phase * 2 * Math.PI)
   readonly property real azimuth: -Math.cos(phase * 2 * Math.PI)
-  // Only what is above the horizon lights the sky.
   readonly property real light: Math.max(0, elevation)
-  // Twilight straddles the horizon: colour lingers after sunset, and the
-  // haze softens stars while they are still visible before full daylight.
+  // Twilight straddles the horizon.
   readonly property real dusk: Math.exp(-Math.pow(elevation / 0.45, 2))
-  // The sun's glow persists briefly below the horizon; the moon rises after it.
   readonly property real glow: Math.max(0, Math.min(1, elevation + 0.35))
   readonly property real moon: Math.max(0, Math.min(1, (-elevation - 0.10) / 0.55))
 
@@ -31,8 +27,7 @@ Item {
   readonly property vector2d sunPosition: bodyPosition(1)
   readonly property vector2d moonPosition: bodyPosition(-1)
 
-  // Hand lighting from sun (+1) to moon (-1), passing through frontal light
-  // at the horizon. Negative shader X means left; negative Y means above.
+  // Move bevel lighting from sun to moon through frontal light at the horizon.
   readonly property real keyFacing: Math.max(-1, Math.min(1, elevation * 3))
   readonly property vector2d keyDirection: Qt.vector2d(0.70 * keyFacing * azimuth,
                                                        -0.70 * keyFacing * elevation)
@@ -46,27 +41,22 @@ Item {
 
   readonly property color nightColor: Qt.rgba(0.04, 0.05, 0.11, 1)
   readonly property color dayColor: Qt.rgba(0.38, 0.60, 0.92, 1)
-  // Azimuth distinguishes morning from evening without a branch at midnight.
-  // Below the horizon is violet; rising through it brings rose, then gold.
+  // Azimuth distinguishes morning from evening without branching at midnight.
   readonly property real evening: (azimuth + 1) / 2
   readonly property real twilightRise: Math.max(0, Math.min(1, (elevation + 0.30) / 0.65))
   readonly property color dawnColor: sky.mix(
     sky.mix(Qt.rgba(0.30, 0.20, 0.52, 1), Qt.rgba(0.90, 0.48, 0.57, 1), Math.min(1, twilightRise * 2)),
     Qt.rgba(1, 0.84, 0.56, 1), Math.max(0, twilightRise * 2 - 1))
-  // Sunset walks this backwards: gold into copper, leaving purple afterglow.
   readonly property color sunsetColor: sky.mix(
     sky.mix(Qt.rgba(0.29, 0.12, 0.42, 1), Qt.rgba(0.93, 0.36, 0.17, 1), Math.min(1, twilightRise * 2)),
     Qt.rgba(1, 0.69, 0.36, 1), Math.max(0, twilightRise * 2 - 1))
   readonly property color twilightColor: sky.mix(dawnColor, sunsetColor, evening)
-  // Low light is the colour of the light it is carrying; high light burns pale.
   readonly property color glowColor: sky.mix(twilightColor, Qt.rgba(1, 0.93, 0.78, 1), light * light)
 
-  // The bevel borrows the light's colour while the mark keeps its own pigment.
-  // Moonlight is cooler and weaker, with the same smooth handover as direction.
+  // Moonlight is cooler and weaker than sunlight.
   readonly property color keyColor: sky.mix(glowColor, Qt.rgba(0.68, 0.79, 1, 1), Math.max(0, -keyFacing))
   readonly property real keyStrength: 1 - 0.28 * Math.max(0, -keyFacing)
 
-  // The sky itself: what colour the air is, with no light in it yet.
   readonly property color zenith: sky.mix(nightColor, dayColor, light * 0.62)
   readonly property color horizon: sky.mix(sky.mix(nightColor, dayColor, light), twilightColor, dusk)
 
@@ -81,16 +71,13 @@ Item {
     }
   }
 
-  // Both lights use the same radial falloff and shared screen positions.
   component Body: Shape {
     id: body
-    // +1 the sun's end of the arc, -1 the moon's.
     required property real side
-    // How much screen it gets, already faded by how far up it is.
     required property real amount
     required property real spread
     required property color core
-    // Fade to the same halo RGB at zero alpha to avoid a coloured rim.
+    // Keep halo RGB at zero alpha to avoid a colored rim.
     required property color halo
     required property real edge
 
@@ -121,7 +108,6 @@ Item {
     }
   }
 
-  // Broad, warm sunlight; twilight strengthens its glow.
   Body {
     side: 1
     amount: sky.glow * (0.36 + 0.24 * sky.dusk)
@@ -131,7 +117,6 @@ Item {
     edge: 0.30
   }
 
-  // Smaller, cooler moonlight.
   Body {
     side: -1
     amount: sky.moon * 0.30

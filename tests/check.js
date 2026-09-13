@@ -115,6 +115,16 @@ const busy = { root: { note: text => calls.push(text) }, filer: { running: true 
 method(opsSource, "run", busy)(["cp"], {})
 assert.equal(busy.root.op, undefined)
 assert.match(calls.at(-1), /still running/)
+
+const listSource = read("plugins/xpo.files/FilesList.qml")
+const clickHandler = listSource.match(/onClicked:\s*([^\n]+)/)[1]
+const activated = []
+new Function("operations", "panel", "entry", clickHandler)(
+  { activate: entry => activated.push(entry) }, {}, { modelData: { name: "picked" } })
+assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not activate it")
+assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
+  "Files.qml does not hand its operations object to the list")
+
 const wheel = { root: { countUse() {}, dismiss() {}, slices: [], path: [], shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }

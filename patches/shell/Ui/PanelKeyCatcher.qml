@@ -52,10 +52,7 @@ Item {
     if (event.key === Qt.Key_Escape) {
       closeRequested(); event.accepted = true; return
     }
-    // Escape is the way out; backspace is the way back, when there is anywhere
-    // to go back to. A panel cannot tell whether the wheel or its own bar
-    // button opened it, so it does not try -- it asks the wheel, which takes
-    // the panel away itself when the answer is yes and ignores it when not.
+    // Let the wheel decide whether this panel has somewhere to return to.
     if (event.key === Qt.Key_Backspace) {
       Util.execDetached("omarchy-shell -q shell call xpo.wheel back ''")
       event.accepted = true
@@ -66,9 +63,7 @@ Item {
       event.accepted = true
       return
     }
-    // Ctrl+Left/Right walks between panels. Bare arrows stay with the panel
-    // itself -- in the monitor panel they drive the brightness/text-size
-    // sliders and the scale buttons, so taking them would cost that control.
+    // Preserve bare arrows for panel controls; Ctrl+arrows switch panels.
     if ((event.modifiers & Qt.ControlModifier)
         && (event.key === Qt.Key_Right || event.key === Qt.Key_Left)) {
       tabRequested(event.key === Qt.Key_Right ? 1 : -1)

@@ -46,14 +46,8 @@ PanelWindow {
   property int contentHeight: Style.space(200)
   property var borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
   property bool centerOnBar: false
-  // Center the card on the screen instead of tucking it against the bar edge
-  // next to its widget. The surface is already full-screen, so this only moves
-  // the card inside it.
+  // Center the card inside its existing full-screen surface.
   property bool centerOnScreen: true
-  // Entry/exit motion. The card enters from its button's direction over a
-  // short capped distance, with a scale change small enough that its text and
-  // sliders do not visibly deform on the way -- scaling far enough to read as
-  // "out of a 26px button" stretches the contents, which is what looks cheap.
   property int openMotionDuration: 260
   property int closeMotionDuration: 150
   property int fadeDuration: 180
@@ -86,10 +80,7 @@ PanelWindow {
     else root.open = false
   }
 
-  // Tell the bar when this panel's surface is genuinely on screen, so the
-  // scrim can appear with the card instead of ahead of it. Counted up only
-  // once the compositor has mapped us; counted down as soon as we close, so
-  // the scrim's hold covers the fade rather than trailing it.
+  // Count mapped panel surfaces for the shared bar scrim.
   property bool surfaceCounted: false
 
   function syncSurfaceCount() {
@@ -103,10 +94,7 @@ PanelWindow {
     if (open && backingWindowVisible) focusPrimeTimer.restart()
   }
 
-  // Guards startEntryMotion to once per open: both the `open` edge and the
-  // surface-mapped edge call in, and either can be the one that lands second.
-  // lastSwitchDirection is single-use -- reading it clears it, so a later
-  // mouse-driven switch cannot inherit a stale direction from a keyboard one.
+  // Both open and map edges call this; play once and consume switch direction.
   property bool entryPlayed: false
 
   function startEntryMotion() {
@@ -118,9 +106,6 @@ PanelWindow {
       bar.lastSwitchDirection = 0
     }
     if (popoutSwitching && dir !== 0) {
-      // Handoff: flat horizontal slide, no scaling. The card is already on
-      // screen and only its contents change, so scaling it here would read as
-      // a second, competing open.
       card.slideX = dir * maxTravel
       card.slideY = 0
       card.originScale = 1
@@ -132,8 +117,6 @@ PanelWindow {
     entryMotion.restart()
   }
 
-  // Retreat toward the owning button. Skipped during a handoff, where the
-  // outgoing card is replaced rather than dismissed.
   function startExitMotion() {
     exitX.to = offsetToAnchor.x
     exitY.to = offsetToAnchor.y
@@ -164,9 +147,6 @@ PanelWindow {
     ? (focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
     : WlrKeyboardFocus.None
 
-  // The usual path: `open` flips, Qt creates the layer surface, and the
-  // compositor maps it some frames later. This is the first moment the card is
-  // actually on screen, so it is the only honest moment to start moving it.
   onBackingWindowVisibleChanged: {
     beginFocusPrime()
     syncSurfaceCount()
@@ -263,11 +243,7 @@ PanelWindow {
   // centering the card under the icon.
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
-  // Centre of the bar button that owns this panel, in surface coordinates.
-  // The parallel axis (along the bar) uses the anchor's own position; the
-  // perpendicular one uses the bar window's thickness, for the same reason
-  // cardOrigin does -- the anchor's position on that axis has the bar's
-  // internal layout padding baked in.
+  // Center of the owning bar button in surface coordinates.
   readonly property point anchorCenter: {
     anchorWatcher.transform  // reactive dependency
     if (barPos === "bottom") return Qt.point(anchorScreenPos.x + anchorW / 2, screenH - barH / 2)
@@ -276,14 +252,8 @@ PanelWindow {
     return Qt.point(screenW - barW / 2, anchorScreenPos.y + anchorH / 2)
   }
 
-  // A short offset pointing at the owning button, rather than all the way to
-  // it. Same direction as the full journey, a fraction of the distance and
-  // capped, so the card enters from the right side without the visible trip.
+  // Short, capped entry offset toward the owning button.
   readonly property point offsetToAnchor: {
-    // A centered card has no owning corner to come from: aiming it at the bar
-    // button means it flies in from whichever edge that widget sits on, which
-    // reads as wrong when the card lands dead center. Centered panels emerge
-    // in place on scale and opacity alone.
     if (centerOnScreen) return Qt.point(0, 0)
     var dx = anchorCenter.x - (cardOrigin.x + contentWidth / 2)
     var dy = anchorCenter.y - (cardOrigin.y + contentHeight / 2)
@@ -345,10 +315,7 @@ PanelWindow {
       popoutSwitchClosing = false
       popoutSwitching = bar.activePopout && bar.activePopout !== coordinatorKey
       bar.requestPopout(coordinatorKey)
-      // Only if the surface is already mapped -- otherwise wait for it. An
-      // entry animation started here would run to completion against a window
-      // the compositor has not shown yet, and the user would see only whatever
-      // fraction of it survives the map latency.
+      // Wait for the map edge before animating an unmapped surface.
       if (popoutSwitching) popoutSwitchTimer.restart()
       if (backingWindowVisible) startEntryMotion()
       syncSurfaceCount()
@@ -373,8 +340,6 @@ PanelWindow {
     onTriggered: if (root.open) root.focusPrimed = true
   }
 
-  // One curve across all three properties, so the card moves as a rigid
-  // object. Splitting x and y to bend the path only reads over long travel.
   ParallelAnimation {
     id: entryMotion
     NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
@@ -382,9 +347,6 @@ PanelWindow {
     NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
   }
 
-  // Out curves, not the In curves that would mirror the entry. A dismissal
-  // has to leave promptly: InQuint covers 3% of the distance by the halfway
-  // point, so the card hangs still while the fade runs and then jumps.
   ParallelAnimation {
     id: exitMotion
     NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
@@ -522,14 +484,12 @@ PanelWindow {
     radius: Style.cornerRadius
     opacity: root.open || root.popoutSwitching ? 1.0 : 0
 
-    // Offset from the resting position, animated to zero on open. Kept as a
-    // transform so it never fights the x/y bindings on cardOrigin.
+    // Transform offsets avoid fighting cardOrigin bindings.
     property real slideX: 0
     property real slideY: 0
     property real originScale: 1
 
-    // Scale about the card's own centre, then translate. Listed order is
-    // application order; reversed, the scale would shrink the offset too.
+    // Scale before translation so scale does not shrink the offset.
     transform: [
       Scale {
         origin.x: card.width / 2
@@ -540,13 +500,8 @@ PanelWindow {
       Translate { x: card.slideX; y: card.slideY }
     ]
 
-    // Shorter than the motion but eased so the card is essentially opaque by
-    // the time it arrives. A fade that finishes far earlier reads as a pop
-    // followed by a slide.
     Behavior on opacity {
       enabled: !root.popoutSwitching && !root.popoutSwitchClosing
-      // Asymmetric on purpose: `open` is already false by the time this is
-      // evaluated for a close, so the shorter close duration applies there.
       NumberAnimation { duration: root.open ? root.fadeDuration : root.closeFadeDuration; easing.type: Easing.OutQuad }
     }
 
