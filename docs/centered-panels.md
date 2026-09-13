@@ -19,7 +19,7 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 
 ```bash
 ~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
-~/xpo/omarchy-custom/revert.sh    # restore recorded QML and remove managed desktop setup
+~/xpo/omarchy-custom/revert.sh    # restore Omarchy's QML and remove managed desktop setup
 ```
 
 `install.sh` needs a sudo password, so it must be run from a terminal
@@ -54,25 +54,27 @@ the repo.
 **Re-applying is not just copying.** An update may ship a new version of a
 patched file (4.0.2 changed `Bar.qml`: added an `omarchy.bar` IpcHandler and
 `textFormat: Text.PlainText` on the tooltip). Blindly restoring our copy would
-have discarded both without a word. So `install.sh` compares each installed
-file against `orig/`:
+have discarded both without a word. So `install.sh` checks each installed
+file against pacman's checksum for the installed package and against this
+checkout's patch history:
 
-| Installed matches | Action |
+| Installed file is | Action |
 |---|---|
 | `shell/` | already patched — skip |
-| recorded installed patch | our previous version — update without replacing its backup |
-| `orig/` | upstream unchanged — copy the patch in |
-| neither | new upstream version — **three-way merge**, then re-baseline `orig/` |
+| any recorded or committed version of our patch | our previous version — replace it |
+| stock, same as `orig/` | upstream unchanged — copy the patch in |
+| stock, different from `orig/` | new upstream version — **three-way merge**, then re-baseline `orig/` |
+| anything else | changed outside this project — left untouched and reported |
 
 A merge that conflicts leaves the installed file untouched, reports
 it on stderr *and* via `notify-send`, and exits non-zero so the hook logs
 `Hook failed`. It never writes conflict markers into a QML file — that would
 break the entire shell, which is far worse than losing the patch.
 
-Restore snapshots live in `~/.local/state/omarchy-custom/`, separately from the
-checkout's merge bases. Revert restores only recorded, unchanged patches;
-later edits and untracked legacy patches remain in place and produce an error.
-See the [installation and restore rules](../README.md#use).
+`revert.sh` writes stock back only over files that are ours, and only bytes
+matching pacman's checksum: `orig/` when it matches, otherwise the file from the
+cached package. Anything else stays in place and produces an error. See the
+[install and revert summary](../README.md#revert).
 
 ---
 

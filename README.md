@@ -41,10 +41,10 @@ points to it.
 ./revert.sh
 ```
 
-Removes the hook, plugins, Hyprland block and helper links it created, restores
-the original shell files, and restarts the shell. A file edited since
-installation is left untouched and reported, and its backup in
-`~/.local/state/omarchy-custom/` is kept.
+Removes the hook, plugins, Hyprland block and helper links, puts back Omarchy's
+original shell files, and restarts the shell. Originals are checked against
+pacman's checksums before they are written, and a shell file changed outside
+this project is left untouched and reported.
 
 ## Why sudo
 

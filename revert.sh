@@ -1,11 +1,12 @@
 #!/bin/bash
-# Remove installed plugins and restore this machine's unchanged shell patches.
+# Remove installed plugins and put back Omarchy's own shell files where ours are installed.
 set -euo pipefail
 
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONF=~/.config/omarchy/shell.json
 STATE=~/.local/state/omarchy-custom
+source "$REPO/scripts/shell-files.sh"
 
 # Remove first: even a later revert failure must not reinstall on the next update.
 rm -f ~/.config/omarchy/hooks/post-update.d/centered-panels
@@ -25,34 +26,37 @@ for p in "$REPO"/plugins/*/; do
   echo "removed $id"
 done
 
+# Only bytes matching pacman's checksum are written, and only over files that are ours.
 failed=0
+stock=$(mktemp)
+trap 'rm -f "$stock"' EXIT
 for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \
          plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml; do
   installed="$SHELL_DIR/$f"
-  saved="$STATE/orig/$f"
   written="$STATE/installed/$f"
-  if [[ ! -f $saved || ! -f $written ]]; then
-    if [[ -f $saved || -f $written || -f $written.pending || -f $REPO/.installed/$f ]] ||
-       cmp -s "$installed" "$REPO/patches/shell/$f"; then
-      echo "Not restored: $f — no complete installation backup; left untouched" >&2
-      failed=1
-    fi
-    continue
+  if [[ -z $(stock_sum "$f") ]]; then
+    echo "Not restored: $f — no package checksum to verify stock against; left untouched" >&2
+    failed=1; continue
   fi
-  # A failed install or interrupted revert may already have left the saved bytes.
-  if ! cmp -s "$installed" "$saved"; then
-    if ! cmp -s "$installed" "$written"; then
-      echo "Not restored: $f — changed since installation; backup: $saved" >&2
+  if ! is_stock "$f" "$installed"; then
+    if ! is_ours "$f" "$installed"; then
+      echo "Not restored: $f — changed outside this project; left untouched" >&2
       failed=1; continue
     fi
-    if ! touch "$written.pending" || ! sudo cp "$saved" "$installed" || ! cmp -s "$saved" "$installed"; then
-      echo "Could not restore $f; backup retained: $saved" >&2
+    if ! stock_copy "$f" "$stock"; then
+      echo "Not restored: $f — no verified stock copy in patches/orig or the package cache" >&2
       failed=1; continue
     fi
+    mkdir -p "$(dirname "$written")"
+    if ! touch "$written.pending" || ! sudo cp "$stock" "$installed" || ! is_stock "$f" "$installed"; then
+      echo "Could not restore $f; rerun revert.sh" >&2
+      failed=1; continue
+    fi
+    echo "restored $f"
   fi
-  rm -f "$saved" "$written" "$written.pending" "$REPO/.installed/$f"
-  echo "restored $f"
+  rm -f "$written" "$written.pending"
 done
+find "$STATE" -depth -type d -empty -delete 2>/dev/null || true
 
 omarchy restart shell
 (( failed == 0 ))

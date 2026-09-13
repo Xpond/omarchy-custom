@@ -81,7 +81,8 @@ def check():
             config.write_bytes(original.encode())
         print("ok: install/revert/reinstall preserves personal edits, bytes, and permissions")
 
-        # A symlinked main config remains a symlink, and borrowed helpers survive revert.
+        # A symlinked main config remains a symlink; helper links into this checkout are ours,
+        # including one an older installer left without a record.
         target = root / "dotfile"
         config.rename(target)
         config.symlink_to(target)
@@ -90,8 +91,10 @@ def check():
         run("install")
         run("revert")
         assert config.is_symlink() and target.read_bytes() == original.encode()
-        assert borrowed.is_symlink()
-        borrowed.unlink()
+        assert not borrowed.is_symlink()
+        borrowed.symlink_to(source / "bin/omarchy-open-path")
+        run("revert")
+        assert not borrowed.is_symlink()
         borrowed.write_text("personal helper")
         try:
             run("install")

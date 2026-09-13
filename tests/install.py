@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Exercise install/revert with temporary system paths and no desktop changes."""
+import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +18,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     user = base / "user"
     shell = base / "shell"
     stubs = base / "stubs"
+    package = base / "package"
     stubs.mkdir()
     prepare(source, repo, user, stubs)
     shutil.copytree(source / "patches", repo / "patches")
@@ -29,6 +32,12 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
         text = text.replace("~/", str(user) + "/")
         (repo / name).write_text(text)
         (repo / name).chmod(0o755)
+    helper = repo / "scripts/shell-files.sh"
+    helper.write_text(helper.read_text()
+                      .replace("PACKAGE_LOCAL=/var/lib/pacman/local",
+                               "PACKAGE_LOCAL=" + shlex.quote(str(package / "local")))
+                      .replace("PACKAGE_CACHE=/var/cache/pacman/pkg",
+                               "PACKAGE_CACHE=" + shlex.quote(str(package / "cache"))))
     commands = {
         "sudo": '''if [[ "$*" == *shell.qml ]]; then
   [[ "${CHECK_FAIL:-}" == copy ]] && exit 1
@@ -57,10 +66,51 @@ exit 0''',
     conf = user / ".config/omarchy/shell.json"
     hook = user / ".config/omarchy/hooks/post-update.d/centered-panels"
 
+    # A pacman package: its mtree checksums say what stock is, and its cached archive holds it.
+    def publish(files):
+        root = package / "root"
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(package / "cache", ignore_errors=True)
+        (package / "cache").mkdir(parents=True)
+        lines = ["#mtree"]
+        for relative, data in files.items():
+            path = root / "usr/share/omarchy/shell" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            lines.append(f"./usr/share/omarchy/shell/{relative} mode=644 "
+                         f"sha256digest={hashlib.sha256(data).hexdigest()}")
+        db = package / "local/omarchy-4.0.3-1"
+        db.mkdir(parents=True, exist_ok=True)
+        with gzip.open(db / "mtree", "wt") as stream:
+            stream.write("\n".join(lines) + "\n")
+        subprocess.run(["bsdtar", "-c", "--zstd", "-f", str(package / "cache/omarchy-4.0.3-1-x86_64.pkg.tar.zst"),
+                        "-C", str(root), "usr"], check=True)
+
+    def git(*args):
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=test", "-c", "user.email=test@example.com",
+                        *args], check=True, capture_output=True)
+
+    stock = {p.relative_to(source / "patches/orig").as_posix(): p.read_bytes()
+             for p in (source / "patches/orig").rglob("*.qml")}
+    files = sorted(stock)
+    publish(stock)
+    git("init", "-q")
+    git("add", "patches")
+    git("commit", "-qm", "patches")
+
     def run(script="install.sh", failure=""):
         return subprocess.run([str(repo / script)], cwd=base,
                               env=dict(env, CHECK_FAIL=failure),
                               text=True, capture_output=True, timeout=15)
+
+    def installed(relative):
+        return (shell / relative).read_bytes()
+
+    def patched(relative):
+        return (repo / "patches/shell" / relative).read_bytes()
+
+    def all_stock():
+        return all(installed(relative) == stock[relative] for relative in files)
 
     result = run()
     assert result.returncode == 0, result.stderr
@@ -104,99 +154,83 @@ exit 0''',
     assert not (user / ".local/bin/omarchy-open-path").is_symlink()
     assert json.loads(conf.read_text()) == {"plugins": [{"id": "other", "enabled": False}],
                                           "idle": {"lock": 30}}
-    for original in (repo / "patches/orig").rglob("*.qml"):
-        assert (shell / original.relative_to(repo / "patches/orig")).read_bytes() == original.read_bytes()
+    assert all_stock()
     assert run("revert.sh").returncode == 0
     print("ok: revert removes the hook and plugins, restores QML, and preserves other settings")
 
-    # An initial merge conflict never gave the installer ownership of this file.
-    relative = Path("shell.qml")
-    upstream = repo / "patches/orig" / relative
-    patch = repo / "patches/shell" / relative
-    installed = shell / relative
-    upstream.write_text("upstream\n")
-    patch.write_text("wheel\n")
-    installed.write_text("existing customization\n")
-    assert run().returncode == 1
-    assert installed.read_text() == "existing customization\n"
+    # The state revert broke on: patches an older installer left without records, two of
+    # them an older committed version of the patch.
+    assert run().returncode == 0
+    shutil.rmtree(user / ".local/state/omarchy-custom/installed")
+    older = {}
+    for relative in ["shell.qml", "services/PluginShellApi.qml"]:
+        current = patched(relative)
+        older[relative] = current + b"// older patch\n"
+        (repo / "patches/shell" / relative).write_bytes(older[relative])
+        git("commit", "-qam", "older patch")
+        (repo / "patches/shell" / relative).write_bytes(current)
+        git("commit", "-qam", "current patch")
+        (shell / relative).write_bytes(older[relative])
     result = run("revert.sh")
-    assert result.returncode == 0, result.stderr
-    assert installed.read_text() == "existing customization\n"
-    print("ok: revert preserves an initial merge conflict while restoring successful patches")
+    assert result.returncode == 0 and all_stock(), result.stdout + result.stderr
+    print("ok: revert restores Omarchy's files from unrecorded and older versions of the patch")
 
-    state = user / ".local/state/omarchy-custom"
-    saved = state / "orig" / relative
-    written = state / "installed" / relative
-    gap = "unchanged\n" * 8
-    stock = "stock\n" + gap + "end\n"
-    custom = "stock\n" + gap + "custom\n"
-    upstream.write_text(stock)
-    patch.write_text("wheel\n" + gap + "end\n")
-    installed.write_text(custom)
-    assert run().returncode == 0
-    assert installed.read_text() == "wheel\n" + gap + "custom\n"
-    assert saved.read_text() == custom
-    assert run().returncode == 0
-    patch.write_text(patch.read_text().replace("wheel", "updated wheel"))
-    assert run().returncode == 0
-    assert saved.read_text() == custom
-    # Revert must be independent of this checkout's changing merge baseline.
-    upstream.write_text("different repository baseline\n")
-    assert run("revert.sh").returncode == 0
-    assert installed.read_text() == custom
-    print("ok: custom merges, repeated installs and patch updates preserve the machine backup")
+    for relative, content in older.items():
+        (shell / relative).write_bytes(content)
+    result = run()
+    assert result.returncode == 0 and "rebased" not in result.stdout, result.stdout + result.stderr
+    assert all(installed(relative) == patched(relative) for relative in files)
+    assert all((repo / "patches/orig" / relative).read_bytes() == stock[relative] for relative in files)
+    assert run("revert.sh").returncode == 0 and all_stock()
+    print("ok: an older committed patch is replaced on install and restored to stock on revert")
 
-    upstream.write_text(stock)
-    patch.write_text("wheel\n" + gap + "end\n")
-    installed.write_text(stock)
+    relative = "shell.qml"
+    update = stock[relative] + b"// upstream addition\n"
     assert run().returncode == 0
-    installed.write_text(custom)  # simulate a package update replacing our patch
-    assert run().returncode == 0
-    assert saved.read_text() == custom
-    installed.write_text(installed.read_text() + "later edit\n")
-    edited = installed.read_bytes()
+    publish({**stock, relative: update})
+    (shell / relative).write_bytes(update)  # the package update replaced our patch
+    result = run()
+    assert result.returncode == 0 and "rebased onto new upstream: shell.qml" in result.stdout, result.stderr
+    assert (repo / "patches/orig" / relative).read_bytes() == update
+    assert installed(relative) != update and installed(relative).endswith(b"// upstream addition\n")
+    assert run("revert.sh").returncode == 0 and installed(relative) == update
+    publish(stock)
+    for directory in ("orig", "shell"):
+        (repo / "patches" / directory / relative).write_bytes((source / "patches" / directory / relative).read_bytes())
+    (shell / relative).write_bytes(stock[relative])
+    print("ok: a package update is rebased onto, and revert restores the updated stock file")
+
+    relative = "plugins/bar/Bar.qml"
+    edited = stock[relative] + b"// personal edit\n"
+    (shell / relative).write_bytes(edited)
+    result = run()
+    assert result.returncode == 1 and installed(relative) == edited, result.stderr
+    assert "changed outside" in result.stderr
     result = run("revert.sh")
-    assert result.returncode == 1 and "changed since installation" in result.stderr
-    assert installed.read_bytes() == edited and saved.read_text() == custom
-    installed.write_bytes(written.read_bytes())  # user resolves the reported conflict
-    assert run("revert.sh", "copy").returncode == 1
-    assert saved.exists() and written.exists()
-    assert run("revert.sh", "partial").returncode == 1
-    assert run().returncode == 1  # a partial restore also requires recovery first
-    installed.write_bytes(written.read_bytes())
-    assert run("revert.sh").returncode == 0
-    assert installed.read_text() == custom
-    print("ok: upstream replacement, later edits and failed restores retain recoverable backups")
+    assert result.returncode == 1 and installed(relative) == edited and "changed outside" in result.stderr
+    (shell / relative).write_bytes(stock[relative])
+    assert all_stock()
+    print("ok: files edited outside this project are neither patched over nor restored over")
 
-    for failure in ["copy", "partial"]:
-        upstream.write_text(stock)
-        patch.write_text("wheel\n" + gap + "end\n")
-        installed.write_text(stock)
-        assert run(failure=failure).returncode == 1
-        assert saved.read_text() == stock
-        result = run("revert.sh")
-        if failure == "partial":
-            assert result.returncode == 1 and installed.read_text() == patch.read_text()[:-4]
-            assert run().returncode == 1  # retry must not rebase onto a truncated patch
-            assert saved.read_text() == stock
-            installed.write_bytes(saved.read_bytes())
-            assert run("revert.sh").returncode == 0
-        else:
-            assert result.returncode == 0 and installed.read_text() == stock
-    print("ok: failed and partial copies preserve originals and report unresolved files")
+    relative = "shell.qml"
+    assert run(failure="partial").returncode == 1
+    assert run("revert.sh").returncode == 0 and all_stock()
+    assert run(failure="copy").returncode == 1 and installed(relative) == stock[relative]
+    assert run().returncode == 0 and installed(relative) == patched(relative)
+    assert run("revert.sh", "copy").returncode == 1 and installed(relative) == patched(relative)
+    assert run("revert.sh", "partial").returncode == 1 and installed(relative) != stock[relative]
+    assert run("revert.sh").returncode == 0 and all_stock()
+    print("ok: interrupted installs and restores are recognised as ours and recover on retry")
 
-    # A failed backup commit must prevent the privileged write entirely.
-    assert run(failure="mv").returncode == 1
-    assert installed.read_text() == stock
-    assert not written.exists()
     assert run().returncode == 0
-    assert run("revert.sh").returncode == 0
-    assert installed.read_text() == stock
-    print("ok: failed backup recording prevents patching and a later retry recovers")
-
-    installed.write_bytes(patch.read_bytes())
-    assert run().returncode == 0  # old installation without a saved original
+    (repo / "patches/orig" / relative).write_bytes(b"a different repository baseline\n")
+    assert run("revert.sh").returncode == 0 and all_stock()
+    (repo / "patches/orig" / relative).write_bytes(stock[relative])
+    assert run().returncode == 0
+    (package / "local").rename(package / "hidden")
     result = run("revert.sh")
-    assert result.returncode == 1 and "no complete installation backup" in result.stderr
-    assert installed.read_bytes() == patch.read_bytes()
-    print("ok: untracked legacy patches are never replaced with a guessed original")
+    assert result.returncode == 1 and "no package checksum" in result.stderr
+    assert installed(relative) == patched(relative)
+    (package / "hidden").rename(package / "local")
+    assert run("revert.sh").returncode == 0 and all_stock()
+    print("ok: stock comes from the cached package when needed, and is never guessed")

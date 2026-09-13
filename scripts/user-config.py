@@ -50,6 +50,11 @@ def change_config(config, before, after):
 def configure(mode, config, state, bindir):
     record = state / "user-config.json"
     if mode == "revert" and not record.exists():
+        # An installer older than the record may still have linked helpers into this checkout.
+        for name in HELPERS:
+            link = bindir / name
+            if link.is_symlink() and os.readlink(link) == str(REPO / "bin" / name):
+                link.unlink()
         return
     text = config.read_bytes().decode()
     previous_record = record.read_text() if record.exists() else None
@@ -61,7 +66,7 @@ def configure(mode, config, state, bindir):
         if not block or text.count(BEGIN) != 1 or text.count(END) != 1:
             raise ValueError(f"Managed Lua block was edited; left untouched. Backup: {record}")
 
-    # Check every helper before making any change. Existing matching links are borrowed.
+    # Check every helper before making any change. Existing links into this checkout are ours.
     previous_links = {}
     for name in HELPERS:
         if mode == "revert" and name not in saved["links"]:
@@ -75,7 +80,7 @@ def configure(mode, config, state, bindir):
                 raise ValueError(f"Helper link changed; left untouched: {link}")
         elif link.exists():
             raise ValueError(f"Existing helper left untouched: {link}")
-        if mode == "install" and (name in saved["links"] or not link.is_symlink()):
+        if mode == "install" and (name in saved["links"] or previous_links[name] in (None, target)):
             saved["links"][name] = list(dict.fromkeys(allowed + [target]))
 
     if mode == "install":

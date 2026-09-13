@@ -8,6 +8,7 @@ FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
        plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
 STATE=~/.local/state/omarchy-custom
+source "$REPO/scripts/shell-files.sh"
 
 # Hook failures can scroll away, so report them on the desktop too.
 alert() {
@@ -57,54 +58,38 @@ rm -rf "$hook_dir"
 applied=()   # patch copied in
 rebased=()   # patch re-based onto a new upstream version first
 conflicts=() # merge failed; installed file left untouched
-failed=()    # backup or installation failed
+foreign=()   # neither stock nor ours; installed file left untouched
+failed=()    # recording or installation failed
 
 for f in "${FILES[@]}"; do
   installed="$SHELL_DIR/$f"
   ours="$REPO/patches/shell/$f"
   base="$REPO/patches/orig/$f"
-  saved="$STATE/orig/$f"
   written="$STATE/installed/$f"
-  prev="$written"
-  [[ -f $prev ]] || prev="$REPO/.installed/$f"  # older installs have no backup
-
-  # Never treat an incomplete copy as upstream and overwrite its recovery backup.
-  if [[ -f $written.pending ]]; then
-    if ! cmp -s "$installed" "$written" && ! cmp -s "$installed" "$saved"; then
-      alert "Incomplete shell write: $f; left untouched" "Restore from backup before retrying: $saved"
-      failed+=("$f"); continue
-    fi
-    rm -f "$written.pending" || { failed+=("$f"); continue; }
-  fi
   cmp -s "$installed" "$ours" && continue
 
-  # Rebase only a real upstream change, not the previous version of our patch.
-  if ! cmp -s "$installed" "$prev" && ! cmp -s "$installed" "$base"; then
-    merged=$(mktemp)
-    cp "$ours" "$merged"
-    git merge-file -q "$merged" "$base" "$installed"; ok=$?
-    if (( ok == 0 )); then
-      cp "$merged" "$ours"      # patch, now on the new base
-      cp "$installed" "$base"   # new pristine baseline
-      rebased+=("$f")
+  # Stock that differs from the merge base is a new upstream version to rebase onto.
+  # Any version of our patch is simply replaced; anything else is not ours to touch.
+  if is_stock "$f" "$installed"; then
+    if ! cmp -s "$installed" "$base"; then
+      merged=$(mktemp)
+      cp "$ours" "$merged"
+      git merge-file -q "$merged" "$base" "$installed"; ok=$?
+      if (( ok == 0 )); then
+        cp "$merged" "$ours"      # patch, now on the new base
+        cp "$installed" "$base"   # new pristine baseline
+        rebased+=("$f")
+      fi
+      rm -f "$merged"
+      (( ok == 0 )) || { conflicts+=("$f"); continue; }
     fi
-    rm -f "$merged"
-    (( ok == 0 )) || { conflicts+=("$f"); continue; }
+  elif ! is_ours "$f" "$installed"; then
+    foreign+=("$f"); continue
   fi
 
-  # Save the current machine's file, not the repository's mutable merge base.
-  # Reinstalling our own patch must not replace its original backup.
-  if ! mkdir -p "$(dirname "$saved")" "$(dirname "$written")"; then
-    failed+=("$f"); continue
-  fi
-  if [[ ! -f $saved ]] || ! cmp -s "$installed" "$prev"; then
-    if ! { cp -p "$installed" "$saved.new" && mv "$saved.new" "$saved"; }; then
-      rm -f "$saved.new"
-      failed+=("$f"); continue
-    fi
-  fi
-  # Record the expected bytes before copying so an interrupted install is recoverable.
-  if ! { touch "$written.pending" && cp "$ours" "$written.new" && mv "$written.new" "$written"; }; then
+  # Record the bytes, then mark the copy pending, so an interrupted copy is still ours.
+  if ! { mkdir -p "$(dirname "$written")" && cp "$ours" "$written.new" &&
+         mv "$written.new" "$written" && touch "$written.pending"; }; then
     rm -f "$written.new"
     failed+=("$f"); continue
   fi
@@ -117,13 +102,15 @@ done
 
 (( ${#rebased[@]} )) && printf 'rebased onto new upstream: %s\n' "${rebased[*]}"
 (( ${#applied[@]} )) && printf 'installed: %s\n' "${applied[*]}"
-(( ${#applied[@]} + ${#conflicts[@]} + ${#failed[@]} )) || echo "already up to date"
+(( ${#applied[@]} + ${#conflicts[@]} + ${#foreign[@]} + ${#failed[@]} )) || echo "already up to date"
 
-broken=("${conflicts[@]}" "${failed[@]}")
+broken=("${conflicts[@]}" "${foreign[@]}" "${failed[@]}")
 if (( ${#broken[@]} )); then
   msg=("Not patched: ${broken[*]}")
   (( ${#conflicts[@]} )) && msg+=("Merge conflicted; installed files left untouched." \
-                                  "Rebase by hand: diff orig/ against shell/ for the file(s) above.")
+                                  "Rebase by hand: diff orig/ against shell/ for: ${conflicts[*]}")
+  (( ${#foreign[@]} )) && msg+=("Files changed outside this project, left untouched: ${foreign[*]}" \
+                                "Reinstall the omarchy package to restore them, then rerun install.sh.")
   alert "${msg[@]}"
 fi
 
