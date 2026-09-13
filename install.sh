@@ -7,6 +7,7 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
        plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
+STATE=~/.local/state/omarchy-custom
 
 # Hook failures can scroll away, so report them on the desktop too.
 alert() {
@@ -54,15 +55,26 @@ rm -rf "$hook_dir"
 # ------------------------------------------------------------------- patches
 applied=()   # patch copied in
 rebased=()   # patch re-based onto a new upstream version first
-conflicts=() # merge failed, left stock, needs a human
-failed=()    # copy itself failed (e.g. no sudo)
+conflicts=() # merge failed; installed file left untouched
+failed=()    # backup or installation failed
 
 for f in "${FILES[@]}"; do
   installed="$SHELL_DIR/$f"
   ours="$REPO/patches/shell/$f"
   base="$REPO/patches/orig/$f"
-  prev="$REPO/.installed/$f"   # what this script last wrote to $installed
+  saved="$STATE/orig/$f"
+  written="$STATE/installed/$f"
+  prev="$written"
+  [[ -f $prev ]] || prev="$REPO/.installed/$f"  # older installs have no backup
 
+  # Never treat an incomplete copy as upstream and overwrite its recovery backup.
+  if [[ -f $written.pending ]]; then
+    if ! cmp -s "$installed" "$written" && ! cmp -s "$installed" "$saved"; then
+      alert "Incomplete shell write: $f; left untouched" "Restore from backup before retrying: $saved"
+      failed+=("$f"); continue
+    fi
+    rm -f "$written.pending" || { failed+=("$f"); continue; }
+  fi
   cmp -s "$installed" "$ours" && continue
 
   # Rebase only a real upstream change, not the previous version of our patch.
@@ -79,9 +91,24 @@ for f in "${FILES[@]}"; do
     (( ok == 0 )) || { conflicts+=("$f"); continue; }
   fi
 
-  if sudo cp "$ours" "$installed"; then
+  # Save the current machine's file, not the repository's mutable merge base.
+  # Reinstalling our own patch must not replace its original backup.
+  if ! mkdir -p "$(dirname "$saved")" "$(dirname "$written")"; then
+    failed+=("$f"); continue
+  fi
+  if [[ ! -f $saved ]] || ! cmp -s "$installed" "$prev"; then
+    if ! { cp -p "$installed" "$saved.new" && mv "$saved.new" "$saved"; }; then
+      rm -f "$saved.new"
+      failed+=("$f"); continue
+    fi
+  fi
+  # Record the expected bytes before copying so an interrupted install is recoverable.
+  if ! { touch "$written.pending" && cp "$ours" "$written.new" && mv "$written.new" "$written"; }; then
+    rm -f "$written.new"
+    failed+=("$f"); continue
+  fi
+  if sudo cp "$ours" "$installed" && cmp -s "$ours" "$installed" && rm -f "$written.pending"; then
     applied+=("$f")
-    mkdir -p "$(dirname "$prev")" && cp "$ours" "$prev"
   else
     failed+=("$f")
   fi
@@ -94,7 +121,7 @@ done
 broken=("${conflicts[@]}" "${failed[@]}")
 if (( ${#broken[@]} )); then
   msg=("Not patched: ${broken[*]}")
-  (( ${#conflicts[@]} )) && msg+=("Conflicted against a new upstream version; left as upstream shipped it." \
+  (( ${#conflicts[@]} )) && msg+=("Merge conflicted; installed files left untouched." \
                                   "Rebase by hand: diff orig/ against shell/ for the file(s) above.")
   alert "${msg[@]}"
 fi

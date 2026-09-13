@@ -19,7 +19,7 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 
 ```bash
 ~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
-~/xpo/omarchy-custom/revert.sh    # restore pristine QML; leave hypr config alone
+~/xpo/omarchy-custom/revert.sh    # restore recorded QML backups; leave hypr config alone
 ```
 
 `install.sh` needs a sudo password, so it must be run from a terminal
@@ -27,7 +27,7 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 re-running when nothing has changed prints `already up to date` and exits.
 
 ```
-orig/     pristine upstream files — the merge base and revert source, never edit
+orig/     upstream merge bases, updated by successful rebases
 shell/    patched copies, mirroring /usr/share/omarchy/shell/
 docs/     this file
 ```
@@ -60,13 +60,19 @@ file against `orig/`:
 | Installed matches | Action |
 |---|---|
 | `shell/` | already patched — skip |
+| recorded installed patch | our previous version — update without replacing its backup |
 | `orig/` | upstream unchanged — copy the patch in |
 | neither | new upstream version — **three-way merge**, then re-baseline `orig/` |
 
-A merge that conflicts leaves the file exactly as upstream shipped it, reports
+A merge that conflicts leaves the installed file untouched, reports
 it on stderr *and* via `notify-send`, and exits non-zero so the hook logs
 `Hook failed`. It never writes conflict markers into a QML file — that would
 break the entire shell, which is far worse than losing the patch.
+
+Restore snapshots live in `~/.local/state/omarchy-custom/`, separately from the
+checkout's merge bases. Revert restores only recorded, unchanged patches;
+later edits and untracked legacy patches remain in place and produce an error.
+See the [installation and restore rules](../README.md#use).
 
 ---
 

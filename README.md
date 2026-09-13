@@ -6,7 +6,7 @@ own outright, and patches to the parts of the packaged shell we don't.
     plugins/    our Quickshell plugins, symlinked into ~/.config/omarchy/plugins/
     patches/
       shell/    patched copies, mirroring /usr/share/omarchy/shell/
-      orig/     pristine upstream copies — the revert source, never edit
+      orig/     upstream merge bases, updated by successful rebases
     bin/        scripts the keybinds and the browser call
     docs/       the long-form writeups
     install.sh / revert.sh
@@ -58,7 +58,7 @@ Hyprland. Other versions have not been verified.
 
 ```bash
 ./install.sh   # link the plugins, patch the packaged shell, restart it
-./revert.sh    # remove plugins and hook, restore the pristine packaged QML
+./revert.sh    # remove plugins and hook, restore recorded shell backups
 ```
 
 `install.sh` links every directory under `plugins/` into
@@ -93,11 +93,24 @@ registration failure returns a nonzero exit code.
 
 `install.sh` is idempotent. When an update ships a *new* version of a patched
 file it rebases the patch onto it with a three-way merge rather than clobbering
-upstream's changes; a conflict leaves the file stock and shouts via
-`notify-send` instead of writing broken QML. It tells a new upstream from our
-own previous patch by way of the `.installed/` mirror — without that it reads
-every edit of our own patch as an upstream change, and the rebase's success
-path overwrites `patches/orig/`, the revert source.
+upstream's changes; a conflict leaves the installed file untouched and reports
+it via `notify-send`. Successful rebases update the repository's merge bases.
+
+Before writing each shell file, installation saves its current contents under
+`~/.local/state/omarchy-custom/orig/` and the intended patch under `installed/`
+in the same state directory. Reinstalling or updating our own patch retains
+the original backup. If a package update or external edit replaces that patch,
+the next successful rebase saves that replacement as the new restore point.
+
+`revert.sh` restores only recorded files that still match the installed patch.
+It preserves later edits and incomplete copies, retains their backups, and
+returns failure with the affected paths. Resolve those files before retrying.
+An incomplete install or restore is marked pending; retries preserve its backup until
+the file matches the saved original or the complete intended patch.
+Successful restoration clears that file's record; initial merge conflicts are
+never restored over. Older installations without backups are left untouched
+and reported: `.installed/` remains a legacy comparison source, not proof of
+what existed before installation.
 
 ## The one thing that will bite you
 
