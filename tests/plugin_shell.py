@@ -45,6 +45,8 @@ def check(repo, base, run, block):
     manifests["omarchy.dropbox"] = {**widget, "id": "omarchy.dropbox", "name": "Dropbox"}
     manifests["alice.audio"] = {**widget, "id": "alice.audio", "name": "Alice Audio",
                                 "omarchy": {"clonedFrom": "omarchy.audio"}}
+    manifests["third.radar"] = {"kinds": ["bar-widget", "panel"], "id": "third.radar",
+                                "name": "Radar"}
     (base / "Panel.qml").write_text('''import QtQuick
 Item {
   property var shell: null
@@ -62,7 +64,7 @@ Item {
   property var _pluginSurfaceStates: ({})
   property var openPanelIds: ({})
   property var panelLoaders: ({})
-  property var panelEntries: ["xpo.wheel", "xpo.files"].map(function(id) {
+  property var panelEntries: ["xpo.wheel", "xpo.files", "third.radar"].map(function(id) {
     return {id: id, manifest: pluginRegistry.installedPlugins[id], kind: "overlay", keepLoaded: true}
   })
   property var pluginRegistry: QtObject {
@@ -96,6 +98,10 @@ Item {
     function check(condition, message) {
       if (!condition) throw new Error("FAIL " + message)
     }
+    function listed() {
+      return String(wheel.shell.panels().map(function(p) {
+        return p.id + ":" + p.name + ":" + p.source }).sort())
+    }
     try {
       var wheel = root.panelLoaders["xpo.wheel"].item
       var files = root.panelLoaders["xpo.files"].item
@@ -113,13 +119,12 @@ Item {
       check(root.bar.visiblePanelSurfaces === 0, "backdrop retained after close")
       var bareBar = root.bar
       check(!wheel.shell.claimPopout(wheel), "claimed a popout the bar cannot own")
-      check(wheel.shell.panels().length === 0, "listed panels from a bar without lookup")
+      var loaded = "third.radar:Radar:third.radar,xpo.files:Files:xpo.files"
+      check(listed() === loaded, "loader panels " + listed())
       root.bar = root.popoutBar
       check(wheel.shell.claimPopout(wheel), "built-in bar refused the popout")
-      var listed = String(wheel.shell.panels().map(function(p) {
-        return p.id + ":" + p.name + ":" + p.source }).sort())
-      check(listed === "alice.audio:Alice Audio:omarchy.audio,omarchy.weather:Weather:omarchy.weather",
-            "live panels " + listed)
+      check(listed() === "alice.audio:Alice Audio:omarchy.audio,omarchy.weather:Weather:omarchy.weather,"
+            + loaded, "live panels " + listed())
       check(files.shell.panels().length === 0, "a plugin without menu capability listed panels")
       root.bar = bareBar
       wheel.shell.releasePopout(wheel)

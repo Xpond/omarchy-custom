@@ -110,14 +110,18 @@ var SEARCH_PANELS = [
   { plugin: "omarchy.weather", icon: "", label: "Weather" }
 ]
 
-// Clones keep their source's mark; unknown panels get a generic one.
+// Clones keep their source's mark; unknown panels get a generic one. Panels
+// that already have a fixed search row are not repeated.
 function livePanels(live) {
-  var marks = {}
+  var marks = {}, fixed = {}
   var known = PANELS.concat(SEARCH_PANELS)
   for (var i = 0; i < known.length; i++) marks[known[i].plugin] = known[i]
+  var rows = OVERLAYS.concat(EXTRAS)
+  for (var k = 0; k < rows.length; k++) fixed[rows[k].plugin] = true
   var out = []
   for (var j = 0; j < live.length; j++) {
     var p = live[j]
+    if (fixed[p.id]) continue
     var mark = marks[p.source] || { icon: "󰕮" }
     out.push({ plugin: p.id, icon: mark.icon, iconFile: mark.iconFile,
                label: p.id === mark.plugin ? mark.label : p.name,

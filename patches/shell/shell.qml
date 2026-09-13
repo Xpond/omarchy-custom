@@ -690,7 +690,7 @@ ShellRoot {
       },
       _panels: function() {
         return shell.summonablePanels().filter(function(panel) {
-          return shell.menuPluginMayControl(currentManifest(), panel.id)
+          return panel.id !== key && shell.menuPluginMayControl(currentManifest(), panel.id)
         })
       },
       _claimPopout: function(owner) {
@@ -1210,17 +1210,21 @@ ShellRoot {
     return true
   }
 
-  // Bar widgets the live bar can open, clones and third-party ones included.
+  // Panels a menu can open: enabled third-party panels and overlays (Omarchy's
+  // own are in its menu) and every bar widget the live bar can open.
   function summonablePanels() {
-    if (!shell.bar || typeof shell.bar.findPanelWidget !== "function") return []
-    var plugins = shell.pluginRegistry.installedPlugins
     var out = []
-    for (var id in plugins) {
-      if (!shell.isBarWidgetPanelPlugin(id) || !shell.bar.findPanelWidget(id)) continue
-      var m = plugins[id]
+    function add(id, m) {
       out.push({ id: id, name: String(m.name || id),
                  source: String((m.omarchy && m.omarchy.clonedFrom) || id) })
     }
+    var entries = shell.panelEntries
+    for (var i = 0; i < entries.length; i++)
+      if (!entries[i].manifest.__isFirstParty) add(entries[i].id, entries[i].manifest)
+    if (!shell.bar || typeof shell.bar.findPanelWidget !== "function") return out
+    var plugins = shell.pluginRegistry.installedPlugins
+    for (var id in plugins)
+      if (shell.isBarWidgetPanelPlugin(id) && shell.bar.findPanelWidget(id)) add(id, plugins[id])
     return out
   }
 

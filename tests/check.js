@@ -233,11 +233,13 @@ assert.equal(back(), "none", "and one that has since gone is not owed a return")
 console.log("ok: only the panel the wheel opened answers backspace with a return")
 
 // Search takes every panel the live bar can open, whether or not it has a disc.
-const indexed = { staticRows: [], themes: [], fonts: [], focusOrder: [], appLibrary: null,
+const indexed = { staticRows: M.panelRows(M.OVERLAYS.concat(M.EXTRAS)),
+  themes: [], fonts: [], focusOrder: [], appLibrary: null,
   shell: { panels: () => [
     { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
     { id: "alice.audio", name: "Alice Audio", source: "omarchy.audio" },
-    { id: "third.notes", name: "Notes", source: "third.notes" }] } }
+    { id: "third.notes", name: "Notes", source: "third.notes" },
+    { id: "xpo.files", name: "Files", source: "xpo.files" }] } }
 const rebuildIndex = method(wheelSource, "rebuildIndex",
   { root: indexed, MenuIndex: M, Hyprland: { toplevels: { values: [] } } })
 rebuildIndex()
@@ -247,11 +249,14 @@ assert.ok(hits("audio").includes("alice.audio"), "a clone is not searchable by i
 assert.ok(hits("notes").includes("third.notes"), "a third-party panel is not searchable")
 assert.equal(indexed.index.find(r => r.plugin === "alice.audio").icon, M.PANELS[0].icon,
   "a clone lost its source's mark")
-assert.ok(indexed.index.every(r => r.icon), "a panel row has no mark")
+assert.ok(indexed.index.find(r => r.plugin === "third.notes").icon, "an unknown panel has no mark")
+assert.equal(indexed.index.filter(r => r.plugin === "xpo.files").length, 1,
+  "a panel with a fixed search row was listed twice")
 assert.ok(!M.panels(null).some(p => p.plugin === "omarchy.weather"), "Weather joined the ring")
 indexed.shell = {}
 rebuildIndex()
-assert.equal(indexed.index.length, 0, "a facade without panels() fills search")
+assert.equal(indexed.index.length, indexed.staticRows.length,
+  "a facade without panels() fills search")
 console.log("ok: every panel the bar can open is searchable, on the ring or not")
 
 // The host closes peers without exposing its panel registries to the wheel.
@@ -295,6 +300,12 @@ assert.ok(bare.acted && bare.clear, "a bar without plugin popouts still switches
 bareBar.activePopout = { close() {} }
 const sticky = closeBarePeers("xpo.wheel")
 assert.ok(sticky.acted && !sticky.clear, "a bar panel that stays open keeps the wheel hidden")
+
+// Third-party panels join search; Omarchy's own are already in its menu.
+const hostPanels = method(shellSource, "summonablePanels", { shell: { bar: null, panelEntries: [
+  { id: "third.radar", manifest: { name: "Radar" } },
+  { id: "omarchy.clipboard", manifest: { name: "Clipboard", __isFirstParty: true } }] } })
+assert.equal(String(hostPanels().map(p => p.id)), "third.radar", "Omarchy's own panels were listed")
 
 let claimedPopout = null
 const opening = {
