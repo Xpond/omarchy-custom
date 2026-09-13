@@ -34,7 +34,7 @@ def check(repo, base, run, block):
     source = (repo / "patches/shell/shell.qml").read_text()
     methods = ["manifestHasKind", "pluginHasVisualCapabilities", "pluginHasBarCapabilities",
                "pluginShellCapabilityProfile", "createScopedPluginShell", "pluginShellFor",
-               "publicPluginManifest", "setPluginSurfaceVisible"]
+               "publicPluginManifest", "setPluginSurfaceVisible", "barHasPluginPopouts"]
     production = "\n".join(block(source, "  function " + name + r"\(") for name in methods)
     production += "\n" + block(source, r"  Instantiator {")
     manifests = {name: json.loads((repo / "plugins" / name / "manifest.json").read_text())
@@ -67,6 +67,12 @@ Item {
     property int visiblePanelSurfaces: 0
     function panelSurfaceVisible(shown) { visiblePanelSurfaces += shown ? 1 : -1 }
   }
+  property var popoutBar: QtObject {
+    property var activePopout: null
+    function requestPluginPopout(id, owner) { activePopout = owner }
+    function pluginOwnsBarObject(id, owner) { return owner === activePopout }
+    function releasePluginPopout(id, owner) {}
+  }
   Component { id: pluginShellApiComponent; PluginShellApi {} }
   function pluginIsIndicatorsClone(manifest) { return false }
   function pluginAppLibraryFor(cacheKey, key) { return {detached: true} }
@@ -95,6 +101,12 @@ Item {
       check(root.bar.visiblePanelSurfaces === 1, "handoff dropped Files backdrop")
       files.opened = false
       check(root.bar.visiblePanelSurfaces === 0, "backdrop retained after close")
+      var bareBar = root.bar
+      check(!wheel.shell.claimPopout(wheel), "claimed a popout the bar cannot own")
+      root.bar = root.popoutBar
+      check(wheel.shell.claimPopout(wheel), "built-in bar refused the popout")
+      root.bar = bareBar
+      wheel.shell.releasePopout(wheel)
       console.log("PASS"); Qt.quit()
     } catch (error) { console.error(String(error)); Qt.exit(1) }
   } }

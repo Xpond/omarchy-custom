@@ -689,13 +689,13 @@ ShellRoot {
           ? shell.closePluginPeers(key) : ({ acted: false, clear: true })
       },
       _claimPopout: function(owner) {
-        if (!visualCapabilities || !shell.bar || !owner) return false
+        if (!visualCapabilities || !shell.barHasPluginPopouts() || !owner) return false
         shell.bar.requestPluginPopout(key, owner)
         return shell.bar.pluginOwnsBarObject(key, owner)
           && shell.bar.activePopout === owner
       },
       _releasePopout: function(owner) {
-        if (visualCapabilities && shell.bar)
+        if (visualCapabilities && shell.barHasPluginPopouts())
           shell.bar.releasePluginPopout(key, owner)
       },
       _panelSurfaceVisible: function(shown) {
@@ -1205,11 +1205,20 @@ ShellRoot {
     return true
   }
 
+  // Plugin popout ownership comes from the patched built-in Bar.qml. A custom
+  // full bar may lack it; plugins then open without claiming its popout slot.
+  function barHasPluginPopouts() {
+    return !!shell.bar && typeof shell.bar.requestPluginPopout === "function"
+      && typeof shell.bar.pluginOwnsBarObject === "function"
+      && typeof shell.bar.releasePluginPopout === "function"
+  }
+
   function closePluginPeers(pluginId) {
     var key = String(pluginId || "")
     var acted = false
+    var ownership = shell.barHasPluginPopouts()
     var popout = shell.bar && shell.bar.activePopout
-    if (popout && !shell.bar.pluginOwnsBarObject(key, popout)) {
+    if (popout && !(ownership && shell.bar.pluginOwnsBarObject(key, popout))) {
       acted = true
       if ("closeForPopoutSwitch" in popout) popout.closeForPopoutSwitch()
       else if ("close" in popout) popout.close()
@@ -1221,7 +1230,7 @@ ShellRoot {
     for (var id in candidates)
       if (id !== key && shell.isPluginOpen(id)) ids.push(id)
     var clear = !shell.bar || !shell.bar.activePopout
-      || shell.bar.pluginOwnsBarObject(key, shell.bar.activePopout)
+      || (ownership && shell.bar.pluginOwnsBarObject(key, shell.bar.activePopout))
     for (var i = 0; i < ids.length; i++) {
       shell.hide(ids[i])
       acted = true

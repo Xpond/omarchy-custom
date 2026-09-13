@@ -245,6 +245,7 @@ const oldPanel = { closed: false, closeForPopoutSwitch() {
 popoutBar.activePopout = oldPanel
 const hostShell = {
   bar: popoutBar,
+  barHasPluginPopouts: () => true,
   isPluginOpen: id => openPeers[id] === true,
   hide: id => { openPeers[id] = false }
 }
@@ -259,6 +260,19 @@ assert.equal(peers.clear, true)
 assert.equal(oldPanel.closed, true, "the old bar panel is switched out")
 assert.equal(openPeers["xpo.files"], false, "an open overlay is closed")
 assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is closed")
+
+// A custom full bar need not implement this project's plugin popout ownership.
+const bareBar = { activePopout: null }
+bareBar.activePopout = { closeForPopoutSwitch() { bareBar.activePopout = null } }
+const bareShell = { bar: bareBar, isPluginOpen: () => false, hide() {} }
+bareShell.barHasPluginPopouts = method(shellSource, "barHasPluginPopouts", { shell: bareShell })
+const closeBarePeers = method(shellSource, "closePluginPeers",
+  { shell: bareShell, openPanelIds: {}, panelLoaders: {} })
+const bare = closeBarePeers("xpo.wheel")
+assert.ok(bare.acted && bare.clear, "a bar without plugin popouts still switches its panel out")
+bareBar.activePopout = { close() {} }
+const sticky = closeBarePeers("xpo.wheel")
+assert.ok(sticky.acted && !sticky.clear, "a bar panel that stays open keeps the wheel hidden")
 
 let claimedPopout = null
 const opening = {
