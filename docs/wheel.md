@@ -462,6 +462,11 @@ bar has no user config, so the layout Omarchy ships
 (`$OMARCHY_PATH/config/omarchy/shell.json`) is read instead — otherwise the
 ring would offer panels that machine has no widget for.
 
+Search does not follow the ring. Each open asks the shell's facade for every
+bar widget the live bar can open — Weather, clones, third-party widgets — so a
+panel is searchable whether or not it has a disc. Clones borrow their source's
+mark, Weather uses its widget's own glyph, and unknown panels a generic one.
+
 To choose the ring yourself, write `~/.config/omarchy/wheel.json`:
 
 ```json

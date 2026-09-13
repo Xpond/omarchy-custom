@@ -105,6 +105,27 @@ var EXTRAS = [
     keywords: "file manager browser folder directory explorer nautilus" }
 ]
 
+// Searchable panels kept off the default ring so its count stays even.
+var SEARCH_PANELS = [
+  { plugin: "omarchy.weather", icon: "", label: "Weather" }
+]
+
+// Clones keep their source's mark; unknown panels get a generic one.
+function livePanels(live) {
+  var marks = {}
+  var known = PANELS.concat(SEARCH_PANELS)
+  for (var i = 0; i < known.length; i++) marks[known[i].plugin] = known[i]
+  var out = []
+  for (var j = 0; j < live.length; j++) {
+    var p = live[j]
+    var mark = marks[p.source] || { icon: "󰕮" }
+    out.push({ plugin: p.id, icon: mark.icon, iconFile: mark.iconFile,
+               label: p.id === mark.plugin ? mark.label : p.name,
+               keywords: p.name + " " + (mark.label || "") })
+  }
+  return out
+}
+
 function ringIds(raw) {
   var cfg = parse(raw)
   return (cfg.slices && cfg.slices.length) ? cfg.slices : null

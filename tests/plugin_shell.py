@@ -34,11 +34,17 @@ def check(repo, base, run, block):
     source = (repo / "patches/shell/shell.qml").read_text()
     methods = ["manifestHasKind", "pluginHasVisualCapabilities", "pluginHasBarCapabilities",
                "pluginShellCapabilityProfile", "createScopedPluginShell", "pluginShellFor",
-               "publicPluginManifest", "setPluginSurfaceVisible", "barHasPluginPopouts"]
+               "publicPluginManifest", "setPluginSurfaceVisible", "barHasPluginPopouts",
+               "isBarWidgetPanelPlugin", "menuPluginMayControl", "summonablePanels"]
     production = "\n".join(block(source, "  function " + name + r"\(") for name in methods)
     production += "\n" + block(source, r"  Instantiator {")
     manifests = {name: json.loads((repo / "plugins" / name / "manifest.json").read_text())
                  for name in ["xpo.wheel", "xpo.files"]}
+    widget = {"kinds": ["bar-widget"]}
+    manifests["omarchy.weather"] = {**widget, "id": "omarchy.weather", "name": "Weather"}
+    manifests["omarchy.dropbox"] = {**widget, "id": "omarchy.dropbox", "name": "Dropbox"}
+    manifests["alice.audio"] = {**widget, "id": "alice.audio", "name": "Alice Audio",
+                                "omarchy": {"clonedFrom": "omarchy.audio"}}
     (base / "Panel.qml").write_text('''import QtQuick
 Item {
   property var shell: null
@@ -56,13 +62,16 @@ Item {
   property var _pluginSurfaceStates: ({})
   property var openPanelIds: ({})
   property var panelLoaders: ({})
-  property var panelEntries: Object.keys(pluginRegistry.installedPlugins).map(function(id) {
+  property var panelEntries: ["xpo.wheel", "xpo.files"].map(function(id) {
     return {id: id, manifest: pluginRegistry.installedPlugins[id], kind: "overlay", keepLoaded: true}
   })
   property var pluginRegistry: QtObject {
     property var installedPlugins: ''' + json.dumps(manifests) + '''
     function entryPointUrl(manifest, kind) { return Qt.resolvedUrl("Panel.qml") }
+    function resolveEnabledId(id) { return id }
+    function isEnabled(id) { return true }
   }
+  function isAuthenticationService(manifest, id) { return false }
   property var bar: QtObject {
     property int visiblePanelSurfaces: 0
     function panelSurfaceVisible(shown) { visiblePanelSurfaces += shown ? 1 : -1 }
@@ -72,6 +81,7 @@ Item {
     function requestPluginPopout(id, owner) { activePopout = owner }
     function pluginOwnsBarObject(id, owner) { return owner === activePopout }
     function releasePluginPopout(id, owner) {}
+    function findPanelWidget(id) { return id === "omarchy.dropbox" ? null : ({}) }
   }
   Component { id: pluginShellApiComponent; PluginShellApi {} }
   function pluginIsIndicatorsClone(manifest) { return false }
@@ -103,8 +113,14 @@ Item {
       check(root.bar.visiblePanelSurfaces === 0, "backdrop retained after close")
       var bareBar = root.bar
       check(!wheel.shell.claimPopout(wheel), "claimed a popout the bar cannot own")
+      check(wheel.shell.panels().length === 0, "listed panels from a bar without lookup")
       root.bar = root.popoutBar
       check(wheel.shell.claimPopout(wheel), "built-in bar refused the popout")
+      var listed = String(wheel.shell.panels().map(function(p) {
+        return p.id + ":" + p.name + ":" + p.source }).sort())
+      check(listed === "alice.audio:Alice Audio:omarchy.audio,omarchy.weather:Weather:omarchy.weather",
+            "live panels " + listed)
+      check(files.shell.panels().length === 0, "a plugin without menu capability listed panels")
       root.bar = bareBar
       wheel.shell.releasePopout(wheel)
       console.log("PASS"); Qt.quit()

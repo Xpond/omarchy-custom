@@ -45,7 +45,7 @@ Item {
   readonly property var ring: root.ringIds
     ? MenuIndex.ringOf(root.menuItems, root.ringIds, root.conditions)
     : root.panels
-  readonly property var staticRows: MenuIndex.panelRows(root.panels.concat(MenuIndex.EXTRAS))
+  readonly property var staticRows: MenuIndex.panelRows(MenuIndex.OVERLAYS.concat(MenuIndex.EXTRAS))
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   property var themes: []
   property var fonts: []
@@ -253,9 +253,11 @@ Item {
     return null
   }
 
-  // Refresh live apps/windows per open; reuse the more expensive static menu rows.
+  // Refresh live panels/apps/windows per open; panels need not be on the ring.
   function rebuildIndex() {
-    root.index = root.staticRows.concat(MenuIndex.liveRows({
+    var live = MenuIndex.panelRows(MenuIndex.livePanels(
+      root.shell && root.shell.panels ? root.shell.panels() : []))
+    root.index = root.staticRows.concat(live, MenuIndex.liveRows({
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
       focusOrder: root.focusOrder,

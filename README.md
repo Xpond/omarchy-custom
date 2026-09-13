@@ -3,10 +3,11 @@
 A radial control center, a file browser and centered shell panels for
 [Omarchy](https://omarchy.org).
 
-- **Wheel** (`SUPER+A`): your bar's panels on a ring, plus one search over the
-  Omarchy menu, apps, open windows, themes and fonts. Start with `/` to search
-  files under your home. `SUPER+W` closes the wheel and any open shell panel,
-  otherwise the active window. See [`docs/wheel.md`](docs/wheel.md).
+- **Wheel** (`SUPER+A`): your bar's panels on a ring. Start typing to search
+  every bar panel, the Omarchy menu, apps, open windows, themes and fonts; begin
+  with `/` to search files and folders under your home instead. `SUPER+W`
+  closes the wheel and any open shell panel, otherwise the active window. See
+  [`docs/wheel.md`](docs/wheel.md).
 - **Files**: a keyboard-driven directory browser with previews, opened from
   the wheel. See [`docs/files.md`](docs/files.md).
 - **Centered panels**: bar panels open centered over a blurred desktop. See

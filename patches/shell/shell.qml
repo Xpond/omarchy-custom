@@ -688,6 +688,11 @@ ShellRoot {
         return shell.manifestHasKind(currentManifest(), "menu")
           ? shell.closePluginPeers(key) : ({ acted: false, clear: true })
       },
+      _panels: function() {
+        return shell.summonablePanels().filter(function(panel) {
+          return shell.menuPluginMayControl(currentManifest(), panel.id)
+        })
+      },
       _claimPopout: function(owner) {
         if (!visualCapabilities || !shell.barHasPluginPopouts() || !owner) return false
         shell.bar.requestPluginPopout(key, owner)
@@ -1203,6 +1208,20 @@ ShellRoot {
       if (m.kinds.indexOf(loaderKinds[i]) !== -1) return false
     }
     return true
+  }
+
+  // Bar widgets the live bar can open, clones and third-party ones included.
+  function summonablePanels() {
+    if (!shell.bar || typeof shell.bar.findPanelWidget !== "function") return []
+    var plugins = shell.pluginRegistry.installedPlugins
+    var out = []
+    for (var id in plugins) {
+      if (!shell.isBarWidgetPanelPlugin(id) || !shell.bar.findPanelWidget(id)) continue
+      var m = plugins[id]
+      out.push({ id: id, name: String(m.name || id),
+                 source: String((m.omarchy && m.omarchy.clonedFrom) || id) })
+    }
+    return out
   }
 
   // Plugin popout ownership comes from the patched built-in Bar.qml. A custom

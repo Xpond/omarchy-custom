@@ -232,6 +232,28 @@ ring.launched = "omarchy.audio"
 assert.equal(back(), "none", "and one that has since gone is not owed a return")
 console.log("ok: only the panel the wheel opened answers backspace with a return")
 
+// Search takes every panel the live bar can open, whether or not it has a disc.
+const indexed = { staticRows: [], themes: [], fonts: [], focusOrder: [], appLibrary: null,
+  shell: { panels: () => [
+    { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
+    { id: "alice.audio", name: "Alice Audio", source: "omarchy.audio" },
+    { id: "third.notes", name: "Notes", source: "third.notes" }] } }
+const rebuildIndex = method(wheelSource, "rebuildIndex",
+  { root: indexed, MenuIndex: M, Hyprland: { toplevels: { values: [] } } })
+rebuildIndex()
+const hits = query => M.search(indexed.index, query, 40, {}).map(r => r.plugin)
+assert.ok(hits("weather").includes("omarchy.weather"), "Weather is not searchable")
+assert.ok(hits("audio").includes("alice.audio"), "a clone is not searchable by its source")
+assert.ok(hits("notes").includes("third.notes"), "a third-party panel is not searchable")
+assert.equal(indexed.index.find(r => r.plugin === "alice.audio").icon, M.PANELS[0].icon,
+  "a clone lost its source's mark")
+assert.ok(indexed.index.every(r => r.icon), "a panel row has no mark")
+assert.ok(!M.panels(null).some(p => p.plugin === "omarchy.weather"), "Weather joined the ring")
+indexed.shell = {}
+rebuildIndex()
+assert.equal(indexed.index.length, 0, "a facade without panels() fills search")
+console.log("ok: every panel the bar can open is searchable, on the ring or not")
+
 // The host closes peers without exposing its panel registries to the wheel.
 const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }
 const popoutBar = {

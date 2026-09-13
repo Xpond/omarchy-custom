@@ -25,6 +25,7 @@ QtObject {
   property var _toggle: null
   property var _isOpen: null
   property var _closePeers: null
+  property var _panels: null
   property var _claimPopout: null
   property var _releasePopout: null
   property var _panelSurfaceVisible: null
@@ -67,6 +68,11 @@ QtObject {
 
   function closePeers() {
     return _closePeers ? _closePeers() : { acted: false, clear: true }
+  }
+
+  // Menu plugins only: the panels the live bar can open, for search.
+  function panels() {
+    return _panels ? _panels() : []
   }
 
   function claimPopout(owner) {
