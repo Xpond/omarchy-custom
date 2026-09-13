@@ -11,6 +11,8 @@ STATE=~/.local/state/omarchy-custom
 rm -f ~/.config/omarchy/hooks/post-update.d/centered-panels
 echo "removed post-update hook"
 
+python3 "$REPO/scripts/user-config.py" revert ~/.config/hypr/hyprland.lua "$STATE" ~/.local/bin
+
 # Remove each plugin link and registration.
 for p in "$REPO"/plugins/*/; do
   id=$(basename "$p")
@@ -22,7 +24,6 @@ for p in "$REPO"/plugins/*/; do
   fi
   echo "removed $id"
 done
-rm -f ~/.local/bin/omarchy-open-path
 
 failed=0
 for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \

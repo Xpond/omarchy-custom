@@ -19,9 +19,12 @@ alert() {
 # ------------------------------------------------------------------ plugins
 # Link plugins for live editing and register them idempotently via a temp file.
 command -v jq >/dev/null || { alert "jq is required to register plugins"; exit 1; }
+command -v python3 >/dev/null || { alert "python3 is required to manage user configuration"; exit 1; }
+command -v hyprctl >/dev/null || { alert "hyprctl is required to validate user configuration"; exit 1; }
+python3 "$REPO/scripts/user-config.py" install ~/.config/hypr/hyprland.lua "$STATE" ~/.local/bin || exit 1
 mkdir -p ~/.config/omarchy/plugins ~/.local/bin || exit 1
 if [[ ! -e $CONF ]]; then
-  printf '{"plugins": []}\n' > "$CONF" || exit 1
+  cp "${OMARCHY_PATH:-/usr/share/omarchy}/config/omarchy/shell.json" "$CONF" || exit 1
 fi
 plugins_ok=1
 ids=()
@@ -39,8 +42,6 @@ for p in "$REPO"/plugins/*/; do
   fi
 done
 
-# Files.qml resolves its opener through PATH.
-ln -sfn "$REPO"/bin/omarchy-open-path ~/.local/bin/omarchy-open-path || plugins_ok=0
 (( ${#ids[@]} )) && echo "plugins: ${ids[*]}"
 
 # The copied hook is a shell-quoted trampoline back to this checkout.
@@ -126,7 +127,7 @@ if (( ${#broken[@]} )); then
   alert "${msg[@]}"
 fi
 
-omarchy restart shell
+omarchy restart shell || { alert "Could not restart Omarchy shell"; exit 1; }
 
 # Verify the render thread itself; legacy Lua config can be accepted but inert.
 render_ok=0
@@ -139,19 +140,8 @@ for _ in $(seq 20); do
 done
 
 (( render_ok )) || alert "Not on the threaded render loop — animations will judder" \
-  'Expected hl.env("QSG_RENDER_LOOP", "threaded") in ~/.config/hypr/looknfeel.lua;' \
-  'the legacy `env =` form in hyprland.conf is accepted silently and does nothing.' \
+  'Check the managed block at the end of ~/.config/hypr/hyprland.lua;' \
   'Then: hyprctl reload && omarchy restart shell'
-
-# Report missing user-owned Lua config without rewriting it or failing the hook.
-cfg=()
-grep -qs omarchy-wheel ~/.config/hypr/looknfeel.lua ||
-  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-wheel -- Hyprland fades its map and unmap")
-grep -qs omarchy-files ~/.config/hypr/looknfeel.lua ||
-  cfg+=("looknfeel.lua: no layer rule for namespace omarchy-files -- Hyprland fades its map and unmap")
-grep -qs "summon xpo.wheel" ~/.config/hypr/bindings.lua ||
-  cfg+=("bindings.lua: nothing runs 'omarchy-shell -q shell summon xpo.wheel' -- the wheel has no key")
-(( ${#cfg[@]} )) && printf 'missing config:\n' && printf '  %s\n' "${cfg[@]}"
 
 # Fail the hook when installation or rendering failed.
 (( plugins_ok == 1 && ${#broken[@]} == 0 && render_ok == 1 ))

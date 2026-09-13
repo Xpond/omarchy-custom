@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from desktop import prepare, verify
 
 source = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
@@ -16,6 +17,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     shell = base / "shell"
     stubs = base / "stubs"
     stubs.mkdir()
+    prepare(source, repo, user, stubs)
     shutil.copytree(source / "patches", repo / "patches")
     shutil.copytree(source / "patches/orig", shell)
     shutil.copytree(source / "bin", repo / "bin")
@@ -62,6 +64,7 @@ exit 0''',
 
     result = run()
     assert result.returncode == 0, result.stderr
+    verify(user, repo)
     expected = [{"id": "xpo.files"}, {"id": "xpo.wheel"}]
     assert json.loads(conf.read_text())["plugins"] == expected
     assert "plugins: xpo.files xpo.wheel" in result.stdout
@@ -95,6 +98,7 @@ exit 0''',
     conf.write_text(json.dumps(config))
     result = run("revert.sh")
     assert result.returncode == 0, result.stderr
+    verify(user, repo, installed=False)
     assert not hook.exists()
     assert not (user / ".config/omarchy/plugins/xpo.files").is_symlink()
     assert not (user / ".local/bin/omarchy-open-path").is_symlink()

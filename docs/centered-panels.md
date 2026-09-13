@@ -19,7 +19,7 @@ var fixed it; see [The render loop](#the-render-loop-read-this-first).
 
 ```bash
 ~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
-~/xpo/omarchy-custom/revert.sh    # restore recorded QML backups; leave hypr config alone
+~/xpo/omarchy-custom/revert.sh    # restore recorded QML and remove managed desktop setup
 ```
 
 `install.sh` needs a sudo password, so it must be run from a terminal
@@ -89,10 +89,11 @@ Six package-owned QML files plus Hyprland config.
 | `services/PluginShellApi.qml` | narrow peer-panel, popout, and shared-scrim callbacks without exposing host objects |
 | `shell.qml` | grants menu plugins control of enabled non-authentication UI plugins and implements the callbacks above |
 
-`~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
+The managed block in `~/.config/hypr/hyprland.lua` supplies these settings
+(the original prototype kept them manually in `looknfeel.lua`):
 
 ```lua
-decoration = { blur = { enabled = true, size = 4, passes = 2 } }
+hl.config({ decoration = { blur = { enabled = true, size = 4, passes = 2 } } })
 
 -- The one blurred surface. Everything else stands on it.
 hl.layer_rule({
@@ -103,18 +104,18 @@ hl.layer_rule({
   animation = "none",
 })
 
--- The wheel and the browser. no_anim only -- deliberately NOT blur: they sit
--- over the scrim, so blurring them blurs an already blurred desktop a second
--- time inside every card, and recomputes a fullscreen blur on every frame the
--- ring spins. Both carried `blur = true, ignore_alpha = 0.05` while they drew
--- their own backdrops; both must lose it now that they do not.
-hl.layer_rule({ match = { namespace = "omarchy-wheel" }, no_anim = true, animation = "none" })
-hl.layer_rule({ match = { namespace = "omarchy-files" }, no_anim = true, animation = "none" })
+-- Overlay blur would blur the shared backdrop again on every animation frame.
+hl.layer_rule({
+  match = { namespace = "^(omarchy-wheel|omarchy-files)$" },
+  blur = false,
+  no_anim = true,
+  animation = "none",
+})
 ```
 
-`install.sh` checks these two rules exist but cannot check what is in them, so a
-machine that still has `blur = true` on either gets no warning — only cards that
-look over-frosted inside. This file is hand-kept Lua; nothing installs it.
+`config/hyprland.lua` is the installed source of truth. It explicitly disables
+blur on the wheel/files overlays, then installation reloads Hyprland and checks
+for configuration errors. Revert removes only the managed block.
 
 ### Why the scrim lives in the bar
 
@@ -214,7 +215,7 @@ judder, on every panel, in both directions. Measured with a bare `qml6` app:
 | `threaded` | **6.9ms** | **145Hz** |
 | `basic` | 16.0ms | 62Hz |
 
-The fix is one line in `~/.config/hypr/looknfeel.lua`:
+The installer now includes this line in its managed Hyprland block:
 
 ```lua
 hl.env("QSG_RENDER_LOOP", "threaded")
@@ -225,9 +226,9 @@ hl.env("QSG_RENDER_LOOP", "threaded")
 `layerrule` below. `hyprctl configerrors` stays clean, the line looks right,
 and the var is simply never exported. That cost a full reboot to discover.
 (`hyprland.conf` *is* loaded — its binds work — so this is specifically the
-`env` keyword, not the file.) It lives in `looknfeel.lua` because that is
-parsed before `autostart.lua`, so the var is set before the shell launches.
-`revert.sh` leaves this user-maintained file alone.
+`env` keyword, not the file.) Omarchy launches the shell from a `hyprland.start`
+callback, after configuration is parsed. Installation also reloads configuration
+before restarting the shell. Older manual `looknfeel.lua` settings remain untouched.
 
 In-shell, that took the entry animation from ~12 rendered frames to ~44.
 
@@ -475,7 +476,8 @@ and look at it.
 | `panelScrimColor` | `Color.menu.scrim` | the one backdrop, behind panels, wheel, browser and clipboard alike |
 | `panelScrimHoldMs` | `150` | **must stay >= `closeFadeDuration`** or the backdrop drops out early |
 
-Blur strength lives in `~/.config/hypr/looknfeel.lua` (`size 4, passes 2`).
+Installed blur strength comes from `config/hyprland.lua` (`size 4, passes 2`).
+Put personal overrides after the managed block in your main Hyprland config.
 `passes` has the most effect; `passes 1` for a lighter frost.
 
 > Two cross-file couplings, both easy to break: `panelScrimHoldMs` >=

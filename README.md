@@ -43,14 +43,15 @@ See [`docs/centered-panels.md`](docs/centered-panels.md).
 
 ## Requirements
 
-Tested with Omarchy **4.0.2**, Quickshell **0.3.1**, and Qt **6.11.2** on
+Tested with Omarchy **4.0.3**, Quickshell **0.3.1**, and Qt **6.11.2** on
 Hyprland. Other versions have not been verified.
 
-- Installation: Bash, Git, `jq`, `sudo`, and the Omarchy CLI.
+- Installation: Bash, Git, Python 3, `jq`, `sudo`, `hyprctl`, and the Omarchy CLI.
+  Run from an active Omarchy session with `~/.config/hypr/hyprland.lua` present.
 - File search: `fd`. File operations use standard GNU utilities and `gio`
   (trash); path copying uses `wl-copy`.
 - Opening files: `xdg-mime`, `xdg-open`, and `setsid`.
-- Optional: Python 3 with Pygments for syntax colours, ImageMagick `identify`
+- Optional: Pygments for syntax colours, ImageMagick `identify`
   for image dimensions, and `notify-send` for desktop installation alerts.
   Without the first two, plain text previews and image previews still work.
 
@@ -65,18 +66,19 @@ Hyprland. Other versions have not been verified.
 `~/.config/omarchy/plugins/`, registers each id in `~/.config/omarchy/shell.json`
 — a plugin the shell cannot find listed there is one it does not load, and
 `omarchy refresh shell` rewrites that file from the defaults — and puts
-`bin/omarchy-open-path` on `PATH`, which the browser runs by name.
+both `bin/omarchy-open-path` and `bin/omarchy-wheel-close` in `~/.local/bin`.
 
-**Only the patch wants root.** It writes three package-owned files under
+**Only the patch wants root.** It writes six package-owned files under
 `/usr/share/omarchy/shell`, and that is the only `sudo` in the script: asked
 per file, and only when that file actually differs, so a re-run that finds
 everything in place never prompts. Everything else lives under `$HOME`.
 
-Two pieces are deliberately *not* installed, only checked for and named on
-stdout: the layer rules in `~/.config/hypr/looknfeel.lua` (without them the
-wheel and the browser get no blur) and the `SUPER+A` binding in `bindings.lua`.
-Both are hand-kept Lua carrying your own comments, and a script splicing lines
-into those fails worse than a missing line it tells you about.
+Installation appends a marked block from `config/hyprland.lua` to your main
+`~/.config/hypr/hyprland.lua`. It sets `SUPER+A` press/release, overrides
+`SUPER+W` with the wheel-aware close helper, enables shared backdrop blur,
+disables blur/fades on the wheel and files overlays, and sets the threaded
+render loop. Existing binding and appearance files remain intact.
+Hyprland is reloaded and checked for errors before the shell is restarted.
 
 Links, not copies: editing the repo *is* editing the installed plugin. It still
 needs `omarchy-restart-shell` — QML components are cached, so `rescanPlugins`
@@ -88,8 +90,8 @@ checkout, wherever you cloned it. Keep the checkout at that location; after
 moving it, rerun `install.sh`. `revert.sh` removes the hook too, so a later
 update does not reinstall the customization.
 
-A missing `shell.json` is created. Existing invalid JSON is preserved and
-registration failure returns a nonzero exit code.
+A missing `shell.json` is copied from Omarchy's defaults. Existing invalid JSON
+is preserved and registration failure returns a nonzero exit code.
 
 `install.sh` is idempotent. When an update ships a *new* version of a patched
 file it rebases the patch onto it with a three-way merge rather than clobbering
@@ -114,8 +116,8 @@ what existed before installation.
 
 ## The one thing that will bite you
 
-Smooth animation depends on `hl.env("QSG_RENDER_LOOP", "threaded")` in
-`~/.config/hypr/looknfeel.lua`. Without it Qt drives animations from a 16ms
+Smooth animation depends on `hl.env("QSG_RENDER_LOOP", "threaded")` in the
+managed Hyprland block. Without it Qt drives animations from a 16ms
 timer — 62Hz against a 144Hz display — and every panel judders.
 
 **It must be the Lua `hl.env()` form.** `env = QSG_RENDER_LOOP,threaded` in
@@ -133,28 +135,29 @@ proves nothing, which is exactly how this stayed broken for days.
 
 ## Hyprland config we own
 
-These edits live outside this repo, in `~/.config/hypr/`:
+The `BEGIN omarchy-custom` / `END omarchy-custom` block is managed by the
+installer. Put personal overrides outside it. Revert removes the exact block,
+preserving surrounding edits and restoring the bindings from your remaining
+configuration. Older manual wheel bindings/rules remain in place.
 
-    looknfeel.lua   the global blur enable, QSG_RENDER_LOOP, and blur layer
-                    rules for the panel scrim, the wheel and the browser
-    bindings.lua    SUPER+A (press opens the wheel, release commits),
-                    SUPER+W (close wheel/panel, else close window)
-
-`install.sh` names any of these that is missing but never writes them, and
-`revert.sh` leaves them alone. There are `*.bak.centered-panel` copies in that
-directory from the first prototype run; they predate everything above, so treat
-them as history rather than as a restore point.
+The original config and ownership records live in
+`~/.local/state/omarchy-custom/user-config.json`. Edited managed blocks or
+conflicting helper files are reported and left untouched. Existing helper links
+to this checkout are borrowed; revert removes only links the installer created.
+Failed reload validation restores the previous config, links, and records.
 
 ## Checks
 
 ```bash
 node tests/check.js
 python3 tests/install.py
+python3 tests/desktop.py
 python3 tests/runtime.py
 node plugins/xpo.wheel/check.js
 ```
 
-The first three use fixtures; the last checks this machine's real Omarchy menu.
+All but the last use fixtures; the last checks this machine's real Omarchy menu.
+The desktop fixture also executes the shipped configuration with Lua.
 The runtime fixtures use Quickshell offscreen and do not change the clipboard.
 They include the production plugin loader and facade together to catch QML
 model conversion errors, as well as backdrop counting and popout ownership.
