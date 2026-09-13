@@ -232,25 +232,40 @@ ring.launched = "omarchy.audio"
 assert.equal(back(), "none", "and one that has since gone is not owed a return")
 console.log("ok: only the panel the wheel opened answers backspace with a return")
 
-// The wheel is one shell popout, not a second surface stacked over the first.
-// Loader-owned overlays are closed through the same handoff.
+// The host closes peers without exposing its panel registries to the wheel.
 const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }
 const popoutBar = {
   activePopout: null,
-  requestPopout(owner) { this.activePopout = owner },
-  releasePopout(owner) { if (this.activePopout === owner) this.activePopout = null }
+  pluginOwnsBarObject: (id, owner) => owner && owner.pluginId === id
 }
 const oldPanel = { closed: false, closeForPopoutSwitch() {
   this.closed = true
-  popoutBar.releasePopout(this)
+  popoutBar.activePopout = null
 } }
 popoutBar.activePopout = oldPanel
+const hostShell = {
+  bar: popoutBar,
+  isPluginOpen: id => openPeers[id] === true,
+  hide: id => { openPeers[id] = false }
+}
+const shellSource = read("patches/shell/shell.qml")
+const closePluginPeers = method(shellSource, "closePluginPeers", {
+  shell: hostShell,
+  openPanelIds: { "xpo.wheel": true, "xpo.files": true },
+  panelLoaders: { "omarchy.menu": {} }
+})
+const peers = closePluginPeers("xpo.wheel")
+assert.equal(peers.clear, true)
+assert.equal(oldPanel.closed, true, "the old bar panel is switched out")
+assert.equal(openPeers["xpo.files"], false, "an open overlay is closed")
+assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is closed")
+
+let claimedPopout = null
 const opening = {
   pluginId: "xpo.wheel", shell: {
-    bar: popoutBar, openPanelIds: { "xpo.wheel": true, "xpo.files": true },
-    panelLoaders: { "omarchy.menu": {} },
-    isPluginOpen: id => openPeers[id] === true,
-    hide: id => { openPeers[id] = false }
+    closePeers: () => ({ acted: false, clear: true }),
+    claimPopout: owner => { claimedPopout = owner },
+    releasePopout: owner => { if (claimedPopout === owner) claimedPopout = null }
   },
   opened: false, shown: false, selected: -1, armed: false, originX: -1,
   query: "", path: [], launched: "", launchedAt: -1, justOpened: false,
@@ -261,15 +276,13 @@ const openingScope = { root: opening, unmap: { running: false, stop() {} },
   spin: { stepsLeft: 0, restart() {} }, keys: { forceActiveFocus() {} },
   Qt: { callLater: fn => fn() } }
 method(wheelSource, "open", openingScope)("{}")
-assert.equal(oldPanel.closed, true, "the old bar panel is switched out")
-assert.equal(openPeers["xpo.files"], false, "an open overlay is closed")
-assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is closed")
-assert.equal(popoutBar.activePopout, opening, "the wheel owns the popout slot")
+assert.equal(claimedPopout, opening, "the wheel owns the popout slot")
 assert.equal(opening.opened, true)
 method(wheelSource, "close", { root: opening, unmap: { stop() {} } })(true)
-assert.equal(popoutBar.activePopout, null, "closing releases the popout slot")
+assert.equal(claimedPopout, null, "closing releases the popout slot")
 openPeers["xpo.files"] = true
-opening.shell.hide = () => {}
+hostShell.hide = () => {}
+opening.shell.closePeers = () => closePluginPeers("xpo.wheel")
 method(wheelSource, "open", openingScope)("{}")
 assert.equal(opening.opened, false, "a peer protecting unsaved work keeps the wheel hidden")
 console.log("ok: the wheel replaces an open panel instead of stacking above it")
@@ -359,38 +372,74 @@ walkKey("Key_Backspace"); assert.equal(walk.left, 1, "home has nowhere left but 
 assert.equal(walk.dir, "/home/test", "and it does not climb past home on the way")
 console.log("ok: backspace shortens, then climbs, then leaves for the wheel")
 
-// One wash, owned by the bar, behind every shell surface. A plugin that paints
-// its own takes Hyprland's blur down with it when it unmaps -- which is the
-// flash that stood for eight sessions and survived two timing fixes, because
-// timing was never what was wrong. So neither may paint one, and both must hand
-// the bar their open state instead.
+// The bar owns the shared backdrop so panel handoffs preserve blur.
 for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) {
   assert.doesNotMatch(read(f), /color:\s*Color\.menu\.scrim/, f + " paints its own scrim")
-  assert.match(read(f), /panelSurfaceVisible\(/, f + " never counts on the bar's")
+  assert.match(read(f), /onOpenedChanged:[\s\S]*?panelSurfaceVisible\(root\.opened\)/,
+    f + " does not drive the bar scrim from its open state")
 }
 console.log("ok: neither plugin paints a scrim; both count on the bar's")
 
-// 4.0.3 hands a plugin a facade scoped to its own id instead of the host
-// shell, which is nothing to an overlay built to launch other plugins.
-// centered-panels.md has the full symptom list. Run the patched function
-// rather than grep for it: a comment naming the namespace satisfies a regex
-// and restores nothing, and an upstream rebase can leave the line in a
-// function no longer on the injection path.
-const scoped = { sandboxed: true }
-const host = { createScopedPluginShell: () => scoped, pluginHasBarCapabilities: () => false }
-const shellFor = method(read("patches/shell/shell.qml"), "pluginShellFor", { shell: host })
-for (const id of ["xpo.wheel", "xpo.files"])
-  assert.equal(shellFor({ id, __isFirstParty: false }), host, id + " is sandboxed")
-// The grant is ours alone, and it is a prefix, not a substring: `notxpo.thing`
-// is somebody else's plugin.
-for (const id of ["third.party", "notxpo.thing"])
-  assert.equal(shellFor({ id, __isFirstParty: false }), scoped, id + " was handed the host shell")
-console.log("ok: xpo. plugins get the host shell, nobody else does")
+// Every third-party plugin gets a facade. A namespace must never grant the
+// host ShellRoot: another plugin can choose the same prefix or even the same id.
+const scoped = []
+const host = {
+  createScopedPluginShell: (...args) => { const api = { args }; scoped.push(api); return api },
+  pluginHasBarCapabilities: () => false
+}
+const shellFor = method(shellSource, "pluginShellFor", { shell: host })
+for (const id of ["xpo.wheel", "xpo.files", "xpo.hostile", "third.party"])
+  assert.notEqual(shellFor({ id, __isFirstParty: false }), host, id + " received ShellRoot")
+assert.equal(scoped.length, 4)
+
+const manifests = {
+  "ui.panel": { kinds: ["panel"] },
+  "disabled.panel": { kinds: ["panel"] },
+  "auth.service": { kinds: ["panel"] },
+  "plain.service": { kinds: ["service"] }
+}
+const permissionShell = {
+  manifestHasKind: (manifest, kind) => manifest.kinds.includes(kind),
+  pluginHasVisualCapabilities: manifest => manifest.kinds.some(k =>
+    ["bar-widget", "panel", "overlay", "menu"].includes(k)),
+  pluginRegistry: {
+    resolveEnabledId: id => id,
+    installedPlugins: manifests,
+    isEnabled: id => id !== "disabled.panel"
+  },
+  isAuthenticationService: (manifest, id) => id === "auth.service"
+}
+const menuMayControl = method(shellSource, "menuPluginMayControl", { shell: permissionShell })
+assert.equal(menuMayControl({ kinds: ["menu"] }, "ui.panel"), true)
+assert.equal(menuMayControl({ kinds: ["overlay"] }, "ui.panel"), false)
+assert.equal(menuMayControl({ kinds: ["menu"] }, "disabled.panel"), false)
+assert.equal(menuMayControl({ kinds: ["menu"] }, "auth.service"), false)
+assert.equal(menuMayControl({ kinds: ["menu"] }, "plain.service"), false)
+
+const surfaceCalls = []
+const surfaceScope = {
+  _pluginSurfaceStates: ({}),
+  shell: { bar: { panelSurfaceVisible: shown => surfaceCalls.push(shown) } }
+}
+const setSurfaceVisible = method(shellSource, "setPluginSurfaceVisible", surfaceScope)
+setSurfaceVisible("xpo.wheel", false)
+setSurfaceVisible("xpo.wheel", true)
+setSurfaceVisible("xpo.wheel", true)
+setSurfaceVisible("xpo.wheel", false)
+assert.deepEqual(surfaceCalls, [true, false], "a plugin cannot inflate the scrim count")
+
+for (const file of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"])
+  assert.doesNotMatch(read(file), /root\.shell\.(?:bar|openPanelIds|panelLoaders|callIfLoaded)\b/,
+    file + " reaches through its facade")
+assert.match(read("plugins/xpo.wheel/manifest.json"), /"menu"/,
+  "the wheel lacks the menu capability")
+console.log("ok: xpo plugins use narrow facades and menus control only UI plugins")
 
 // revert.sh needs no assertion here: install.py walks every patches/orig/*.qml
 // and checks revert put it back, so shell.qml joined that the moment it existed.
-assert.match(read("install.sh"), /\bshell\.qml\b/, "install.sh does not carry shell.qml")
-console.log("ok: install.sh carries shell.qml")
+for (const file of ["shell.qml", "services/PluginShellApi.qml"])
+  assert.ok(read("install.sh").includes(file), "install.sh does not carry " + file)
+console.log("ok: install.sh carries both shell facade patches")
 
 require("./scene.js")
 require("./trails.js")

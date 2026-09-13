@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from plugin_shell import check as check_plugin_shell
 
 repo = Path(__file__).resolve().parents[1]
 wheel = (repo / "plugins/xpo.wheel/Wheel.qml").read_text()
@@ -29,6 +30,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     def run(name, body, extra=None):
         qml = base / (name + ".qml")
         qml.write_text('''import QtQuick
+import QtQml.Models
 import Quickshell
 import Quickshell.Io
 import "FilesIndex.js" as FilesIndex
@@ -44,6 +46,8 @@ Scope {
         assert result.returncode == 0 and "PASS" in log, log
         assert not any(error in log for error in ["TypeError", "ReferenceError", "FAIL"]), log
         print("ok:", name)
+
+    check_plugin_shell(repo, base, run, block)
 
     # The real walk, with `fd` swapped for a scan that says which epoch asked
     # for it. Everything below it -- the epoch, the guards -- is production code.

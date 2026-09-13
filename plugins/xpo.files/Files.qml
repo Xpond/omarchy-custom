@@ -264,6 +264,7 @@ Item {
 
   // Drop preview state and pending work when the panel closes.
   onOpenedChanged: {
+    if (root.shell) root.shell.panelSurfaceVisible(root.opened)
     if (root.opened) {
       // Rebuild a preview even when reopening on the same row.
       settle.restart()
@@ -290,7 +291,8 @@ Item {
 
   // At home, hand Backspace navigation to the wheel.
   function toWheel() {
-    if (root.shell) root.shell.callIfLoaded("xpo.wheel", "back", "")
+    Quickshell.execDetached(["omarchy-shell", "-q", "shell", "call",
+                             "xpo.wheel", "back", ""])
   }
 
   function move(step) {
@@ -503,12 +505,6 @@ Item {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
-
-    // Share the bar scrim so panel handoffs do not flash the desktop.
-    onVisibleChanged: {
-      var bar = root.shell && root.shell.bar
-      if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
-    }
 
     MouseArea { anchors.fill: parent; onClicked: root.close() }
 

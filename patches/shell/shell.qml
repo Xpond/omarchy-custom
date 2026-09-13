@@ -282,6 +282,7 @@ ShellRoot {
   property var _pluginAppLibraryApis: ({})
   property var _pluginBarStateApis: ({})
   property var _pluginFirstPartyServiceApis: ({})
+  property var _pluginSurfaceStates: ({})
 
   Component {
     id: pluginShellApiComponent
@@ -355,6 +356,13 @@ ShellRoot {
     return shell.manifestHasKind(manifest, "bar")
   }
 
+  function pluginHasVisualCapabilities(manifest) {
+    var kinds = ["bar-widget", "panel", "overlay", "menu"]
+    for (var i = 0; i < kinds.length; i++)
+      if (shell.manifestHasKind(manifest, kinds[i])) return true
+    return false
+  }
+
   function pluginIsIndicatorsClone(manifest) {
     var metadata = manifest && Util.isPlainObject(manifest.omarchy) ? manifest.omarchy : null
     return shell.manifestHasKind(manifest, "bar-widget")
@@ -408,6 +416,15 @@ ShellRoot {
     for (var i = 0; i < uiKinds.length; i++)
       if (shell.manifestHasKind(target, uiKinds[i])) return true
     return false
+  }
+
+  function menuPluginMayControl(manifest, requestedId) {
+    if (!shell.manifestHasKind(manifest, "menu")) return false
+    var id = shell.pluginRegistry.resolveEnabledId(String(requestedId || ""))
+    var target = shell.pluginRegistry.installedPlugins[id]
+    return !!target && shell.pluginRegistry.isEnabled(id)
+      && !shell.isAuthenticationService(target, id)
+      && shell.pluginHasVisualCapabilities(target)
   }
 
   function mutatePluginBarConfig(mutator) {
@@ -526,8 +543,23 @@ ShellRoot {
       allowOwnService ? "own-service" : "no-own-service",
       barCapabilities ? "bar" : "no-bar",
       allowOwnService && shell.pluginIsIndicatorsClone(manifest) ? "indicators" : "no-indicators",
-      shell.manifestHasKind(manifest, "menu") ? "menu" : "no-menu"
+      shell.manifestHasKind(manifest, "menu") ? "menu" : "no-menu",
+      shell.pluginHasVisualCapabilities(manifest) ? "visual" : "no-visual"
     ].join("|")
+  }
+
+  function setPluginSurfaceVisible(cacheKey, shown) {
+    var key = String(cacheKey || "")
+    var nextShown = shown === true
+    var current = _pluginSurfaceStates[key] === true
+    if (!key || current === nextShown) return
+    var next = ({})
+    for (var id in _pluginSurfaceStates)
+      if (id !== key && _pluginSurfaceStates[id] === true) next[id] = true
+    if (nextShown) next[key] = true
+    _pluginSurfaceStates = next
+    if (shell.bar && typeof shell.bar.panelSurfaceVisible === "function")
+      shell.bar.panelSurfaceVisible(nextShown)
   }
 
   function cacheWithoutKey(cache, key, destroyValue) {
@@ -559,6 +591,7 @@ ShellRoot {
   function revokePluginShellApi(cacheKey) {
     var key = String(cacheKey || "")
     if (!key) return
+    shell.setPluginSurfaceVisible(key, false)
     _pluginAppLibraryApis = shell.cacheWithoutKey(_pluginAppLibraryApis, key, true)
     _pluginFirstPartyServiceApis = shell.cacheWithoutPrefix(_pluginFirstPartyServiceApis, key + "::")
     _pluginBarEntryShellApis = shell.cacheWithoutPrefix(_pluginBarEntryShellApis, key + ":")
@@ -583,6 +616,8 @@ ShellRoot {
     function hasCurrentBarCapabilities() {
       return barCapabilities && shell.pluginHasBarCapabilities(currentManifest())
     }
+
+    var visualCapabilities = shell.pluginHasVisualCapabilities(manifest)
 
     // Construct the narrow service proxies before any plugin binding can call
     // firstPartyServiceFor(). Creating a QObject while evaluating that binding
@@ -627,23 +662,44 @@ ShellRoot {
       _summon: function(requestedId, payloadJson) {
         if (!shell.pluginOwnsTarget(key, requestedId)
             && !shell.barPluginMayControl(currentManifest(), requestedId)
+            && !shell.menuPluginMayControl(currentManifest(), requestedId)
             && !shell.pluginCloneMaySummon(currentManifest(), requestedId)) return false
         return shell.summon(shell.pluginRegistry.resolveEnabledId(requestedId), payloadJson)
       },
       _hide: function(requestedId) {
         if (!shell.pluginOwnsTarget(key, requestedId)
-            && !shell.barPluginMayControl(currentManifest(), requestedId)) return false
+            && !shell.barPluginMayControl(currentManifest(), requestedId)
+            && !shell.menuPluginMayControl(currentManifest(), requestedId)) return false
         return shell.hide(shell.pluginRegistry.resolveEnabledId(requestedId))
       },
       _toggle: function(requestedId, payloadJson) {
         if (!shell.pluginOwnsTarget(key, requestedId)
-            && !shell.barPluginMayControl(currentManifest(), requestedId)) return false
+            && !shell.barPluginMayControl(currentManifest(), requestedId)
+            && !shell.menuPluginMayControl(currentManifest(), requestedId)) return false
         return shell.toggle(shell.pluginRegistry.resolveEnabledId(requestedId), payloadJson)
       },
       _isOpen: function(requestedId) {
         if (!shell.pluginOwnsTarget(key, requestedId)
-            && !shell.barPluginMayControl(currentManifest(), requestedId)) return false
+            && !shell.barPluginMayControl(currentManifest(), requestedId)
+            && !shell.menuPluginMayControl(currentManifest(), requestedId)) return false
         return shell.isPluginOpen(shell.pluginRegistry.resolveEnabledId(requestedId))
+      },
+      _closePeers: function() {
+        return shell.manifestHasKind(currentManifest(), "menu")
+          ? shell.closePluginPeers(key) : ({ acted: false, clear: true })
+      },
+      _claimPopout: function(owner) {
+        if (!visualCapabilities || !shell.bar || !owner) return false
+        shell.bar.requestPluginPopout(key, owner)
+        return shell.bar.pluginOwnsBarObject(key, owner)
+          && shell.bar.activePopout === owner
+      },
+      _releasePopout: function(owner) {
+        if (visualCapabilities && shell.bar)
+          shell.bar.releasePluginPopout(key, owner)
+      },
+      _panelSurfaceVisible: function(shown) {
+        if (visualCapabilities) shell.setPluginSurfaceVisible(cacheKey, shown)
       },
       _updateSettings: function(requestedId, settings) {
         if (shell.pluginOwnsTarget(key, requestedId)) return shell.updateEntryInline(key, settings)
@@ -740,8 +796,6 @@ ShellRoot {
     if (!manifest || manifest.__isFirstParty) return shell
     var key = String(manifest.id || "")
     if (!key) return null
-    // Local xpo plugins need the host shell to launch other plugins.
-    if (key.indexOf("xpo.") === 0) return shell
     return shell.createScopedPluginShell(manifest, key, true, shell.pluginHasBarCapabilities(manifest))
   }
 
@@ -1151,6 +1205,31 @@ ShellRoot {
     return true
   }
 
+  function closePluginPeers(pluginId) {
+    var key = String(pluginId || "")
+    var acted = false
+    var popout = shell.bar && shell.bar.activePopout
+    if (popout && !shell.bar.pluginOwnsBarObject(key, popout)) {
+      acted = true
+      if ("closeForPopoutSwitch" in popout) popout.closeForPopoutSwitch()
+      else if ("close" in popout) popout.close()
+    }
+    var candidates = ({})
+    for (var openId in openPanelIds) candidates[openId] = true
+    for (var loadedId in panelLoaders) candidates[loadedId] = true
+    var ids = []
+    for (var id in candidates)
+      if (id !== key && shell.isPluginOpen(id)) ids.push(id)
+    var clear = !shell.bar || !shell.bar.activePopout
+      || shell.bar.pluginOwnsBarObject(key, shell.bar.activePopout)
+    for (var i = 0; i < ids.length; i++) {
+      shell.hide(ids[i])
+      acted = true
+      if (shell.isPluginOpen(ids[i])) clear = false
+    }
+    return { acted: acted, clear: clear }
+  }
+
   function summon(pluginId, payloadJson) {
     var id = shell.pluginRegistry.resolveEnabledId(pluginId)
     if (!id) return false
@@ -1341,7 +1420,9 @@ ShellRoot {
         onLoaded: {
           if (!item) return
           if ("omarchyPath" in item) item.omarchyPath = shell.omarchyPath
-          if ("shell" in item) item.shell = shell.pluginShellFor(panelEntry.manifest)
+          // Model roles wrap arrays as QML sequences; capability checks need
+          // the host registry's original JavaScript manifest.
+          if ("shell" in item) item.shell = shell.pluginShellFor(shell.pluginRegistry.installedPlugins[panelEntry.pluginId])
           if ("manifest" in item) item.manifest = shell.publicPluginManifest(panelEntry.manifest)
           if ("barWidgetRegistry" in item) item.barWidgetRegistry = shell.pluginBarWidgetRegistryFor(panelEntry.manifest)
           if ("pluginRegistry" in item) item.pluginRegistry = shell.pluginRegistryFor(panelEntry.manifest)

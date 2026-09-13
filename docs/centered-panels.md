@@ -72,7 +72,7 @@ break the entire shell, which is far worse than losing the patch.
 
 ## 2. What changed
 
-Five package-owned QML files (295 added lines total) plus Hyprland config.
+Six package-owned QML files plus Hyprland config.
 
 | File | Change |
 |---|---|
@@ -80,7 +80,8 @@ Five package-owned QML files (295 added lines total) plus Hyprland config.
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
 | `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one (18 lines) |
-| `shell.qml` | `pluginShellFor` hands the host shell to `xpo.*` plugins instead of 4.0.3's per-id sandbox facade (5 lines) |
+| `services/PluginShellApi.qml` | narrow peer-panel, popout, and shared-scrim callbacks without exposing host objects |
+| `shell.qml` | grants menu plugins control of enabled non-authentication UI plugins and implements the callbacks above |
 
 `~/.config/hypr/looknfeel.lua` (backed up as `*.bak.centered-panel`):
 
@@ -134,7 +135,7 @@ Top       omarchy-bar
 and blurred the card along with the desktop. Layer separation is a protocol
 guarantee; `order` is a hint.
 
-### Why `shell.qml` is patched: the 4.0.3 plugin sandbox
+### Why `shell.qml` is patched: plugin capabilities
 
 4.0.3 stopped handing plugins the host `ShellRoot`. A plugin now gets a
 `services/PluginShellApi.qml` facade, closed over its own id.
@@ -147,8 +148,8 @@ party. Symlinking them into the packaged directory instead does not work:
 that scan is `find … -type f` with no `-L`, so it neither descends a
 symlinked directory nor matches a symlinked file.
 
-The wheel exists to launch *other* plugins, so the sandbox took all of it at
-once — and silently, because a denied call just returns `false`:
+The wheel exists to launch *other* plugins, so the stock facade denies several
+things it needs — silently, because a denied call just returns `false`:
 
 | Call | Sandboxed result |
 |---|---|
@@ -156,19 +157,38 @@ once — and silently, because a denied call just returns `false`:
 | `shell.summon("xpo.files", …)` | `false` — browser never opens |
 | `shell.isPluginOpen(other)` / `hide(other)` | `false` — close-others and Backspace-to-wheel dead |
 | `shell.appLibrary` | `null` — app launching dead |
-| `shell.bar.panelSurfaceVisible` | `undefined` — shared scrim never maps |
-| `shell.callIfLoaded` (`xpo.files`) | absent from the facade entirely |
+| shared surface reporting | absent — shared scrim never maps |
+| peer-panel coordination | absent — surfaces can stack and fight for focus |
 
-The one line in `pluginShellFor` returns the host shell for the `xpo.`
-namespace, which is this machine's own code. The two supported alternatives
-were both worse: declaring kind `"bar"` buys cross-plugin control through
-`barPluginMayControl`, but lies about what the wheel is and lists it as a bar
-replacement; routing through the `shell` IPC target restores `toggle` and
-`summon` but cannot restore `appLibrary` or the scrim at all.
+`PluginShellApi` now exposes only the missing operations as callbacks closed
+over the caller's id. A plugin with kind `menu` may summon, hide, toggle, and
+inspect enabled non-authentication UI plugins. Visual plugins may report one
+mapped surface and claim their own popout object; the bar validates ownership.
+The host closes peer panels internally, so neither its panel maps nor the live
+Bar object cross the facade. Files uses the public shell IPC for its one call
+back to the wheel.
 
-**Diagnosing a repeat:** the facade declares `pluginId`, the host shell does
-not. From inside a plugin, `root.shell.pluginId` naming your own plugin means
-you are sandboxed.
+`pluginShellFor` now returns the scoped facade for every third-party plugin.
+No namespace or plugin id is a trust grant: an unrelated `xpo.*` manifest,
+including a replacement using one of these ids, still receives only the narrow
+capabilities declared by its kinds.
+
+This is a QML capability boundary, not an OS sandbox. Plugin code still has
+the Quickshell APIs available to its process.
+
+**Keep capability checks on the original registry manifest.** Passing a
+manifest through an Instantiator model role converts its arrays to QML
+sequences. `Array.isArray(manifest.kinds)` then returns false, silently denying
+the wheel's menu and visual capabilities. The panel loader passes the host
+registry's original manifest to `pluginShellFor()` to preserve those arrays.
+This fixes the missing shared blur without granting the plugin ShellRoot.
+
+`tests/plugin_shell.py`, included in the runtime suite, exercises the actual
+loader and API factory together. It checks restricted host access, menu
+capabilities, backdrop counting, duplicate reports, and panel handoffs.
+An isolated Wayland comparison against `0ca54c8` confirmed that the registry
+manifest restores `omarchy-panel-scrim`; the installed fix was also confirmed
+on the desktop.
 
 ---
 

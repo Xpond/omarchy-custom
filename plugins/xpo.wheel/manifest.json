@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "xpo",
   "description": "Radial launcher for the shell panels",
-  "kinds": ["overlay"],
+  "kinds": ["overlay", "menu"],
   "keepLoaded": true,
   "entryPoints": { "overlay": "Wheel.qml" }
 }

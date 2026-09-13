@@ -250,11 +250,11 @@ then fades on its own.
 ## Why a plugin and not a patch
 
 Third-party plugins live in `~/.config/omarchy/plugins/<id>/` and are
-discovered from a `manifest.json`. The shell injects `shell` into the loaded
-item, which means a plugin can call `shell.toggle("omarchy.audio")` and drive
-every existing panel without touching packaged code. Nothing in
-`/usr/share/omarchy` is modified, so `omarchy update` cannot break it and
-there is no merge to maintain.
+discovered from a `manifest.json`. The shell injects a capability-scoped
+facade into the loaded item. The wheel's `menu` kind may control enabled UI
+plugins and use a detached application-library API, but it never receives the
+host ShellRoot, Bar, or plugin-loader maps. Small versioned shell patches add
+that facade support; the installer rebases them when Omarchy updates.
 
 `import qs.Commons` and `import qs.Ui` resolve from a third-party plugin, so
 the theme singletons (`Color`, `Style`, `Border`) and shared widgets

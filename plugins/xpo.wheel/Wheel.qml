@@ -265,30 +265,7 @@ Item {
   }
 
   function closePeers() {
-    if (!root.shell) return { acted: false, clear: true }
-    var acted = false
-    var bar = root.shell.bar
-    var popout = bar && bar.activePopout
-    if (popout && popout !== root) {
-      acted = true
-      if ("closeForPopoutSwitch" in popout) popout.closeForPopoutSwitch()
-      else if ("close" in popout) popout.close()
-    }
-    var ids = []
-    var candidates = {}
-    var openIds = root.shell.openPanelIds || {}
-    var loaders = root.shell.panelLoaders || {}
-    for (var openId in openIds) candidates[openId] = true
-    for (var loadedId in loaders) candidates[loadedId] = true
-    for (var id in candidates)
-      if (id !== root.pluginId && root.shell.isPluginOpen(id)) ids.push(id)
-    var clear = !bar || !bar.activePopout || bar.activePopout === root
-    for (var i = 0; i < ids.length; i++) {
-      root.shell.hide(ids[i])
-      acted = true
-      if (root.shell.isPluginOpen(ids[i])) clear = false
-    }
-    return { acted: acted, clear: clear }
+    return root.shell ? root.shell.closePeers() : { acted: false, clear: true }
   }
 
   function open(payloadJson) {
@@ -297,8 +274,7 @@ Item {
     unmap.stop()
     var peers = root.closePeers()
     if (!peers.clear) return
-    var bar = root.shell && root.shell.bar
-    if (bar && typeof bar.requestPopout === "function") bar.requestPopout(root)
+    if (root.shell) root.shell.claimPopout(root)
     root.selected = -1
     root.armed = false
     root.originX = -1
@@ -317,8 +293,7 @@ Item {
 
   // Fade cancellation; unmap immediately before handing keyboard focus to a panel.
   function close(immediate) {
-    var bar = root.shell && root.shell.bar
-    if (bar && bar.activePopout === root) bar.releasePopout(root)
+    if (root.shell) root.shell.releasePopout(root)
     if (immediate) { unmap.stop(); root.opened = false; root.shown = false; return }
     if (!root.opened || unmap.running) return
     root.shown = false
@@ -529,11 +504,14 @@ Item {
     fileScan.running = true
   }
   onModeChanged: root.scanFiles()
-  onOpenedChanged: if (!root.opened) {
-    root.scanEpoch++
-    fileScan.running = false
-    root.files = null
-    root.daylight = 0
+  onOpenedChanged: {
+    if (root.shell) root.shell.panelSurfaceVisible(root.opened)
+    if (!root.opened) {
+      root.scanEpoch++
+      fileScan.running = false
+      root.files = null
+      root.daylight = 0
+    }
   }
 
   // Themes and fonts change rarely enough to list once at startup.
@@ -616,12 +594,6 @@ Item {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: root.shown ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
-
-    // Share the bar scrim so panel handoffs do not flash the desktop.
-    onVisibleChanged: {
-      var bar = root.shell && root.shell.bar
-      if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(visible)
-    }
 
     Sky {
       id: sky

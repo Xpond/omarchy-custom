@@ -5,7 +5,7 @@ set -uo pipefail
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
-       plugins/clipboard/Clipboard.qml shell.qml)
+       plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
 
 # Hook failures can scroll away, so report them on the desktop too.

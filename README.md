@@ -143,3 +143,5 @@ node plugins/xpo.wheel/check.js
 
 The first three use fixtures; the last checks this machine's real Omarchy menu.
 The runtime fixtures use Quickshell offscreen and do not change the clipboard.
+They include the production plugin loader and facade together to catch QML
+model conversion errors, as well as backdrop counting and popout ownership.

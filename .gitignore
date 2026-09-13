@@ -1,3 +1,4 @@
 .rb/
 .installed/
 misc/
+__pycache__/
