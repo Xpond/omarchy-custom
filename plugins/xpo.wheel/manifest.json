@@ -7,5 +7,5 @@
   "description": "Radial launcher for the shell panels",
   "kinds": ["overlay", "menu"],
   "keepLoaded": true,
-  "entryPoints": { "overlay": "Wheel.qml" }
+  "entryPoints": { "overlay": "Wheel.qml", "menu": "Wheel.qml" }
 }

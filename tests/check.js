@@ -433,6 +433,9 @@ for (const file of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"
     file + " reaches through its facade")
 assert.match(read("plugins/xpo.wheel/manifest.json"), /"menu"/,
   "the wheel lacks the menu capability")
+for (const plugin of ["xpo.wheel", "xpo.files"])
+  require("node:child_process").execFileSync("omarchy",
+    ["plugin", "validate", path.join(repo, "plugins", plugin)], { stdio: "inherit" })
 console.log("ok: xpo plugins use narrow facades and menus control only UI plugins")
 
 // revert.sh needs no assertion here: install.py walks every patches/orig/*.qml
