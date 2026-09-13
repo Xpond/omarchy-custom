@@ -264,10 +264,41 @@ Item {
     }))
   }
 
+  function closePeers() {
+    if (!root.shell) return { acted: false, clear: true }
+    var acted = false
+    var bar = root.shell.bar
+    var popout = bar && bar.activePopout
+    if (popout && popout !== root) {
+      acted = true
+      if ("closeForPopoutSwitch" in popout) popout.closeForPopoutSwitch()
+      else if ("close" in popout) popout.close()
+    }
+    var ids = []
+    var candidates = {}
+    var openIds = root.shell.openPanelIds || {}
+    var loaders = root.shell.panelLoaders || {}
+    for (var openId in openIds) candidates[openId] = true
+    for (var loadedId in loaders) candidates[loadedId] = true
+    for (var id in candidates)
+      if (id !== root.pluginId && root.shell.isPluginOpen(id)) ids.push(id)
+    var clear = !bar || !bar.activePopout || bar.activePopout === root
+    for (var i = 0; i < ids.length; i++) {
+      root.shell.hide(ids[i])
+      acted = true
+      if (root.shell.isPluginOpen(ids[i])) clear = false
+    }
+    return { acted: acted, clear: clear }
+  }
+
   function open(payloadJson) {
     // Treat a press during fade-out as a fresh open.
     var wasOpen = root.opened && !unmap.running
     unmap.stop()
+    var peers = root.closePeers()
+    if (!peers.clear) return
+    var bar = root.shell && root.shell.bar
+    if (bar && typeof bar.requestPopout === "function") bar.requestPopout(root)
     root.selected = -1
     root.armed = false
     root.originX = -1
@@ -286,6 +317,8 @@ Item {
 
   // Fade cancellation; unmap immediately before handing keyboard focus to a panel.
   function close(immediate) {
+    var bar = root.shell && root.shell.bar
+    if (bar && bar.activePopout === root) bar.releasePopout(root)
     if (immediate) { unmap.stop(); root.opened = false; root.shown = false; return }
     if (!root.opened || unmap.running) return
     root.shown = false
@@ -303,21 +336,14 @@ Item {
     if (root.shell && typeof root.shell.hide === "function") root.shell.hide(root.pluginId)
   }
 
+  function closeForPopoutSwitch() { root.dismiss(true) }
+
   // Return whether anything closed so SUPER+W can decide whether to fall through.
   function closeAll() {
     var acted = root.opened
     if (root.opened) root.dismiss()
-    if (!root.shell) return acted ? "closed" : "none"
-    var catalogue = MenuIndex.panels(null)
-    for (var i = 0; i < catalogue.length; i++) {
-      var id = catalogue[i].plugin
-      if (id && root.shell.isPluginOpen(id)) { root.shell.hide(id); acted = true }
-    }
-    // Include overlays opened through actions rather than panel slices.
-    var summoned = ["omarchy.menu", "omarchy.emojis", "omarchy.speedtest",
-                    "omarchy.disk-speedtest", "omarchy.wifiqr", "xpo.files"]
-    for (var j = 0; j < summoned.length; j++)
-      if (root.shell.isPluginOpen(summoned[j])) { root.shell.hide(summoned[j]); acted = true }
+    var peers = root.closePeers()
+    acted = acted || peers.acted
     return acted ? "closed" : "none"
   }
 
@@ -358,8 +384,6 @@ Item {
   function back() {
     if (!root.launched || !root.shell || !root.shell.isPluginOpen(root.launched)) return "none"
     var at = root.launchedAt
-    root.shell.hide(root.launched)
-    // Let the panel release keyboard focus before summoning the wheel.
     Qt.callLater(function () {
       root.shell.summon(root.pluginId, "{}")
       if (at >= 0 && at < root.sliceCount) root.select(at)

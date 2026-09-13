@@ -222,14 +222,57 @@ const back = method(read("plugins/xpo.wheel/Wheel.qml"), "back",
 assert.equal(back(), "none", "a wheel that opened nothing owes nothing")
 ring.launched = "omarchy.audio"; opened["omarchy.audio"] = true
 assert.equal(back(), "wheel")
-assert.equal(opened["omarchy.audio"], false, "the wheel takes the panel away itself")
+assert.equal(opened["omarchy.audio"], true, "the panel stays up until the wheel claims its surface")
 assert.equal(opened["xpo.wheel"], true)
+opened["omarchy.audio"] = false
 opened["omarchy.network"] = true
 ring.launched = ""
 assert.equal(back(), "none", "a panel opened from the bar keeps its backspace")
 ring.launched = "omarchy.audio"
 assert.equal(back(), "none", "and one that has since gone is not owed a return")
 console.log("ok: only the panel the wheel opened answers backspace with a return")
+
+// The wheel is one shell popout, not a second surface stacked over the first.
+// Loader-owned overlays are closed through the same handoff.
+const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }
+const popoutBar = {
+  activePopout: null,
+  requestPopout(owner) { this.activePopout = owner },
+  releasePopout(owner) { if (this.activePopout === owner) this.activePopout = null }
+}
+const oldPanel = { closed: false, closeForPopoutSwitch() {
+  this.closed = true
+  popoutBar.releasePopout(this)
+} }
+popoutBar.activePopout = oldPanel
+const opening = {
+  pluginId: "xpo.wheel", shell: {
+    bar: popoutBar, openPanelIds: { "xpo.wheel": true, "xpo.files": true },
+    panelLoaders: { "omarchy.menu": {} },
+    isPluginOpen: id => openPeers[id] === true,
+    hide: id => { openPeers[id] = false }
+  },
+  opened: false, shown: false, selected: -1, armed: false, originX: -1,
+  query: "", path: [], launched: "", launchedAt: -1, justOpened: false,
+  sliceCount: 8, focusedScreen: () => null, rebuildIndex() {}
+}
+opening.closePeers = method(wheelSource, "closePeers", { root: opening })
+const openingScope = { root: opening, unmap: { running: false, stop() {} },
+  spin: { stepsLeft: 0, restart() {} }, keys: { forceActiveFocus() {} },
+  Qt: { callLater: fn => fn() } }
+method(wheelSource, "open", openingScope)("{}")
+assert.equal(oldPanel.closed, true, "the old bar panel is switched out")
+assert.equal(openPeers["xpo.files"], false, "an open overlay is closed")
+assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is closed")
+assert.equal(popoutBar.activePopout, opening, "the wheel owns the popout slot")
+assert.equal(opening.opened, true)
+method(wheelSource, "close", { root: opening, unmap: { stop() {} } })(true)
+assert.equal(popoutBar.activePopout, null, "closing releases the popout slot")
+openPeers["xpo.files"] = true
+opening.shell.hide = () => {}
+method(wheelSource, "open", openingScope)("{}")
+assert.equal(opening.opened, false, "a peer protecting unsaved work keeps the wheel hidden")
+console.log("ok: the wheel replaces an open panel instead of stacking above it")
 
 // `back` can only give back what `run` wrote down, and nothing covered that
 // write: taking it out left every test green while the bug came straight back.
