@@ -3,8 +3,8 @@
 The lock screen has swappable designs. The patched `LockView.qml` is their host: it keeps
 the password field, the connection to `Service.qml` and the wake handling, and loads a
 design's `Scene.qml` from this checkout's `lock/`. That is outside the shell directory the
-patches replace, so a design can span any number of files. Two ship: `rally`, described
-below, and `wallpaper`, Omarchy's own blurred wallpaper.
+patches replace, so a design can span any number of files. Three ship: `rally` and `tunnel`,
+described below, and `wallpaper`, Omarchy's own blurred wallpaper.
 
 ## Designs
 
@@ -43,6 +43,9 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
 | `bin/omarchy-lock-design` | Lists the designs, or sets the one the next lock shows |
 | `lock/wallpaper/Scene.qml` | The wallpaper, blurred, fading out on unlock |
+| `lock/tunnel/Scene.qml` | The wheel's mark stacked into a corridor, flown through |
+| `lock/tunnel/mark.frag` / `.qsb` | One mark: its maze and a comet running through it, source and compiled |
+| `lock/tunnel/space.frag` / `.qsb` | The glow at the tunnel's far end and the dust, source and compiled |
 | `lock/rally/Scene.qml` | Scenery, contact shadow, floor reflection and the car's framing |
 | `lock/rally/Car.qml` | Projection, tracing, paint sweep and drive-off |
 | `lock/rally/Paintwork.qml` | Material mask, shaded paint, outlines and comets, in draw order |
@@ -69,6 +72,40 @@ including failures.
 Three files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
 lines, mostly the stock password field), `Car.qml` (about 350: the car's state and the logic
 that drives it) and `Paintwork.qml` (about 300: a mask and paint that must stay in step).
+
+## Tunnel
+
+Forty copies of the wheel's mark, stacked in perspective, form a corridor flown through
+first person. The mark is the centrelines of Omarchy's icon on its 30-unit grid: drawn 0.1
+wide they cover every stroke pixel of the wheel's `mark.png`; the tunnel draws them 0.07
+wide. Marks stand every 4 units, each 0.7–1.3× in size and turned at random; the
+choice is fixed by its place along the corridor, so a mark keeps it as it nears, and one flown
+past returns to the far end as another. It fades in there, and fades out from 3 units ahead to
+1.5, where even the smallest is already past the edges of a 16:9 screen.
+The corridor's centreline wanders on a few sine waves; the camera looks down its tangent, so
+the far end swings, and it banks into the turns. The view is 90° high: a mark 14 units
+ahead fills the screen's height.
+
+Each mark is a `ShaderEffect` running `mark.frag`, which draws the maze's 17 stretches and a
+comet through them as the wheel's runs: out from where the bottom bar meets the inner square,
+splitting at every junction. Each stretch carries its ends' distances along the maze, which
+match `mark.png`'s at every junction. A mark's place picks its hue, from cyan to magenta, and
+its comet's start, pace (0.3–0.8 laps a second at cruise), tail (12–35% of the run) and way
+round: three in ten run back in from the ends. The comets keep time with the flight, so they
+race on unlock. Behind the marks, `space.frag` lights the far end, where the tunnel's tangent
+meets the screen, and dust drifts past as small dots, each its own size. At 1080p on a GTX
+1080 Ti the tunnel holds 144fps using about a fifth of a CPU core and under a tenth of the GPU.
+
+`play()` fades the tunnel in over 1.2s while it accelerates to 8 units a second.
+`leave()` accelerates tenfold and fades out within the 1.1s before the lock releases.
+The flight pauses while the display is blank. After GLSL changes, rebuild the shaders:
+
+```bash
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o lock/tunnel/mark.frag.qsb lock/tunnel/mark.frag
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o lock/tunnel/space.frag.qsb lock/tunnel/space.frag
+```
 
 ## Rally
 
@@ -277,8 +314,9 @@ sequence has a 150-second timeout. It needs a working
 Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-render/`
 or a directory supplied as its argument. They cover tracing, paint, parked and
 drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
-of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `wallpaper`
-and then to a missing design: the field stays on both, and the missing one leaves the plain background.
+of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `tunnel`,
+which must draw its lines, then `wallpaper` and a missing design: the field stays on all three, and the
+missing one leaves the plain background.
 
 `lock_parts.py` compares wing-visible and wing-hidden captures at 1080p and 4K,
 checks that the roof and C-pillar over the far fin are unchanged, that the near fin

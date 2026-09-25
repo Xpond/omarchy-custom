@@ -64,8 +64,9 @@ stages += [{"name": f"drive-{t}", "drive": t / 1100} for t in [100, 200, 300, 35
 # Geometry probes read the unshaded pigment: the shader now darkens the cabin and lights the tyres.
 stages += [{"name": "unlit-4k", "unlit": True, "width": 3840, "height": 2160}]
 stages += [dict(s, name=s["name"] + "-unlit", unlit=True) for s in stages if 0 < s.get("drive", 0) < 0.9]
-# Last, since they unload the car: another design at runtime, then one that is missing.
-stages += [{"name": "design-wallpaper", "design": "wallpaper"}, {"name": "design-missing", "design": "missing"}]
+# Last, since they unload the car: other designs at runtime, then one that is missing.
+stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-wallpaper", "design": "wallpaper"},
+           {"name": "design-missing", "design": "missing"}]
 qml = '''import QtQuick
 import Quickshell
 Window {
@@ -146,8 +147,11 @@ def pixel(name, x, y):
     return subprocess.check_output(["magick", f"{output / name}.png[1x1+{x}+{y}]", "-depth", "8", "RGB:-"]).hex()
 
 # The field is the host's: it stays on every design, and when a design fails to load.
-for name in ("parked", "design-wallpaper", "design-missing"):
+for name in ("parked", "design-tunnel", "design-wallpaper", "design-missing"):
     assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
+lines = subprocess.check_output(["magick", output / "design-tunnel.png", "-crop", "1920x880+0+0", "-colorspace", "gray",
+                                 "-threshold", "25%", "-format", "%[fx:mean]", "info:"])
+assert float(lines) > 0.01, "switching to the tunnel design drew no lines"
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
 print("ok: designs switch at runtime, and a missing one leaves the plain background and the field")
