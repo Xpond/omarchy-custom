@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install/remove a marked Lua block and the two helper links, preserving user edits."""
+"""Install/remove a marked Lua block and the helper links, preserving user edits."""
 import json
 import os
 from pathlib import Path
@@ -10,7 +10,7 @@ import tempfile
 REPO = Path(__file__).resolve().parents[1]
 BEGIN = "-- BEGIN omarchy-custom\n"
 END = "-- END omarchy-custom\n"
-HELPERS = ("omarchy-open-path", "omarchy-wheel-close")
+HELPERS = ("omarchy-open-path", "omarchy-wheel-close", "omarchy-lock-design")
 
 
 def write(path, text):

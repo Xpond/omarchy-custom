@@ -1,12 +1,24 @@
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
-const qml = fs.readFileSync(path.join(__dirname, "../patches/shell/plugins/lock/LockView.qml"), "utf8")
+const rally = path.join(__dirname, "../lock/rally")
+const qml = fs.readFileSync(path.join(rally, "Car.qml"), "utf8")
+
+// A QML JavaScript library of the car's: its functions, with its .imports as arguments.
+const loaded = {}
+function library(file) {
+  if (loaded[file]) return loaded[file]
+  const source = fs.readFileSync(path.join(rally, file), "utf8")
+  const imports = [...source.matchAll(/^\.import "(.+)" as (\w+)$/gm)]
+  const code = source.replace(/^\.(pragma|import) .*$/gm, "")
+  const names = [...code.matchAll(/^function (\w+)/gm)].map(m => m[1])
+  return loaded[file] = new Function(...imports.map(i => i[2]), `${code}\nreturn { ${names} }`)(...imports.map(i => library(i[1])))
+}
 
 // Runs the car's own model, projection, tracing and drive-off outside Qt, at 1080p.
-const model = new Function(qml.match(/function carModel\(\) \{([^]*?)\n      \}\n/)[1])(), parts = model.parts
-const code = qml.slice(qml.indexOf("      // Screen polylines of an outline from a to b"), qml.indexOf("      onClockChanged"))
-const drive = qml.match(/onDriveChanged: \{([^]*?)\n      \}\n      onWidthChanged/)[1]
+const model = library("model.js").carModel(), parts = model.parts
+const code = qml.slice(qml.indexOf("  // Screen polylines of an outline from a to b"), qml.indexOf("  onClockChanged"))
+const drive = qml.match(/onDriveChanged: \{([^]*?)\n  \}\n  onWidthChanged/)[1]
 const streakFrom = qml.match(/readonly property var streakFrom: (\[[^]*?\]\])\n/)[1]
 const paint = qml.match(/readonly property var paint: (\[[^\]]*\])/)[1]
 // traced is when the last outline lands; painted is the paint's own progress over the paintTime after it,

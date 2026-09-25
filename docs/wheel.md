@@ -386,7 +386,10 @@ since closed, and focusing one is a `Hyprland.dispatch` — see the trap below.
 Themes and fonts are `omarchy theme list` and `omarchy font list`, run once at
 startup and fired back as `omarchy theme set '<name>'`. Both are otherwise
 buried: `style.theme` in the menu shells out to `omarchy-theme-switcher`, a
-second overlay on top of the first.
+second overlay on top of the first. Lock-screen designs come from
+`omarchy-lock-design list`, also once, but join the menu as one Style ›
+Lockscreen Designs submenu: search finds that entry, and the designs, marked
+`search: false`, show only inside it. Picking one runs `omarchy-lock-design set`.
 
 The live half of the index — apps, windows, themes, fonts — is rebuilt when the
 wheel opens. That is the only moment any of it has to be correct, and it means
@@ -398,9 +401,11 @@ is already on screen — the ring re-reads them on its own, and `onStaticRowsCha
 tells the index to rebuild, since that half is built by hand.
 
 Every query term must appear somewhere in the row, so terms narrow. Rows then
-sort on four keys: **rank** (label-prefix, then label-substring, then a hit
+sort on six keys: **rank** (label-prefix, then label-substring, then a hit
 anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
-theme/font, menu), **recency**, and finally **label length**, which floats
+theme/font, menu), an **exact label** (so "lock" puts Lock before Lockscreen
+Designs, however often that is used), **uses**, **recency**, and finally
+**label length**, which floats
 "Screenshot" over "Stop Screenrecording".
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them

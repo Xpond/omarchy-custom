@@ -150,7 +150,7 @@ Item {
     return true
   }
 
-  // Authentication has already succeeded: the car drives off, then a timer
+  // Authentication has already succeeded: the design plays its exit, then a timer
   // releases the lock whatever the animation does.
   function driveOffThenUnlock() {
     if (!lockRequested || unlocking) return
@@ -381,7 +381,7 @@ Item {
 
   Timer {
     id: unlockTimer
-    // LockView's car.driveTime.
+    // How long a design's leave() plays; the rally car's drive-off fits it.
     interval: 1100
     repeat: false
     onTriggered: root.finishUnlock()

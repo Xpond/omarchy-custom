@@ -1,5 +1,75 @@
 # Lock screen
 
+The lock screen has swappable designs. The patched `LockView.qml` is their host: it keeps
+the password field, the connection to `Service.qml` and the wake handling, and loads a
+design's `Scene.qml` from this checkout's `lock/`. That is outside the shell directory the
+patches replace, so a design can span any number of files. Two ship: `rally`, described
+below, and `wallpaper`, Omarchy's own blurred wallpaper.
+
+## Designs
+
+In the wheel, Style › Lockscreen Designs lists the designs (search "lockscreen"); picking
+one only switches to it, and the next lock shows it. From a terminal,
+`omarchy-lock-design list` and `omarchy-lock-design set <name>` do the same. The choice is one
+word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The host watches that
+file, so a switch needs no install or restart.
+
+A design is a folder in `lock/` holding a `Scene.qml`, plus whatever QML, JavaScript,
+shaders and images it loads relative to itself. The scene fills the screen behind the field.
+Every design declares `property Item host`: the host sets it before the scene's bindings
+run, and the log warns if it's missing. The rest is optional:
+
+| Member | Use |
+|---|---|
+| `host` | The `LockView`, for state such as `backgroundPath`, `failureMessage`, `authenticatingPassword` or `passwordText.length` |
+| `play()` | Called when the lock shows, and on the first key or click after a wake |
+| `hide()` | Called when the display wakes from blank, so `play()` can run the entrance again |
+| `leave()` | Called when the password is accepted; the lock releases 1.1s later, whatever it does |
+
+A design that fails to load, from a syntax error or a missing folder, leaves the plain
+background, and the field still unlocks. The wheel lists designs at startup and the shell
+caches loaded QML, so after adding or editing a design run `omarchy restart shell`; neither
+needs `install.sh` or sudo. Designs are not Omarchy plugins: only this host loads them onto
+the lock surface, so an installed plugin cannot draw where the password is typed.
+
+## Files and installation
+
+| File | Responsibility |
+|---|---|
+| `patches/shell/plugins/lock/LockView.qml` | Host: password field, wake handling, loads the chosen design |
+| `patches/shell/plugins/lock/Service.qml` | PAM flow, unlock delay, display blanking and wake state |
+| `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
+| `bin/omarchy-lock-design` | Lists the designs, or sets the one the next lock shows |
+| `lock/wallpaper/Scene.qml` | The wallpaper, blurred, fading out on unlock |
+| `lock/rally/Scene.qml` | Scenery, contact shadow, floor reflection and the car's framing |
+| `lock/rally/Car.qml` | Projection, tracing, paint sweep and drive-off |
+| `lock/rally/Paintwork.qml` | Material mask, shaded paint, outlines and comets, in draw order |
+| `lock/rally/model.js` | Assembles the car from its parts |
+| `lock/rally/shape.js` | Body width, nose warp and the curves every part is drawn with |
+| `lock/rally/outlines.js` | Traced outlines: sills, wheels, shell, flank, front, details and wing |
+| `lock/rally/cabin.js` | Dash, steering wheel, roll cage, harness and seats |
+| `lock/rally/body.js` | Painted panels: bodywork, glass, wheels, mirrors, lamps and wing |
+| `lock/rally/livery.js` | Stripes, decals, lettering and the side intake |
+| `lock/rally/car-paint.frag` / `.qsb` | Analytical surface normals and city reflections, source and compiled |
+| `lock/rally/car-focus.frag` / `.qsb` | Final camera focus pass, source and compiled |
+| `lock/rally/neon-city.png` | Illustrated background and paint reflection source |
+| `tests/lock.js` | Model, geometry, tracing and drive-off checks |
+| `tests/lock-render.py` | GPU captures, drive-off exit and design switching checks |
+| `tests/lock_parts.py` | Wing occlusion and wing, mirror and flap shading checks |
+| `tests/lock_pixels.py` | Material, scenery and seam regression checks |
+
+Run `./install.sh` to apply the patches. It links `lock/` to `~/.local/share/omarchy-custom/lock`
+before updating the QML and restarting the shell, and needs no shader compiler. `./revert.sh`
+restores stock files, then removes the link and the design choice only after a successful
+restore, so a retained custom lock screen can still render. Installer tests cover both paths,
+including failures.
+
+Three files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
+lines, mostly the stock password field), `Car.qml` (about 350: the car's state and the logic
+that drives it) and `Paintwork.qml` (about 300: a mask and paint that must stay in step).
+
+## Rally
+
 A fixed front-left view of a Sport quattro S1 E2 assembles as blue comets trace its outlines.
 The wireframe builds over 2940ms, followed by a 600ms paint sweep from nose to tail.
 Successful authentication starts the car, spins the wheels and launches it left;
@@ -15,37 +85,9 @@ The car is framed at 89% scale about screen centre, then lowered by 4% of screen
 height. The shadow and floor reflection share these transforms through the drive-off.
 The paint layer uses smooth filtering so the smaller car keeps clean edges.
 
-## Files and installation
-
-| File | Responsibility |
-|---|---|
-| `patches/shell/plugins/lock/LockView.qml` | Model, projection, paint, scenery, animations and password UI |
-| `patches/shell/plugins/lock/Service.qml` | PAM flow, unlock delay, display blanking and wake state |
-| `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
-| `shaders/car-paint.frag` | Analytical surface normals and city reflections |
-| `shaders/car-paint.frag.qsb` | Compiled shader shipped with the checkout |
-| `shaders/car-focus.frag` / `.qsb` | Final camera focus pass, source and compiled shader |
-| `assets/lock/neon-city.png` | Illustrated background and paint reflection source |
-| `tests/lock.js` | Model, geometry, tracing and drive-off checks |
-| `tests/lock-render.py` | GPU captures and drive-off exit check |
-| `tests/lock_parts.py` | Wing occlusion and wing, mirror and flap shading checks |
-| `tests/lock_pixels.py` | Material, scenery and seam regression checks |
-
-Run `./install.sh` to apply the patches. It installs each asset atomically into
-`~/.local/share/omarchy-custom/` before updating the QML and restarting the shell.
-Installation does not need a shader compiler. `./revert.sh` restores stock files
-and removes the assets and their directory only after a successful restore, so a
-retained custom lock screen can still render. Installer tests cover both paths, including failures.
-
-The lock screen remains a trusted system-plugin patch, not an independently
-installable plugin. `LockView.qml` is about 1750 lines, an exception to the ~200-line
-limit: the patch mechanism replaces existing shell files and cannot split this model
-into new QML modules. The separately installed assets are an explicit exception to
-that deployment constraint.
-
 ## Model and animation
 
-`carModel()` returns `{ parts, surfaces, panes, dash }`. Parts are 3D polylines with
+`carModel()` in `model.js` returns `{ parts, surfaces, panes, dash }`. Parts are 3D polylines with
 cumulative distances and trace timings; surfaces carry a paint tone and optional
 wheel axle. Design units are approximately centimetres: x along the car, y upward,
 z across it, with the near side at negative z.
@@ -203,9 +245,9 @@ After GLSL changes, rebuild the bundled shaders:
 
 ```bash
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
-  -o shaders/car-paint.frag.qsb shaders/car-paint.frag
+  -o lock/rally/car-paint.frag.qsb lock/rally/car-paint.frag
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
-  -o shaders/car-focus.frag.qsb shaders/car-focus.frag
+  -o lock/rally/car-focus.frag.qsb lock/rally/car-focus.frag
 ```
 
 ## Wake and authentication
@@ -233,7 +275,8 @@ sequence has a 150-second timeout. It needs a working
 Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-render/`
 or a directory supplied as its argument. They cover tracing, paint, parked and
 drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
-of the drive-off frames, since the shader darkens the cabin.
+of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `wallpaper`
+and then to a missing design: the field stays on both, and the missing one leaves the plain background.
 
 `lock_parts.py` compares wing-visible and wing-hidden captures at 1080p and 4K,
 checks that the roof and C-pillar over the far fin are unchanged, that the near fin

@@ -81,6 +81,17 @@ function styleRows(out, names, icon, trail, command) {
   }
 }
 
+// Lock-screen designs as one Style submenu: search finds it, and each design shows only inside it.
+function lockItems(names) {
+  var out = { "style.lockscreen": { icon: "󰌾", label: "Lockscreen Designs" } }
+  for (var i = 0; i < names.length; i++) {
+    var name = names[i]
+    out["style.lockscreen." + i] = { icon: "󰋩", label: name.charAt(0).toUpperCase() + name.slice(1),
+                                     action: "omarchy-lock-design set " + quote(name), search: false }
+  }
+  return out
+}
+
 // Shell panels in ring order; branded marks use their own QML components.
 var PANELS = [
   { plugin: "omarchy.audio", icon: "󰕾", label: "Audio" },
@@ -259,7 +270,7 @@ function menuRows(items, cond) {
   var out = []
   for (var id in items) {
     var e = items[id]
-    if (!e || !shows(items, id, e, cond)) continue
+    if (!e || e.search === false || !shows(items, id, e, cond)) continue
     var trail = trailOf(items, id)
     var row = entryOf(id, e)
     row.trail = trail.join(" › ")
@@ -357,11 +368,14 @@ function search(index, query, limit, uses) {
     var rank = e.kind === KIND.window ? 0
              : squash(e.label).indexOf(squashed) === 0 ? 0
              : startsWord(words(e.label), spaced) ? 1 : 2
-    hits.push({ rank: rank, uses: -(counts[keyOf(e)] || 0), len: e.label.length, entry: e })
+    hits.push({ rank: rank, exact: squash(e.label) === squashed ? 0 : 1,
+                uses: -(counts[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
+  // An exact label beats a more-used one it prefixes: "lock" locks before it lists designs.
   hits.sort(function (a, b) {
     return a.rank - b.rank
         || a.entry.kind - b.entry.kind
+        || a.exact - b.exact
         || a.uses - b.uses
         || (a.entry.recency || 0) - (b.entry.recency || 0)
         || a.len - b.len
