@@ -18,15 +18,9 @@ alert() {
   command -v notify-send >/dev/null && notify-send -u critical "omarchy-custom" "$1"
 }
 
-# Install lock-screen assets before any QML can reference them.
-asset_dir=~/.local/share/omarchy-custom
-mkdir -p "$asset_dir" || { alert "Could not create the lock-screen asset directory"; exit 1; }
-for asset in shaders/car-paint.frag.qsb shaders/car-focus.frag.qsb assets/lock/neon-city.png; do
-  target="$asset_dir/${asset##*/}"
-  cp "$REPO/$asset" "$target.new" && mv "$target.new" "$target" || {
-    alert "Could not install the lock-screen asset: $asset"; exit 1;
-  }
-done
+# Link the lock-screen designs before any QML can load them; edits apply on the next shell start.
+data=~/.local/share/omarchy-custom
+mkdir -p "$data" && ln -sfn "$REPO/lock" "$data/lock" || { alert "Could not link the lock-screen designs"; exit 1; }
 
 # ------------------------------------------------------------------ plugins
 # Link plugins for live editing and register them idempotently via a temp file.
@@ -114,6 +108,10 @@ done
 (( ${#rebased[@]} )) && printf 'rebased onto new upstream: %s\n' "${rebased[*]}"
 (( ${#applied[@]} )) && printf 'installed: %s\n' "${applied[*]}"
 (( ${#applied[@]} + ${#conflicts[@]} + ${#foreign[@]} + ${#failed[@]} )) || echo "already up to date"
+
+# Assets an older install copied for its lock screen; each design now carries its own.
+cmp -s "$SHELL_DIR/plugins/lock/LockView.qml" "$REPO/patches/shell/plugins/lock/LockView.qml" &&
+  rm -f "$data"/{car-paint.frag.qsb,car-focus.frag.qsb,neon-city.png}
 
 broken=("${conflicts[@]}" "${foreign[@]}" "${failed[@]}")
 if (( ${#broken[@]} )); then

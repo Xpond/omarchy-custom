@@ -59,10 +59,12 @@ for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \
 done
 find "$STATE" -depth -type d -empty -delete 2>/dev/null || true
 
-# A failed restore may leave the custom lock screen in use; keep its assets then.
+# A failed restore may leave the custom lock screen in use; keep its designs then.
 if (( failed == 0 )); then
-  rm -f ~/.local/share/omarchy-custom/{car-paint.frag.qsb,car-focus.frag.qsb,neon-city.png}
+  rm -f ~/.local/share/omarchy-custom/{lock,car-paint.frag.qsb,car-focus.frag.qsb,neon-city.png}
   rmdir ~/.local/share/omarchy-custom 2>/dev/null || true
+  rm -f ~/.config/omarchy-custom/lock-design
+  rmdir ~/.config/omarchy-custom 2>/dev/null || true
 fi
 
 omarchy restart shell

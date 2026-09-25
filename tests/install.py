@@ -24,8 +24,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     shutil.copytree(source / "patches", repo / "patches")
     shutil.copytree(source / "patches/orig", shell)
     shutil.copytree(source / "bin", repo / "bin")
-    shutil.copytree(source / "shaders", repo / "shaders")
-    shutil.copytree(source / "assets", repo / "assets")
+    (repo / "lock").mkdir()
     for plugin in (source / "plugins").iterdir():
         (repo / "plugins" / plugin.name).mkdir(parents=True)
     for name in ["install.sh", "revert.sh"]:
@@ -114,12 +113,17 @@ exit 0''',
     def all_stock():
         return all(installed(relative) == stock[relative] for relative in files)
 
+    asset_dir = user / ".local/share/omarchy-custom"
+    # What an older install copied for its lock screen, now inside the rally design.
+    old_assets = [asset_dir / name for name in ("car-paint.frag.qsb", "car-focus.frag.qsb", "neon-city.png")]
+    asset_dir.mkdir(parents=True)
+    for asset in old_assets:
+        asset.write_text("old")
     result = run()
     assert result.returncode == 0, result.stderr
-    asset_dir = user / ".local/share/omarchy-custom"
-    assets = {asset_dir / p.name: p for p in [source / "shaders/car-paint.frag.qsb",
-                                              source / "shaders/car-focus.frag.qsb", source / "assets/lock/neon-city.png"]}
-    assert all(target.read_bytes() == origin.read_bytes() for target, origin in assets.items())
+    designs = asset_dir / "lock"
+    assert designs.resolve() == repo / "lock"
+    assert not any(asset.exists() for asset in old_assets), "the old lock-screen assets outlived the new host"
     verify(user, repo)
     expected = [{"id": "xpo.files"}, {"id": "xpo.wheel"}]
     assert json.loads(conf.read_text())["plugins"] == expected
@@ -225,7 +229,7 @@ exit 0''',
     assert run(failure="copy").returncode == 1 and installed(relative) == stock[relative]
     assert run().returncode == 0 and installed(relative) == patched(relative)
     assert run("revert.sh", "copy").returncode == 1 and installed(relative) == patched(relative)
-    assert all(target.exists() for target in assets), "a failed revert must keep the lock screen's assets"
+    assert designs.is_symlink(), "a failed revert must keep the lock screen's designs"
     assert run("revert.sh", "partial").returncode == 1 and installed(relative) != stock[relative]
     assert run("revert.sh").returncode == 0 and all_stock()
     print("ok: interrupted installs and restores are recognised as ours and recover on retry")

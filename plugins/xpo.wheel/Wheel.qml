@@ -529,6 +529,15 @@ Item {
     stdout: StdioCollector { onStreamFinished: root.fonts = MenuIndex.lines(text) }
   }
 
+  // Lock-screen designs join the menu as one Style submenu, listed once at startup like the themes.
+  Process {
+    running: true
+    command: ["omarchy-lock-design", "list"]
+    stdout: StdioCollector {
+      onStreamFinished: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.lockItems(MenuIndex.lines(text)))
+    }
+  }
+
   FileView {
     path: root.omarchyPath + "/default/omarchy/omarchy-menu.jsonc"
     onLoaded: root.menuItems = MenuIndex.merge(MenuIndex.parse(text()), root.menuItems)

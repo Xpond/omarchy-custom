@@ -81,6 +81,16 @@ const app = M.liveRows({ apps: [{ entry: { id: "broken", icon: "/missing.png" } 
 assert.ok(app.icon)
 console.log("ok: file search ordering, limits, ties, and app fallback glyph")
 
+// "lock" locks first, even after the designs row is used more; the designs show only in its submenu.
+const lockMenu = M.merge({ system: { label: "System" }, "system.lock": { label: "Lock", action: "omarchy-system-lock" },
+  style: { label: "Style" } }, M.lockItems(["rally", "wallpaper"]))
+const lockRows = M.menuRows(lockMenu, M.NO_CONDITIONS)
+assert.deepEqual(M.search(lockRows, "lock", 40, { "style.lockscreen": 9 }).map(e => e.label), ["Lock", "Lockscreen Designs"])
+assert.deepEqual(M.search(lockRows, "rally", 40, {}), [])
+assert.deepEqual(M.childrenOf(lockMenu, "style.lockscreen", M.NO_CONDITIONS).map(e => [e.label, e.action]),
+  [["Rally", "omarchy-lock-design set 'rally'"], ["Wallpaper", "omarchy-lock-design set 'wallpaper'"]])
+console.log("ok: \"lock\" finds Lock, then one Lockscreen Designs row whose submenu sets a design")
+
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []
 const root = { editing: true, dirty: true, saving: null, opened: true,
