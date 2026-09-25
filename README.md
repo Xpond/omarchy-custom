@@ -16,6 +16,8 @@ A radial control center, a file browser and centered shell panels for
   Lockscreen Designs. `rally`: a 3D line-art Audi quattro assembles above the
   password field as comets trace its outlines, gains city reflections and gold
   rims, and drives off through a painted neon scene when you unlock.
+  `tunnel`: Omarchy logos stacked into a neon line-art corridor you fly through, each
+  with its own hue and a comet running through it like the wheel's.
   `wallpaper`: Omarchy's own blurred wallpaper. Try one without locking:
   `omarchy-shell lock preview`. Work in progress; see
   [`docs/lockscreen.md`](docs/lockscreen.md).
