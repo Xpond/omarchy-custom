@@ -65,8 +65,8 @@ stages += [{"name": f"drive-{t}", "drive": t / 1100} for t in [100, 200, 300, 35
 stages += [{"name": "unlit-4k", "unlit": True, "width": 3840, "height": 2160}]
 stages += [dict(s, name=s["name"] + "-unlit", unlit=True) for s in stages if 0 < s.get("drive", 0) < 0.9]
 # Last, since they unload the car: other designs at runtime, then one that is missing.
-stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-wallpaper", "design": "wallpaper"},
-           {"name": "design-missing", "design": "missing"}]
+stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
+           {"name": "design-wallpaper", "design": "wallpaper"}, {"name": "design-missing", "design": "missing"}]
 qml = '''import QtQuick
 import Quickshell
 Window {
@@ -145,13 +145,21 @@ print("ok: captured paint sweep, drive-off and 4K without shader or QML errors:"
 
 def pixel(name, x, y):
     return subprocess.check_output(["magick", f"{output / name}.png[1x1+{x}+{y}]", "-depth", "8", "RGB:-"]).hex()
+def lit(name, crop):
+    return float(subprocess.check_output(["magick", output / f"{name}.png", "-crop", crop, "-colorspace", "gray",
+                                          "-threshold", "25%", "-format", "%[fx:mean]", "info:"]))
 
 # The field is the host's: it stays on every design, and when a design fails to load.
-for name in ("parked", "design-tunnel", "design-wallpaper", "design-missing"):
+for name in ("parked", "design-tunnel", "design-mycelium", "design-wallpaper", "design-missing"):
     assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
-lines = subprocess.check_output(["magick", output / "design-tunnel.png", "-crop", "1920x880+0+0", "-colorspace", "gray",
-                                 "-threshold", "25%", "-format", "%[fx:mean]", "info:"])
-assert float(lines) > 0.01, "switching to the tunnel design drew no lines"
+assert lit("design-tunnel", "1920x880+0+0") > 0.01, "switching to the tunnel design drew no lines"
+# A second and a half in, the colony has grown about the centre, and no line shows beyond it, above
+# the field's glow: only the dark ground, which never comes to a tenth of white.
+assert lit("design-mycelium", "600x600+660+240") > 0.003, "switching to the mycelium design grew nothing"
+beyond = subprocess.check_output(["magick", output / "design-mycelium.png", "-alpha", "off", "-fill", "black",
+                                  "-draw", "rectangle 610,190 1310,890", "-draw", "rectangle 0,860 1920,1080",
+                                  "-colorspace", "gray", "-threshold", "10%", "-format", "%[fx:mean*w*h]", "info:"])
+assert float(beyond) == 0, "the mycelium shows lines its growth hasn't reached"
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
 print("ok: designs switch at runtime, and a missing one leaves the plain background and the field")

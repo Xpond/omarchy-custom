@@ -3,8 +3,8 @@
 The lock screen has swappable designs. The patched `LockView.qml` is their host: it keeps
 the password field, the connection to `Service.qml` and the wake handling, and loads a
 design's `Scene.qml` from this checkout's `lock/`. That is outside the shell directory the
-patches replace, so a design can span any number of files. Three ship: `rally` and `tunnel`,
-described below, and `wallpaper`, Omarchy's own blurred wallpaper.
+patches replace, so a design can span any number of files. Four ship: `rally`, `tunnel` and
+`mycelium`, described below, and `wallpaper`, Omarchy's own blurred wallpaper.
 
 ## Designs
 
@@ -46,6 +46,10 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock/tunnel/Scene.qml` | The wheel's mark stacked into a corridor, flown through |
 | `lock/tunnel/mark.frag` / `.qsb` | One mark: its maze and a comet running through it, source and compiled |
 | `lock/tunnel/space.frag` / `.qsb` | The glow at the tunnel's far end and the dust, source and compiled |
+| `lock/mycelium/Scene.qml` | Grows and draws back the colony, drifts the camera, and draws the canvases its shader reads |
+| `lock/mycelium/grow.js` | Grows a colony: its lines, the step that reaches each, and the light it casts |
+| `lock/mycelium/mycelium.frag` / `.qsb` | The colony as grown so far on the ground it lights, and its deep hyphae, source and compiled |
+| `lock/mycelium/ground.frag` / `.qsb` | The ground's clouds and grain, drawn once, source and compiled |
 | `lock/rally/Scene.qml` | Scenery, contact shadow, floor reflection and the car's framing |
 | `lock/rally/Car.qml` | Projection, tracing, paint sweep and drive-off |
 | `lock/rally/Paintwork.qml` | Material mask, shaded paint, outlines and comets, in draw order |
@@ -59,6 +63,8 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock/rally/car-focus.frag` / `.qsb` | Final camera focus pass, source and compiled |
 | `lock/rally/neon-city.png` | Illustrated background and paint reflection source |
 | `tests/lock.js` | Model, geometry, tracing and drive-off checks |
+| `tests/mycelium.js` | Colony coverage, arrival steps and light distribution |
+| `tests/mycelium-render.py` | Strand smoothness at 1080p and 4K, and growth across the packed step boundary |
 | `tests/lock-render.py` | GPU captures, drive-off exit and design switching checks |
 | `tests/lock_parts.py` | Wing occlusion and wing, mirror and flap shading checks |
 | `tests/lock_pixels.py` | Material, scenery and seam regression checks |
@@ -106,6 +112,46 @@ The flight pauses while the display is blank. After GLSL changes, rebuild the sh
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o lock/tunnel/space.frag.qsb lock/tunnel/space.frag
 ```
+
+## Mycelium
+
+Fine hyphae grow from the centre, with white tips cooling through cyan to teal. They light a
+mottled ground, with a softer colony beneath them for depth. The camera drifts and the strands
+sway slowly. Unlocking draws the colony back into the centre while it fades.
+
+`grow.js` builds a new colony each lock in a coordinate space 1080 units high. Twelve strands
+step outward, wander, branch into open space and fuse when they meet another strand. Each tapers
+according to the length it feeds, including its branches. The result contains paths grouped by
+width, segments grouped by arrival step, and a coarse map of density and average arrival time.
+
+`Scene.qml` draws four canvases once:
+
+- `web`: antialiased surface lines.
+- `times`: arrival steps packed into red and green, drawn without antialiasing. Wider strokes
+  cover the line edges; earlier steps win at intersections.
+- `shine`: the coarse light map.
+- `deeper`: the colony at half resolution, with arrival time in its colour.
+
+`ground.frag` draws the background once. `mycelium.frag` combines it with the canvases in one
+full-screen pass. Cubic B-spline sampling smooths the surface lines during camera motion and
+magnifies the light and deep layers. This removes the triangular edges left by bilinear line
+sampling. The arrival map is sampled linearly and decoded without rounding its channels,
+dividing out alpha at its edges; interpolation also works across the packed 255-to-256 boundary.
+
+Growth advances at 45 steps a second on the frame clock, starting once the scene has a size.
+Both growth and camera motion pause when the display is blank. `hide()` resets growth and
+`play()` restarts it on wake. `leave()` retracts and fades it over the host's 1.1-second unlock delay.
+
+After GLSL changes, rebuild the shaders:
+
+```bash
+for f in mycelium ground; do /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o lock/mycelium/$f.frag.qsb lock/mycelium/$f.frag; done
+```
+
+After editing a design's QML or shaders, run `omarchy restart shell` before
+`omarchy-shell lock preview` to ensure the running shell loads the new code. Calling `preview`
+on an already-open preview only leaves it visible; it does not reload the design.
 
 ## Rally
 
@@ -305,6 +351,8 @@ disables input and calls `driveOffThenUnlock()`; its 1100ms timer calls `finishU
 
 ```bash
 node tests/lock.js
+node tests/mycelium.js
+python3 tests/mycelium-render.py
 python3 tests/lock-render.py
 python3 tests/install.py
 ```
@@ -315,8 +363,18 @@ Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-re
 or a directory supplied as its argument. They cover tracing, paint, parked and
 drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
 of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `tunnel`,
-which must draw its lines, then `wallpaper` and a missing design: the field stays on all three, and the
-missing one leaves the plain background.
+which must draw its lines; `mycelium`, whose colony 1.5s in must have grown about the centre with
+no line beyond it, where only the dark ground shows; then `wallpaper` and a missing design. The
+field stays on all four, and the missing one leaves the plain background.
+
+`tests/mycelium.js` grows colonies from fixed seeds at four
+screen shapes: each must cross over 95% of the screen's 60-unit squares, every line drawn must have
+its step, and its light must cover the screen, reaching the corners after the centre.
+
+`tests/mycelium-render.py` renders three isolated, shallow-angle strands through the scene and
+shader at 1080p and 4K. It checks brightness variation along their edges and growth across the
+packed step's 255-to-256 boundary. Captures go to `/tmp/mycelium-render/` or the directory supplied
+as its argument.
 
 `lock_parts.py` compares wing-visible and wing-hidden captures at 1080p and 4K,
 checks that the roof and C-pillar over the far fin are unchanged, that the near fin
