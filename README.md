@@ -12,6 +12,11 @@ A radial control center, a file browser and centered shell panels for
   the wheel. See [`docs/files.md`](docs/files.md).
 - **Centered panels**: bar panels open centered over a blurred desktop. See
   [`docs/centered-panels.md`](docs/centered-panels.md).
+- **Lock screen**: a 3D line-art Audi quattro assembles above the password
+  field as comets trace its outlines, gains city reflections and gold rims,
+  and drives off through a painted neon scene when you unlock.
+  Try it without locking: `omarchy-shell lock preview`. Work in progress; see
+  [`docs/lockscreen.md`](docs/lockscreen.md).
 
 Tested only on Omarchy 4.0.3 with Quickshell 0.3.1. It patches the packaged
 shell, so it is not a plugin `omarchy plugin add` can install.
@@ -31,9 +36,10 @@ cd omarchy-custom
 It links `plugins/` into `~/.config/omarchy/plugins/` and registers them in
 `~/.config/omarchy/shell.json`, appends a marked block (keybinds, layer rules,
 blur, render loop) to `~/.config/hypr/hyprland.lua`, links two helpers into
-`~/.local/bin`, patches six shell files, installs a post-update hook, and
-restarts the shell. Rerunning is safe. Keep the checkout where it is: the hook
-points to it.
+`~/.local/bin`, installs the compiled paint/focus shaders and scene artwork into
+`~/.local/share/omarchy-custom/`, patches eight shell files, installs a post-update
+hook, and restarts the shell. Rerunning is safe. Keep the checkout where it is:
+the hook points to it.
 
 ## Revert
 
@@ -42,13 +48,14 @@ points to it.
 ```
 
 Removes the hook, plugins, Hyprland block and helper links, puts back Omarchy's
-original shell files, and restarts the shell. Originals are checked against
+original shell files, and removes the shaders and scene artwork after a successful
+restore, then restarts the shell. Originals are checked against
 pacman's checksums before they are written, and a shell file changed outside
 this project is left untouched and reported.
 
 ## Why sudo
 
-The six patched files live in `/usr/share/omarchy/shell`, owned by the Omarchy
+The eight patched files live in `/usr/share/omarchy/shell`, owned by the Omarchy
 package. Copying them in (install) and restoring them (revert) are the only
 `sudo` calls, and each runs only when a file actually needs changing.
 Everything else stays in your home directory.
