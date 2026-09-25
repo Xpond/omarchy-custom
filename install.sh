@@ -5,7 +5,8 @@ set -uo pipefail
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
-       plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml)
+       plugins/clipboard/Clipboard.qml plugins/lock/LockView.qml plugins/lock/Service.qml
+       services/PluginShellApi.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
 STATE=~/.local/state/omarchy-custom
 source "$REPO/scripts/shell-files.sh"
@@ -16,6 +17,16 @@ alert() {
   printf '%s\n' "${@:2}" >&2
   command -v notify-send >/dev/null && notify-send -u critical "omarchy-custom" "$1"
 }
+
+# Install lock-screen assets before any QML can reference them.
+asset_dir=~/.local/share/omarchy-custom
+mkdir -p "$asset_dir" || { alert "Could not create the lock-screen asset directory"; exit 1; }
+for asset in shaders/car-paint.frag.qsb shaders/car-focus.frag.qsb assets/lock/neon-city.png; do
+  target="$asset_dir/${asset##*/}"
+  cp "$REPO/$asset" "$target.new" && mv "$target.new" "$target" || {
+    alert "Could not install the lock-screen asset: $asset"; exit 1;
+  }
+done
 
 # ------------------------------------------------------------------ plugins
 # Link plugins for live editing and register them idempotently via a temp file.

@@ -24,6 +24,8 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     shutil.copytree(source / "patches", repo / "patches")
     shutil.copytree(source / "patches/orig", shell)
     shutil.copytree(source / "bin", repo / "bin")
+    shutil.copytree(source / "shaders", repo / "shaders")
+    shutil.copytree(source / "assets", repo / "assets")
     for plugin in (source / "plugins").iterdir():
         (repo / "plugins" / plugin.name).mkdir(parents=True)
     for name in ["install.sh", "revert.sh"]:
@@ -114,6 +116,10 @@ exit 0''',
 
     result = run()
     assert result.returncode == 0, result.stderr
+    asset_dir = user / ".local/share/omarchy-custom"
+    assets = {asset_dir / p.name: p for p in [source / "shaders/car-paint.frag.qsb",
+                                              source / "shaders/car-focus.frag.qsb", source / "assets/lock/neon-city.png"]}
+    assert all(target.read_bytes() == origin.read_bytes() for target, origin in assets.items())
     verify(user, repo)
     expected = [{"id": "xpo.files"}, {"id": "xpo.wheel"}]
     assert json.loads(conf.read_text())["plugins"] == expected
@@ -155,6 +161,7 @@ exit 0''',
     assert json.loads(conf.read_text()) == {"plugins": [{"id": "other", "enabled": False}],
                                           "idle": {"lock": 30}}
     assert all_stock()
+    assert not asset_dir.exists()
     assert run("revert.sh").returncode == 0
     print("ok: revert removes the hook and plugins, restores QML, and preserves other settings")
 
@@ -218,6 +225,7 @@ exit 0''',
     assert run(failure="copy").returncode == 1 and installed(relative) == stock[relative]
     assert run().returncode == 0 and installed(relative) == patched(relative)
     assert run("revert.sh", "copy").returncode == 1 and installed(relative) == patched(relative)
+    assert all(target.exists() for target in assets), "a failed revert must keep the lock screen's assets"
     assert run("revert.sh", "partial").returncode == 1 and installed(relative) != stock[relative]
     assert run("revert.sh").returncode == 0 and all_stock()
     print("ok: interrupted installs and restores are recognised as ours and recover on retry")

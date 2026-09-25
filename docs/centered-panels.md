@@ -80,7 +80,7 @@ cached package. Anything else stays in place and produces an error. See the
 
 ## 2. What changed
 
-Six package-owned QML files plus Hyprland config.
+Eight package-owned QML files plus Hyprland config.
 
 | File | Change |
 |---|---|
@@ -88,6 +88,8 @@ Six package-owned QML files plus Hyprland config.
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
 | `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one (18 lines) |
+| `plugins/lock/LockView.qml` | 3D wireframe quattro `Shape` (GPU `CurveRenderer` paths) above the password field; comets trace its outlines as they fly in each time the lock (or its preview) shows, and it drives off while `driving`; not panel-related, but patched through the same machinery. See [`lockscreen.md`](lockscreen.md) |
+| `plugins/lock/Service.qml` | on successful authentication sets `unlocking` (drives the car off, disables input) and releases the session lock 1.1s later on a timer; tracks `blanked` for the wake flow |
 | `services/PluginShellApi.qml` | narrow peer-panel, popout, and shared-scrim callbacks without exposing host objects |
 | `shell.qml` | grants menu plugins control of enabled non-authentication UI plugins and implements the callbacks above |
 

@@ -31,7 +31,8 @@ failed=0
 stock=$(mktemp)
 trap 'rm -f "$stock"' EXIT
 for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \
-         plugins/clipboard/Clipboard.qml services/PluginShellApi.qml shell.qml; do
+         plugins/clipboard/Clipboard.qml plugins/lock/LockView.qml plugins/lock/Service.qml \
+         services/PluginShellApi.qml shell.qml; do
   installed="$SHELL_DIR/$f"
   written="$STATE/installed/$f"
   if [[ -z $(stock_sum "$f") ]]; then
@@ -57,6 +58,12 @@ for f in Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml \
   rm -f "$written" "$written.pending"
 done
 find "$STATE" -depth -type d -empty -delete 2>/dev/null || true
+
+# A failed restore may leave the custom lock screen in use; keep its assets then.
+if (( failed == 0 )); then
+  rm -f ~/.local/share/omarchy-custom/{car-paint.frag.qsb,car-focus.frag.qsb,neon-city.png}
+  rmdir ~/.local/share/omarchy-custom 2>/dev/null || true
+fi
 
 omarchy restart shell
 (( failed == 0 ))
