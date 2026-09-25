@@ -322,17 +322,21 @@ Item {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
 
-    LockView {
+    // Built each time the preview opens, as the lock builds its own, so it reads the chosen design.
+    Loader {
       anchors.fill: parent
-      backgroundPath: root.backgroundPath
-      backgroundVersion: root.backgroundVersion
-      fingerprintConfigured: root.fingerprintConfigured
-      authenticatingPassword: false
-      failureMessage: ""
-      failedAttempts: 0
-      inputEnabled: false
-      loadBackground: root.previewVisible
-      passwordText: ""
+      active: root.previewVisible
+      sourceComponent: LockView {
+        backgroundPath: root.backgroundPath
+        backgroundVersion: root.backgroundVersion
+        fingerprintConfigured: root.fingerprintConfigured
+        authenticatingPassword: false
+        failureMessage: ""
+        failedAttempts: 0
+        inputEnabled: false
+        loadBackground: root.previewVisible
+        passwordText: ""
+      }
     }
 
     MouseArea {
