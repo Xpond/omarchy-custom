@@ -18,6 +18,9 @@ A radial control center, a file browser and centered shell panels for
   rims, and drives off through a painted neon scene when you unlock.
   `tunnel`: Omarchy logos stacked into a neon line-art corridor you fly through, each
   with its own hue and a comet running through it like the wheel's.
+  `mycelium`: a colony of fine hyphae grows from the centre until it has taken the
+  screen, its tips glowing as they push on and lighting the dark ground, with more of it
+  out of focus deeper down; it sways as in a hyperlapse, and draws back in when you unlock.
   `wallpaper`: Omarchy's own blurred wallpaper. Try one without locking:
   `omarchy-shell lock preview`. Work in progress; see
   [`docs/lockscreen.md`](docs/lockscreen.md).
