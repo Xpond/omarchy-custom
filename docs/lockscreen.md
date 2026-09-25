@@ -11,8 +11,10 @@ below, and `wallpaper`, Omarchy's own blurred wallpaper.
 In the wheel, Style › Lockscreen Designs lists the designs (search "lockscreen"); picking
 one only switches to it, and the next lock shows it. From a terminal,
 `omarchy-lock-design list` and `omarchy-lock-design set <name>` do the same. The choice is one
-word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The host watches that
-file, so a switch needs no install or restart.
+word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The lock and its preview
+build their view each time they show, reading that file then, so a switch needs no install or
+restart. A long-lived view couldn't rely on its watch: a file created after the watch started
+is never seen.
 
 A design is a folder in `lock/` holding a `Scene.qml`, plus whatever QML, JavaScript,
 shaders and images it loads relative to itself. The scene fills the screen behind the field.
@@ -37,7 +39,7 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | File | Responsibility |
 |---|---|
 | `patches/shell/plugins/lock/LockView.qml` | Host: password field, wake handling, loads the chosen design |
-| `patches/shell/plugins/lock/Service.qml` | PAM flow, unlock delay, display blanking and wake state |
+| `patches/shell/plugins/lock/Service.qml` | PAM flow, unlock delay, display blanking, wake state and the preview |
 | `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
 | `bin/omarchy-lock-design` | Lists the designs, or sets the one the next lock shows |
 | `lock/wallpaper/Scene.qml` | The wallpaper, blurred, fading out on unlock |
