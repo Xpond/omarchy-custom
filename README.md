@@ -21,6 +21,9 @@ A radial control center, a file browser and centered shell panels for
   `mycelium`: a colony of fine hyphae grows from the centre until it has taken the
   screen, its tips glowing as they push on and lighting the dark ground, with more of it
   out of focus deeper down; it sways as in a hyperlapse, and draws back in when you unlock.
+  `shore`: where the wash meets the sand, seen close from high above: the water's edge surges
+  across the middle of the screen under a rope of foam and slides back, with ripples, glints and
+  caustics in the shallow water; unlocking brings the tide in.
   `wallpaper`: Omarchy's own blurred wallpaper. Try one without locking:
   `omarchy-shell lock preview`. Work in progress; see
   [`docs/lockscreen.md`](docs/lockscreen.md).

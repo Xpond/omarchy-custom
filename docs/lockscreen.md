@@ -3,8 +3,8 @@
 The lock screen has swappable designs. The patched `LockView.qml` is their host: it keeps
 the password field, the connection to `Service.qml` and the wake handling, and loads a
 design's `Scene.qml` from this checkout's `lock/`. That is outside the shell directory the
-patches replace, so a design can span any number of files. Four ship: `rally`, `tunnel` and
-`mycelium`, described below, and `wallpaper`, Omarchy's own blurred wallpaper.
+patches replace, so a design can span any number of files. Five ship: `rally`, `tunnel`,
+`mycelium` and `shore`, described below, and `wallpaper`, Omarchy's own blurred wallpaper.
 
 ## Designs
 
@@ -50,6 +50,8 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock/mycelium/grow.js` | Grows a colony: its lines, the step that reaches each, and the light it casts |
 | `lock/mycelium/mycelium.frag` / `.qsb` | The colony as grown so far on the ground it lights, and its deep hyphae, source and compiled |
 | `lock/mycelium/ground.frag` / `.qsb` | The ground's clouds and grain, drawn once, source and compiled |
+| `lock/shore/Scene.qml` | Runs the surf's clock, fades the beach in and brings the tide in on unlock |
+| `lock/shore/shore.frag` / `.qsb` | The wash: its edge, water, foam and light, and the sand it wets, source and compiled |
 | `lock/rally/Scene.qml` | Scenery, contact shadow, floor reflection and the car's framing |
 | `lock/rally/Car.qml` | Projection, tracing, paint sweep and drive-off |
 | `lock/rally/Paintwork.qml` | Material mask, shaded paint, outlines and comets, in draw order |
@@ -75,9 +77,10 @@ restores stock files, then removes the link and the design choice only after a s
 restore, so a retained custom lock screen can still render. Installer tests cover both paths,
 including failures.
 
-Three files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
+Four files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
 lines, mostly the stock password field), `Car.qml` (about 350: the car's state and the logic
-that drives it) and `Paintwork.qml` (about 300: a mask and paint that must stay in step).
+that drives it), `Paintwork.qml` (about 300: a mask and paint that must stay in step) and
+`shore.frag` (about 225: one pass whose water, foam, light and sand all follow its surges).
 
 ## Tunnel
 
@@ -147,6 +150,48 @@ After GLSL changes, rebuild the shaders:
 ```bash
 for f in mycelium ground; do /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o lock/mycelium/$f.frag.qsb lock/mycelium/$f.frag; done
+```
+
+## Shore
+
+Where the wash meets the sand, seen close from high above: shallow water fills the top of the
+screen, damp sand the bottom, and the water's edge moves across the middle. Every six seconds or
+so a foaming bore comes down through the water, runs up the sand under a rope of foam and slides
+back. Unlocking brings the tide in as the beach fades.
+
+`shore.frag` draws everything in one full-screen pass from the time alone; `Scene.qml` only runs
+the clock. Surges differ in strength, rhythm and angle, and in how uneven their fronts are. Each
+reaches each stretch of shore at its own time, a second or two apart, and runs its own distance, so
+its edge keeps changing shape: stretches race ahead, lag, or drain back while others still advance.
+Running up, its lip frays into small tongues that form and fade; draining back, the thinning film
+tears into patches. Its reach is a parabola in time, warped so the backwash takes longer than the
+run up, and the next surge catches the backwash near the centre, so the edge stays about the
+middle.
+
+Each surge arrives as a foaming bore that thins to a rope of foam along its edge, with lace
+drifting in patches on the water behind. Foam, ripples and the light they focus ride on the
+topmost water, stretching as it spreads and sliding back with the backwash; a new surge's water
+runs over the old under its foam. The ripples bend the sand seen through the water, their light
+draws a moving web on it, the surface mirrors the sky and glints, and the shallows turn green,
+then turquoise, as reds are absorbed. The foam casts a soft shadow up the beach. Where the
+backwash draws back, the sand shines with the sky in draining patches and dries within 16 seconds,
+and a thin line of bubbles is stranded where each surge stopped. The dry sand is pale and warm,
+golden brown where wet, with fine grains, some dark and some catching the sun, patches of wind
+ripples and small bumps lit from up the beach, and faint lines of grit where earlier surges
+stopped.
+
+600 surges make an hour, then the surf repeats. The ripples and the light drift a whole number of
+their repeats in that hour, so the scene wraps its clock to the hour seamlessly and the shader's
+floats stay precise. Each lock opens at a random point in the hour, and the clock pauses while the
+display is blank. `play()` fades the beach in over 1.2s; `leave()` raises the tide 1.2 screen
+heights and fades it out within the 1.1s before the lock releases. In a 1080p preview window at
+144fps on a GTX 1080 Ti it keeps about 7% of the GPU busy; the live lock is not yet timed.
+
+After GLSL changes, rebuild the shader:
+
+```bash
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
+  -o lock/shore/shore.frag.qsb lock/shore/shore.frag
 ```
 
 After editing a design's QML or shaders, run `omarchy restart shell` before
@@ -364,8 +409,9 @@ or a directory supplied as its argument. They cover tracing, paint, parked and
 drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
 of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `tunnel`,
 which must draw its lines; `mycelium`, whose colony 1.5s in must have grown about the centre with
-no line beyond it, where only the dark ground shows; then `wallpaper` and a missing design. The
-field stays on all four, and the missing one leaves the plain background.
+no line beyond it, where only the dark ground shows; `shore`, whose water must fill the top edge and
+sand the bottom corner wherever in the surf it opens; then `wallpaper` and a missing design.
+The field stays on all five, and the missing one leaves the plain background.
 
 `tests/mycelium.js` grows colonies from fixed seeds at four
 screen shapes: each must cross over 95% of the screen's 60-unit squares, every line drawn must have
