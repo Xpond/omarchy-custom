@@ -66,7 +66,8 @@ stages += [{"name": "unlit-4k", "unlit": True, "width": 3840, "height": 2160}]
 stages += [dict(s, name=s["name"] + "-unlit", unlit=True) for s in stages if 0 < s.get("drive", 0) < 0.9]
 # Last, since they unload the car: other designs at runtime, then one that is missing.
 stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
-           {"name": "design-wallpaper", "design": "wallpaper"}, {"name": "design-missing", "design": "missing"}]
+           {"name": "design-shore", "design": "shore"}, {"name": "design-wallpaper", "design": "wallpaper"},
+           {"name": "design-missing", "design": "missing"}]
 qml = '''import QtQuick
 import Quickshell
 Window {
@@ -150,7 +151,7 @@ def lit(name, crop):
                                           "-threshold", "25%", "-format", "%[fx:mean]", "info:"]))
 
 # The field is the host's: it stays on every design, and when a design fails to load.
-for name in ("parked", "design-tunnel", "design-mycelium", "design-wallpaper", "design-missing"):
+for name in ("parked", "design-tunnel", "design-mycelium", "design-shore", "design-wallpaper", "design-missing"):
     assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
 assert lit("design-tunnel", "1920x880+0+0") > 0.01, "switching to the tunnel design drew no lines"
 # A second and a half in, the colony has grown about the centre, and no line shows beyond it, above
@@ -160,6 +161,10 @@ beyond = subprocess.check_output(["magick", output / "design-mycelium.png", "-al
                                   "-draw", "rectangle 610,190 1310,890", "-draw", "rectangle 0,860 1920,1080",
                                   "-colorspace", "gray", "-threshold", "10%", "-format", "%[fx:mean*w*h]", "info:"])
 assert float(beyond) == 0, "the mycelium shows lines its growth hasn't reached"
+# Whenever in the surf it opens, water fills the top edge and sand the bottom corner, beyond the
+# highest run up.
+sea, sand = bytes.fromhex(pixel("design-shore", 960, 10)), bytes.fromhex(pixel("design-shore", 200, 1040))
+assert sea[2] > sea[0] + 5 and sand[0] > sand[2] + 40, f"switching to the shore design drew no beach: {sea.hex()} {sand.hex()}"
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
 print("ok: designs switch at runtime, and a missing one leaves the plain background and the field")
