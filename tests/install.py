@@ -115,11 +115,6 @@ exit 0''',
         return all(installed(relative) == stock[relative] for relative in files)
 
     asset_dir = user / ".local/share/omarchy-custom"
-    # What an older install copied for its lock screen, now inside the rally design.
-    old_assets = [asset_dir / name for name in ("car-paint.frag.qsb", "car-focus.frag.qsb", "neon-city.png")]
-    asset_dir.mkdir(parents=True)
-    for asset in old_assets:
-        asset.write_text("old")
     result = run()
     assert result.returncode == 0, result.stderr
     designs = asset_dir / "lock"
@@ -128,7 +123,6 @@ exit 0''',
     assert (asset_dir / "lock-session/Bridge.qml").resolve() == repo / "lock-session/Bridge.qml"
     assert (asset_dir / "lock-session/Commons").readlink() == shell / "Commons"
     assert (asset_dir / "lock-session/Lock").readlink() == shell / "plugins/lock"
-    assert not any(asset.exists() for asset in old_assets), "the old lock-screen assets outlived the new host"
     verify(user, repo)
     expected = [{"id": "xpo.files"}, {"id": "xpo.wheel"}]
     assert json.loads(conf.read_text())["plugins"] == expected

@@ -36,7 +36,8 @@ with tempfile.TemporaryDirectory(prefix="lock-process-") as directory:
     (config / "lock-design").write_text("mycelium\n")
     for name in ["omarchy-hyprland-session-locked", "fprintd-list", "omarchy-system-wake",
                  "omarchy-brightness-display", "omarchy-brightness-keyboard"]:
-        command = 'sleep 0.5; exit 0' if name == "omarchy-system-wake" else 'exit 1'
+        # A wake leaves its file until it finishes, so one killed with its worker stays behind.
+        command = 'touch "$HOME/wake.$$"; sleep 2; rm "$HOME/wake.$$"' if name == "omarchy-system-wake" else 'exit 1'
         path = stubs / name
         path.write_text("#!/bin/sh\n" + command + "\n")
         path.chmod(0o755)
@@ -154,8 +155,8 @@ ShellRoot { Lock.Service {} }
         until(lambda: child_pid() and child_pid() != pid and status().get("secure"), "crashed lock did not recover")
         assert ipc("authenticated", child=True) == "ok"
         until(lambda: not status().get("locked"), "authenticated unlock did not release")
-        assert child_pid(), "worker exited before its wake command finished"
         until(lambda: not child_pid(), "unlock retained its worker")
+        until(lambda: not list(home.glob("wake.*")), "worker exited before its wake command finished", timeout=3)
         print("ok: failed launch retries, shell restart/crash reconnects, worker crash recovers, unlock/wake retires", flush=True)
     finally:
         subprocess.run(["quickshell", "kill", "-p", str(worker)], env=env, capture_output=True)
