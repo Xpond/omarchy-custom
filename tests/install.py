@@ -25,6 +25,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     shutil.copytree(source / "patches/orig", shell)
     shutil.copytree(source / "bin", repo / "bin")
     (repo / "lock").mkdir()
+    shutil.copytree(source / "lock-session", repo / "lock-session")
     for plugin in (source / "plugins").iterdir():
         (repo / "plugins" / plugin.name).mkdir(parents=True)
     for name in ["install.sh", "revert.sh"]:
@@ -123,6 +124,10 @@ exit 0''',
     assert result.returncode == 0, result.stderr
     designs = asset_dir / "lock"
     assert designs.resolve() == repo / "lock"
+    assert (asset_dir / "lock-session/shell.qml").resolve() == repo / "lock-session/shell.qml"
+    assert (asset_dir / "lock-session/Bridge.qml").resolve() == repo / "lock-session/Bridge.qml"
+    assert (asset_dir / "lock-session/Commons").readlink() == shell / "Commons"
+    assert (asset_dir / "lock-session/Lock").readlink() == shell / "plugins/lock"
     assert not any(asset.exists() for asset in old_assets), "the old lock-screen assets outlived the new host"
     verify(user, repo)
     expected = [{"id": "xpo.files"}, {"id": "xpo.wheel"}]

@@ -39,9 +39,11 @@ void main() {
         for (int side = -1; side <= 1; ++side) {
             float cell = mod(here + float(side), cells);
             float seed = cell + float(layer) * 311.0;
-            float heading = (cell + 0.2 + 0.6 * hash(seed)) / cells * 6.2831853;
             float off = 16.0 + 60.0 * hash(seed + 1.0);
             float depth = 4.0 + mod(160.0 * hash(seed + 2.0) - flight, 160.0);
+            // A mote cannot reach a pixel farther from its radial distance than its largest radius.
+            if (abs(r - off / depth) * focal > 2.0 * focal / 540.0 + 0.501) continue;
+            float heading = (cell + 0.2 + 0.6 * hash(seed)) / cells * 6.2831853;
             float radius = (0.6 + 1.4 * hash(seed + 3.0)) * focal / 540.0;
             float d = length(toward - off / depth * vec2(cos(heading), sin(heading))) * focal;
             float mote = 1.0 - smoothstep(radius - 0.5, radius + 0.5, d);

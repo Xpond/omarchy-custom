@@ -5,6 +5,16 @@ import Quickshell.Services.Pam
 import Quickshell.Wayland
 import qs.Commons
 
+// Keep the renderer and its driver caches out of the long-lived desktop shell.
+Loader {
+  property var shell: null
+  property string omarchyPath: ""
+  source: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? "" :
+    "file://" + Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock-session/Bridge.qml"
+  sourceComponent: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? session : undefined
+
+  Component {
+    id: session
 Item {
   id: root
 
@@ -35,10 +45,25 @@ Item {
   property bool strandedLockResolved: false
   property bool unlocking: false
   property bool blanked: false
+  property bool waking: false
   property double wakeUntil: 0
+  property double lastInput: 0
 
   readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
   readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
+  readonly property string statusText: JSON.stringify({
+    locked: root.locked,
+    requested: root.lockRequested,
+    pending: root.pendingSessionLock,
+    sessionLocked: sessionLock.locked,
+    secure: sessionLock.secure,
+    realScreens: root.realScreenCount(),
+    passwordPam: root.passwordPamConfigured,
+    fingerprint: root.fingerprintConfigured,
+    authenticating: root.authenticating,
+    lastEvent: root.lastEvent,
+    lastEventAt: root.lastEventAt
+  })
 
   function realScreenCount() {
     var screens = Quickshell.screens || []
@@ -58,6 +83,11 @@ Item {
 
   function queueSessionLock() {
     pendingSessionLock = true
+    // A ready output can lock immediately; only wait while displays are coming up.
+    if (hasRealScreen() && !sessionLockStabilizeTimer.running) {
+      requestSessionLock()
+      return
+    }
     if (!sessionLockStabilizeTimer.running) logEvent("lock-pending: screen-stabilizing")
     sessionLockStabilizeTimer.restart()
     if (!pendingSessionLockTimer.running) pendingSessionLockTimer.start()
@@ -138,6 +168,7 @@ Item {
     unlockTimer.stop()
     unlocking = false
     lockRequested = true
+    wakeUntil = 0
     armBlankTimer()
     logEvent("lock-requested")
     queueSessionLock()
@@ -175,20 +206,40 @@ Item {
   }
 
   function armBlankTimer() {
-    // After a wake from blank, leave time for the picture to come back and typing to start.
+    // Every design uses the same idle countdown, regardless of its animation.
+    if (!lockRequested || blanked || waking || unlocking || authenticatingPassword) {
+      idleBlankTimer.stop()
+      return
+    }
+    // DPMS returns before the monitor shows a picture (~4.2s later on this display).
     idleBlankTimer.interval = Math.max(5000, wakeUntil - Date.now())
     idleBlankTimer.armedAt = Date.now()
     idleBlankTimer.restart()
   }
 
   function runWake() {
+    waking = true
+    idleBlankTimer.stop()
+    // Finish an in-flight blank before waking, so its command cannot turn us off again.
+    if (!blankProcess.running && !wakeProcess.running) wakeProcess.running = true
+  }
+
+  function finishWake() {
+    waking = false
     if (blanked) {
       logEvent("display: wake")
       wakeUntil = Date.now() + 10000
       blanked = false
     }
-    if (!wakeProcess.running) wakeProcess.running = true
     if (lockRequested) armBlankTimer()
+  }
+
+  // Wake once per input burst; subsequent events only restart the idle countdown.
+  function wakeOnInput() {
+    var quiet = Date.now() - lastInput > 1000
+    lastInput = Date.now()
+    if (quiet || blanked) runWake()
+    else if (lockRequested) armBlankTimer()
   }
 
   function runBlank() {
@@ -303,10 +354,11 @@ Item {
         blanked: root.blanked
         loadBackground: root.locked
         passwordText: root.enteredPassword
+        onDesignChanged: unlockTimer.interval = design === "mycelium" ? 550 : 1100
         onPasswordTextEdited: function(password) { root.enteredPassword = password }
         onSubmitPassword: function(password) { root.submitPassword(password) }
         onClearFailureRequested: root.failureMessage = ""
-        onWakeRequested: root.runWake()
+        onWakeRequested: root.wakeOnInput()
       }
 
     }
@@ -385,7 +437,7 @@ Item {
 
   Timer {
     id: unlockTimer
-    // How long a design's leave() plays; the rally car's drive-off fits it.
+    // Each lock view sets this from its chosen design; keep a fallback if no view loads.
     interval: 1100
     repeat: false
     onTriggered: root.finishUnlock()
@@ -442,11 +494,13 @@ Item {
   Process {
     id: wakeProcess
     command: ["bash", "-c", "omarchy-system-wake"]
+    onExited: root.finishWake()
   }
 
   Process {
     id: blankProcess
     command: ["bash", "-c", "omarchy-brightness-keyboard off; omarchy-brightness-display off"]
+    onExited: if (root.waking) root.runWake()
   }
 
   Timer {
@@ -559,19 +613,7 @@ Item {
     }
 
     function status(): string {
-      return JSON.stringify({
-        locked: root.locked,
-        requested: root.lockRequested,
-        pending: root.pendingSessionLock,
-        sessionLocked: sessionLock.locked,
-        secure: sessionLock.secure,
-        realScreens: root.realScreenCount(),
-        passwordPam: root.passwordPamConfigured,
-        fingerprint: root.fingerprintConfigured,
-        authenticating: root.authenticating,
-        lastEvent: root.lastEvent,
-        lastEventAt: root.lastEventAt
-      })
+      return root.statusText
     }
 
     function preview(): string {
@@ -585,5 +627,7 @@ Item {
       root.previewVisible = false
       return "ok"
     }
+  }
+}
   }
 }

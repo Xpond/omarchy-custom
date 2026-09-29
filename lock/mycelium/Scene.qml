@@ -12,16 +12,37 @@ Item {
   // units a step, the screen being 1080 high.
   property real grown: 0
   property bool spreading: false
-  readonly property var colony: width > 0 && height > 0 ? Grow.grow(width / height) : null
-  onColonyChanged: { web.requestPaint(); times.requestPaint(); shine.requestPaint(); deeper.requestPaint() }
+  property var colony: null
+  property var growing: null
+  function seed() {
+    colony = null
+    growing = width > 0 && height > 0 ? Grow.begin(width / height) : null
+  }
+  onWidthChanged: Qt.callLater(seed)
+  onHeightChanged: Qt.callLater(seed)
+  Component.onCompleted: Qt.callLater(seed)
+  // Build in small slices so loading and input stay responsive; release the builder when done.
+  Timer {
+    interval: 1
+    running: root.growing !== null && !root.host.blanked
+    repeat: true
+    onTriggered: {
+      var ready = root.growing(3)
+      if (ready) { root.growing = null; root.colony = ready }
+    }
+  }
+  // The canvases draw it on a thread of their own, the arrival map for a quarter of a second, rather
+  // than holding up the lock; growth waits until all four have.
+  property int drawn: 0
+  onColonyChanged: { drawn = 0; web.requestPaint(); times.requestPaint(); shine.requestPaint(); deeper.requestPaint() }
 
-  // Start growth once the scene has a size, even if play() came earlier. Pause both clocks on blank.
+  // Runs while the colony spreads or leaves, never while blanked; growth waits for the canvases.
   property real time: 0
   FrameAnimation {
-    running: !root.host.blanked
+    running: !root.host.blanked && (root.spreading || leaving.running)
     onTriggered: {
       root.time += frameTime
-      if (root.spreading && root.colony) root.grown = Math.min(root.colony.fronts.length, root.grown + 45 * frameTime)
+      if (root.spreading && root.colony && root.drawn >= 4) root.grown = Math.min(root.colony.fronts.length, root.grown + 45 * frameTime)
     }
   }
   // The camera's slow drift, over a minute or so: its pan in pixels, zoom and roll, zoomed in
@@ -39,8 +60,8 @@ Item {
   // Drawn back into the centre, gone by the time the lock releases.
   ParallelAnimation {
     id: leaving
-    NumberAnimation { target: root; property: "grown"; to: 0; duration: 1100; easing.type: Easing.OutQuad }
-    NumberAnimation { target: root; property: "opacity"; to: 0; duration: 1100; easing.type: Easing.InQuart }
+    NumberAnimation { target: root; property: "grown"; to: 0; duration: 550; easing.type: Easing.OutQuad }
+    NumberAnimation { target: root; property: "opacity"; to: 0; duration: 550; easing.type: Easing.InQuart }
   }
 
   // The colony's lines, anti-aliased, the runs of each width in one stroke.
@@ -48,6 +69,8 @@ Item {
     id: web
     anchors.fill: parent
     visible: false
+    renderStrategy: Canvas.Threaded
+    onPainted: if (root.colony) root.drawn++
     onPaint: {
       var c = getContext("2d"), k = height / 1080
       c.clearRect(0, 0, width, height)
@@ -78,6 +101,8 @@ Item {
     visible: false
     antialiasing: false
     smooth: true
+    renderStrategy: Canvas.Threaded
+    onPainted: if (root.colony) root.drawn++
     onPaint: {
       var c = getContext("2d"), k = height / 1080
       c.clearRect(0, 0, width, height)
@@ -105,6 +130,8 @@ Item {
     width: root.width / 2
     height: root.height / 2
     visible: false
+    renderStrategy: Canvas.Threaded
+    onPainted: if (root.colony) root.drawn++
     onPaint: {
       var c = getContext("2d"), k = height / 1080
       c.clearRect(0, 0, width, height)
@@ -130,6 +157,8 @@ Item {
     width: root.colony ? root.colony.light.cols : 1
     height: root.colony ? root.colony.light.rows : 1
     visible: false
+    renderStrategy: Canvas.Threaded
+    onPainted: if (root.colony) root.drawn++
     onPaint: {
       if (!root.colony) return
       var c = getContext("2d"), image = c.createImageData(width, height), px = root.colony.light.px

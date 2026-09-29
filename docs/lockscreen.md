@@ -24,14 +24,14 @@ run, and the log warns if it's missing. The rest is optional:
 | Member | Use |
 |---|---|
 | `host` | The `LockView`, for state such as `backgroundPath`, `failureMessage`, `authenticatingPassword` or `passwordText.length` |
-| `play()` | Called when the lock shows, and on the first key or click after a wake |
-| `hide()` | Called when the display wakes from blank, so `play()` can run the entrance again |
-| `leave()` | Called when the password is accepted; the lock releases 1.1s later, whatever it does |
+| `play()` | Called when the lock shows and automatically when wake completes |
+| `hide()` | Called when the display blanks, resetting the design for its next `play()` |
+| `leave()` | Called when the password is accepted; the lock releases after 550ms for mycelium or 1.1s for the other designs, whatever the animation does |
 
 A design that fails to load, from a syntax error or a missing folder, leaves the plain
-background, and the field still unlocks. The wheel lists designs at startup and the shell
-caches loaded QML, so after adding or editing a design run `omarchy restart shell`; neither
-needs `install.sh` or sudo. Designs are not Omarchy plugins: only this host loads them onto
+background, and the field still unlocks. Each lock or preview runs in a fresh worker, so edits
+appear on its next opening. Restart the shell after adding a design to refresh the wheel's
+list; neither needs `install.sh` or sudo. Designs are not Omarchy plugins: only this host loads them onto
 the lock surface, so an installed plugin cannot draw where the password is typed.
 
 ## Files and installation
@@ -40,10 +40,13 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 |---|---|
 | `patches/shell/plugins/lock/LockView.qml` | Host: password field, wake handling, loads the chosen design |
 | `patches/shell/plugins/lock/Service.qml` | PAM flow, unlock delay, display blanking, wake state and the preview |
+| `lock-session/Bridge.qml` | Keeps the shell's lock IPC available and starts/reconnects the worker |
+| `lock-session/shell.qml` | Runs the installed authentication service and exits after unlock/wake or preview closure |
 | `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
 | `bin/omarchy-lock-design` | Lists the designs, or sets the one the next lock shows |
 | `lock/wallpaper/Scene.qml` | The wallpaper, blurred, fading out on unlock |
 | `lock/tunnel/Scene.qml` | The wheel's mark stacked into a corridor, flown through |
+| `lock/tunnel/mark.vert` / `.qsb` | Places and fades one mark as the flight goes on, source and compiled |
 | `lock/tunnel/mark.frag` / `.qsb` | One mark: its maze and a comet running through it, source and compiled |
 | `lock/tunnel/space.frag` / `.qsb` | The glow at the tunnel's far end and the dust, source and compiled |
 | `lock/mycelium/Scene.qml` | Grows and draws back the colony, drifts the camera, and draws the canvases its shader reads |
@@ -68,19 +71,29 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `tests/mycelium.js` | Colony coverage, arrival steps and light distribution |
 | `tests/mycelium-render.py` | Strand smoothness at 1080p and 4K, and growth across the packed step boundary |
 | `tests/lock-render.py` | GPU captures, drive-off exit and design switching checks |
+| `tests/lock-process.py` | Offscreen memory, process exit, shell reconnection and crash recovery; simulated compositor and authentication |
 | `tests/lock_parts.py` | Wing occlusion and wing, mirror and flap shading checks |
 | `tests/lock_pixels.py` | Material, scenery and seam regression checks |
 
 Run `./install.sh` to apply the patches. It links `lock/` to `~/.local/share/omarchy-custom/lock`
+and links the worker plus the installed lock service and Commons under `lock-session/`
 before updating the QML and restarting the shell, and needs no shader compiler. `./revert.sh`
 restores stock files, then removes the link and the design choice only after a successful
 restore, so a retained custom lock screen can still render. Installer tests cover both paths,
 including failures.
 
-Four files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
-lines, mostly the stock password field), `Car.qml` (about 350: the car's state and the logic
-that drives it), `Paintwork.qml` (about 300: a mask and paint that must stay in step) and
-`shore.frag` (about 225: one pass whose water, foam, light and sand all follow its surges).
+The desktop shell retains only the bridge. A separate Quickshell process owns PAM and the
+lock surfaces, using the same patched service, then exits after unlock and the final wake
+command. This releases the renderer's native and graphics caches. The worker stays alive
+while locked, including while blanked, and survives a desktop-shell restart. Only lock,
+preview and hide-preview commands cross the private runtime socket; passwords stay in the worker.
+Its normal startup also runs the existing stranded-lock recovery check before retiring.
+
+Five files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
+lines, mostly the stock password field), `Car.qml` (about 420: the car's state and the logic
+that drives it), `Paintwork.qml` (about 360: a mask and paint that must stay in step),
+`shore.frag` (about 225: one pass whose water, foam, light and sand all follow its surges), and
+`Service.qml` (about 630: kept together so installer rebases retain upstream authentication fixes).
 
 ## Tunnel
 
@@ -95,21 +108,32 @@ The corridor's centreline wanders on a few sine waves; the camera looks down its
 the far end swings, and it banks into the turns. The view is 90° high: a mark 14 units
 ahead fills the screen's height.
 
-Each mark is a `ShaderEffect` running `mark.frag`, which draws the maze's 17 stretches and a
-comet through them as the wheel's runs: out from where the bottom bar meets the inner square,
-splitting at every junction. Each stretch carries its ends' distances along the maze, which
-match `mark.png`'s at every junction. A mark's place picks its hue, from cyan to magenta, and
-its comet's start, pace (0.3–0.8 laps a second at cruise), tail (12–35% of the run) and way
-round: three in ten run back in from the ends. The comets keep time with the flight, so they
-race on unlock. Behind the marks, `space.frag` lights the far end, where the tunnel's tangent
-meets the screen, and dust drifts past as small dots, each its own size. At 1080p on a GTX
-1080 Ti the tunnel holds 144fps using about a fifth of a CPU core and under a tenth of the GPU.
+Each mark is a `ShaderEffect`: `mark.vert` places it from the distance flown, and `mark.frag`
+draws the maze's 17 stretches and a comet through them as the wheel's runs: out from where the
+bottom bar meets the inner square, splitting at every junction. Each stretch carries its ends'
+distances along the maze, which match `mark.png`'s at every junction. A mark's place picks its
+hue, from cyan to magenta, and its comet's start, pace (0.3–0.8 laps a second at cruise), tail
+(12–35% of the run) and way round: three in ten run back in from the ends. The comets keep time
+with the flight, so they race on unlock. Behind the marks, `space.frag` lights the far end,
+where the tunnel's tangent meets the screen, and dust drifts past as small dots, each its own
+size. Before evaluating a dust mote's heading and coverage, the shader rejects pixels farther
+from its radial distance than the largest mote can reach. This leaves identical pixels while
+roughly halving the dust pass's GPU cost.
+
+QML works out each mark's depth every frame, and the random picks for its place only when it
+comes round again; its position, size, turn, fade and comet head come from the vertex shader, so
+a frame moves 40 marks without moving 40 items. A mark faded below a thousandth isn't drawn, and
+`mark.frag` returns early for points farther than any glow from the grid lines every stretch
+lies on. At 1080p on a GTX 1080 Ti the tunnel holds 144fps using about a tenth of a CPU core and
+0.76ms of GPU time a frame at full clocks.
 
 `play()` fades the tunnel in over 1.2s while it accelerates to 8 units a second.
 `leave()` accelerates tenfold and fades out within the 1.1s before the lock releases.
 The flight pauses while the display is blank. After GLSL changes, rebuild the shaders:
 
 ```bash
+/usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 -b \
+  -o lock/tunnel/mark.vert.qsb lock/tunnel/mark.vert
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o lock/tunnel/mark.frag.qsb lock/tunnel/mark.frag
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
@@ -126,8 +150,12 @@ sway slowly. Unlocking draws the colony back into the centre while it fades.
 step outward, wander, branch into open space and fuse when they meet another strand. Each tapers
 according to the length it feeds, including its branches. The result contains paths grouped by
 width, segments grouped by arrival step, and a coarse map of density and average arrival time.
+The scene calls `begin()` and resumes its builder with a 3ms budget on each timer tick, so colony
+creation leaves time for input and the first frame. It pauses while blanked and releases the
+builder when complete. `grow()` runs the same builder synchronously for geometry tests.
 
-`Scene.qml` draws four canvases once:
+`Scene.qml` draws four canvases once, each on the canvas thread rather than holding up the lock:
+the arrival map takes a quarter of a second. Growth starts once all four have drawn.
 
 - `web`: antialiased surface lines.
 - `times`: arrival steps packed into red and green, drawn without antialiasing. Wider strokes
@@ -141,9 +169,11 @@ magnifies the light and deep layers. This removes the triangular edges left by b
 sampling. The arrival map is sampled linearly and decoded without rounding its channels,
 dividing out alpha at its edges; interpolation also works across the packed 255-to-256 boundary.
 
-Growth advances at 45 steps a second on the frame clock, starting once the scene has a size.
+Growth advances at 45 steps a second on the frame clock, starting once the colony is drawn.
 Both growth and camera motion pause when the display is blank. `hide()` resets growth and
-`play()` restarts it on wake. `leave()` retracts and fades it over the host's 1.1-second unlock delay.
+freezes the ground while blanked; `play()` resumes both automatically after wake. `leave()`
+keeps the camera moving while it retracts and fades over the host's 550ms unlock delay; then the
+clock stops.
 
 After GLSL changes, rebuild the shaders:
 
@@ -183,9 +213,10 @@ stopped.
 600 surges make an hour, then the surf repeats. The ripples and the light drift a whole number of
 their repeats in that hour, so the scene wraps its clock to the hour seamlessly and the shader's
 floats stay precise. Each lock opens at a random point in the hour, and the clock pauses while the
-display is blank. `play()` fades the beach in over 1.2s; `leave()` raises the tide 1.2 screen
-heights and fades it out within the 1.1s before the lock releases. In a 1080p preview window at
-144fps on a GTX 1080 Ti it keeps about 7% of the GPU busy; the live lock is not yet timed.
+display is blank. `play()` fades the beach in over 1.2s; `leave()`
+raises the tide 1.2 screen heights and fades it out within the 1.1s before the lock releases. A
+surge whose water can't reach a point, however far its lip frays, skips its water there. At 1080p a
+frame takes 1.3ms of GPU time on a GTX 1080 Ti at full clocks, the most of any design.
 
 After GLSL changes, rebuild the shader:
 
@@ -266,6 +297,16 @@ rotation. Body surfaces pitch and shake; wheel surfaces do not. The shader undoe
 the body pose before shading so the environment stays fixed. The floor reflection mirrors
 the car about its tyre-contact line, blurs and fades it, and follows the animations.
 
+The body keeps its parked shapes through the drive-off and takes its pose as one flat transform,
+`car.bodyPose`: the affine least-squares fit, over every eighth body outline point, from where they
+park to where the pose takes them. Paintwork's body shapes (`BodyCoat`, `BodyInk`, `BodyMask`)
+carry it; the wheels' shapes sit between them in the same drawing order and are projected again only
+as they turn. Streaks trail on screen from the posed body. The fit matches the shake within 0.5px,
+but a flat transform can't show the squat's parallax: at full pitch it strays 4.7px on average and up
+to 20px at 1080p (twice that at 4K). Re-posing the body exactly cost about 40ms of projection and
+tessellation a frame and held the first 500ms near 25fps; the whole drive now keeps the display's 144fps.
+`project()` runs once per size: width and height each report a resize, and the car completes at its size.
+
 ## Paint and shader
 
 Visible geometry uses `Shape.CurveRenderer`. A separate offscreen material mask uses
@@ -317,9 +358,9 @@ livery share this surface; the shader intersects the same shape. Intake mask gre
 The ochre rubber flaps shade continuously into the arch.
 
 These mask IDs are separate from the QML paint-tone indices into `car.paint`:
-`Paint { tone: N }` fills tone N's surfaces in its pigment, and `Inked` strokes a tone
-at its `car.ink` width. Bumper tone 28 has its own surface group and the same pigment
-as flank tone 0. It must not inherit the upper-flank pigment: even a small difference
+`Paint { tone: N }` fills tone N's body surfaces in its pigment (`Wheel` its wheel
+surfaces), and `Inked` strokes a tone at its `car.ink` width. Bumper tone 28 has its own
+surface group and the same pigment as flank tone 0. It must not inherit the upper-flank pigment: even a small difference
 leaves a visible seam below the stripes.
 
 The fragment shader reconstructs each surface position, adds analytical curvature to
@@ -346,6 +387,8 @@ be lit; their draw order is unchanged.
 Every painted group is a `Coat`, clipped at `car.front` until `painted == 1`.
 Sliding the clip avoids reshaping surfaces each frame. The material mask uses the
 same clip on a wrapping `Item`, since a layered shape cannot clip its own paths.
+Before the paint starts both are transparent, so the layers redrawn for every tracing frame skip
+them; transparent rather than invisible, since a hidden shape misses updates to its paths.
 `car.wavefront` follows the surface crossings, stroked in the comets' blue.
 
 This approximates curved panels on projected polygons. It is not a full 3D mesh or
@@ -382,33 +425,43 @@ After GLSL changes, rebuild the bundled shaders:
 
 ## Wake and authentication
 
-The service blanks the display five seconds after the last input. Waking keeps it
-on for at least ten seconds. The waking key/click only wakes it; the next key/click
-starts the drawing. Mouse movement wakes but does not start the animation. This
-avoids playing the entrance while a monitor is still restoring its picture after
-DPMS; the system does not report when that picture becomes visible.
+The service blanks the display after five seconds of inactivity, starting on lock and
+restarting on input. After waking a blank display, a ten-second minimum allows the physical
+monitor to recover: this display was measured taking about 4.2 seconds to show a picture after
+DPMS returned. Input never shortens that allowance; afterward it gets the normal five seconds.
+These rules apply to every current and future design, regardless of animation progress.
+One wake starts the animation automatically. The countdown pauses while the wake command runs,
+so it cannot expire while that command is restoring the display. An in-flight blank command
+finishes before a queued wake starts. Input after a quiet second runs the wake scripts;
+steady typing or a moving mouse just restarts the timeout. The wake allowance is a margin,
+not a signal that the physical monitor has finished waking.
 
 Authentication stays in the stock trusted lock plugin. On success, `unlocking`
-disables input and calls `driveOffThenUnlock()`; its 1100ms timer calls `finishUnlock()`.
-`LockView` input handlers preserve the wake-before-draw ordering.
+disables input and calls `driveOffThenUnlock()`; its independent timer calls `finishUnlock()`
+after 550ms for mycelium or 1100ms for the other designs. Each lock view sets the interval from
+its selected design; 1100ms remains the fallback if no view loads.
 
 ## Verification
 
 ```bash
 node tests/lock.js
 node tests/mycelium.js
+node tests/check.js
+node tests/lock-idle.js
 python3 tests/mycelium-render.py
+python3 tests/mycelium-lifecycle.py
 python3 tests/lock-render.py
+python3 tests/lock-process.py
 python3 tests/install.py
 ```
 
 The GPU test opens a temporary preview, never a session lock. The expanded capture
-sequence has a 150-second timeout. It needs a working
+sequence has a 300-second timeout. It needs a working
 Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-render/`
 or a directory supplied as its argument. They cover tracing, paint, parked and
 drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
 of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `tunnel`,
-which must draw its lines; `mycelium`, whose colony 1.5s in must have grown about the centre with
+which must draw its lines; `mycelium`, whose colony 1.5s after its textures are ready must have grown about the centre with
 no line beyond it, where only the dark ground shows; `shore`, whose water must fill the top edge and
 sand the bottom corner wherever in the surf it opens; then `wallpaper` and a missing design.
 The field stays on all five, and the missing one leaves the plain background.
@@ -421,6 +474,9 @@ its step, and its light must cover the screen, reaching the corners after the ce
 shader at 1080p and 4K. It checks brightness variation along their edges and growth across the
 packed step's 255-to-256 boundary. Captures go to `/tmp/mycelium-render/` or the directory supplied
 as its argument.
+
+`tests/mycelium-lifecycle.py` exercises the production scene's clocks: blank pauses both,
+one wake resumes growth, and unlock retracts and fades before going idle.
 
 `lock_parts.py` compares wing-visible and wing-hidden captures at 1080p and 4K,
 checks that the roof and C-pillar over the far fin are unchanged, that the near fin
@@ -485,9 +541,8 @@ Rejected along the way; don't retry these without a new direction from the user:
 - Custom Martini/Omarchy livery on the S1 E2 body; aero parts remain subject to visual review.
 - Thin gaps along the roof and belt show during pitch.
 - Multi-monitor and fingerprint unlock still need device testing. Typing immediately
-  after waking can start the drawing before the display is visible.
-- Sustained 144 Hz pacing needs measurement; native 4K artwork is deferred.
-  Earlier 144fps results predate the metallic shader and are not current benchmarks.
+  after a wake command completes can precede the physical display becoming visible.
+- Native 4K artwork is deferred.
 
 If the real lock gets stuck, switch to a TTY with Ctrl+Alt+F2 and log in. Run
 `./revert.sh` from this checkout to restore the verified stock files, then restart
