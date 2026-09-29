@@ -135,8 +135,10 @@ void main() {
         float span = 12.5 + 3.0 * hash(k + 0.6), since = time - start;
         if (since < 0.0) continue;
         float r = reach(k, u), s = since / span;
-        if (s < 1.0) {
-            float p = s * (1.0 + drain * (1.0 - s)), run = 4.0 * p * (1.0 - p) * r;
+        float p = s * (1.0 + drain * (1.0 - s)), run = 4.0 * p * (1.0 - p) * r;
+        // Beyond where the water can reach, with its lip frayed as far as it goes, it neither
+        // wets nor shades.
+        if (s < 1.0 && origin + run - v > -0.017) {
             // Running up, its lip frays and gathers: small tongues form and fade.
             float fray = (0.012 * (noise(vec2(u * 6.0, since * 0.7) + k) - 0.5)
                         + 0.005 * (noise(vec2(u * 18.0, since * 1.5) + k) - 0.5)) * (1.0 - smoothstep(0.35, 0.6, s));

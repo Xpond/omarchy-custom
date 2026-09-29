@@ -19,10 +19,13 @@ Item {
   // Drive-off timeline, 0..1 over driveTime.
   property real drive: 0
   // Polylines per path: finished and tracing outlines by level (inside and far, fine,
-  // panels, outline, beneath paint), and the comets' tail, body, head and the head's glow.
+  // panels, outline, beneath paint), the finished ones on the body and on the wheels apart, and
+  // the tail, body, head and the head's glow of the comets and of the drive-off's speed streaks.
   property var lines: [[], [], [], [], []]
+  property var wheelLines: [[], [], [], [], []]
   property var tracing: [[], [], [], [], []]
   property var comets: [[], [], [], []]
+  property var streaks: [[], [], [], []]
   // Rally livery by tone (see model.js); Paintwork.qml sets the order they're drawn in. Tones with an
   // ink width are stroked that wide rather than filled.
   readonly property var paint: [
@@ -57,8 +60,10 @@ Item {
   // outlines settle with it: the silhouette into a thin light edge, panel lines into dark gaps.
   readonly property real painted: Math.min(1, Math.max(0, (clock - traced) / paintTime))
   readonly property color gapColor: "#15171a"
-  // Screen polygons of the painted surfaces by tone.
-  property var fills: paint.map(function() { return [] })
+  // Screen polygons of the painted surfaces by tone: the body's as parked, which bodyPose moves as a
+  // whole, and the wheels', projected again as they turn.
+  property var bodywork: paint.map(function() { return [] })
+  property var wheels: paint.map(function() { return [] })
   // Paint floods on nose to tail behind a wavefront rather than fading up whole, so it arrives the
   // way the outlines did. span is the x the bodywork covers on screen, a unit out at each end so the
   // car is bare at 0 and wholly covered at 1; front is how far the paint has reached; coating is
@@ -76,18 +81,22 @@ Item {
     return Qt.matrix4x4(1, 0, 0, 0, 2 * k, -1, 0, 2 * (a.y - k * a.x), 0, 0, 1, 0, 0, 0, 0, 1)
   }
   property int finished: -1
-  // Design units to screen, set by project(); the drive-off reuses it to pose the car.
+  // Design units to screen, and the body's pose to the flat screen transform nearest it, both set
+  // by project() for the size it projected.
   property var view: null
+  property var stance: null
+  property size projected
   property var focusHeights: Qt.point(1, 0)
   // Drive-off: its length in ms, wheel turn in radians, launch progress (0..1),
-  // headlamp glow (0..1), the lamp outlines that glow, and the body's pose (pitch in
-  // radians, shake), which the paint shader undoes.
+  // headlamp glow (0..1), the lamp outlines that glow, the body's pose (pitch in
+  // radians, shake), which the paint shader undoes, and the transform that poses its shapes.
   readonly property int driveTime: 1100
   property real rolled: 0
   property real launch: 0
   property real lamps: 0
   property var glowing: []
   property var pose: [0, 0]
+  property matrix4x4 bodyPose
   // Speed streaks trail from these: headlamps, taillamp, mirror, roof, chassis ends, tyres.
   readonly property var streakFrom: [[14, 63, -80], [14, 63, -59], [14, 63, 59], [14, 63, 80], [401, 85, -81], [167.4, 103, -100],
     [210, 130, -64], [300, 131, -64], [210, 130, 64], [1, 15, -88], [397, 16, -88], [100, -2, -88], [322, -2, -88]]
@@ -134,17 +143,24 @@ Item {
     return [0, 1, 2].map(function(i) { return s[j - 1][i] + (s[j][i] - s[j - 1][i]) * k })
   }
 
-  // Screen polygons of the surfaces by tone, posed by f; wheels by view, turned but for what's still, as
-  // they don't pitch.
-  function shade(f) {
-    focusHeights = Qt.point(view([322, 62, -84])[1], f([300, 131, 64])[1])
-    var out = paint.map(function() { return [] })
+  // Screen polygons of the body's surfaces by tone, or the wheels', turned but for what's still. Unless
+  // all are, only the turning surfaces are projected again, and a tone none of whose surfaces moved
+  // keeps its list, so its shapes aren't rebuilt.
+  function shade(wheel, all) {
+    var out = paint.map(function() { return [] }), changed = [], c = Math.cos(rolled), sn = Math.sin(rolled)
+    // Looked up once, Qt.point makes points a third faster.
+    var point = Qt.point
     model.surfaces.forEach(function(s) {
-      var pts = s.pts.map(function(p) { return s.axle === undefined ? f(p) : view(s.still ? p : turn(p, s.axle)) })
-      if (s.hull) pts = hull(pts)
-      out[s.tone].push(pts.map(function(q) { return Qt.point(q[0], q[1]) }))
+      if ((s.axle !== undefined) !== wheel) return
+      if (all || !s.still) {
+        var pts = s.pts.map(!wheel || s.still ? view : function(p) { return view(turn(p, s.axle, c, sn)) })
+        s.poly = (s.hull ? hull(pts) : pts).map(function(q) { return point(q[0], q[1]) })
+        changed[s.tone] = true
+      }
+      out[s.tone].push(s.poly)
     })
-    return out
+    var was = wheel ? wheels : bodywork
+    return out.map(function(tone, n) { return changed[n] || !tone.length ? tone : was[n] })
   }
 
   // Where the paint's leading edge crosses the surfaces. A polygon meets a vertical line an even
@@ -152,7 +168,7 @@ Item {
   // the lit edge follows the car's own shape rather than running straight down it.
   function cuts() {
     var out = []
-    fills.forEach(function(tone) { tone.forEach(function(poly) {
+    bodywork.concat(wheels).forEach(function(tone) { tone.forEach(function(poly) {
       var hits = []
       for (var i = 0; i < poly.length; i++) {
         var a = poly[i], b = poly[(i + 1) % poly.length]
@@ -164,10 +180,37 @@ Item {
     return out
   }
 
-  // A point on a wheel turned by rolled about its axle.
-  function turn(p, axle) {
-    var dx = p[0] - axle, dy = p[1] - 30, c = Math.cos(rolled), s = Math.sin(rolled)
+  // A point on a wheel turned about its axle by an angle of cosine c and sine s, worked out once a frame.
+  function turn(p, axle, c, s) {
+    var dx = p[0] - axle, dy = p[1] - 30
     return [axle + dx * c - dy * s, 30 + dx * s + dy * c, p[2]]
+  }
+
+  // A point on the body, pitched nose-up about the rear axle and shaken.
+  function pitched(p, pitch, shake) {
+    var dx = p[0] - 322, dy = p[1] - 30, c = Math.cos(pitch), s = Math.sin(pitch)
+    return [322 + dx * c + dy * s, 30 - dx * s + dy * c + shake, p[2]]
+  }
+
+  // The wheels turned by rolled, but for their still parts: their outlines and surfaces projected again.
+  function roll() {
+    var c = Math.cos(rolled), s = Math.sin(rolled)
+    parts.forEach(function(part) {
+      if (part.axle === undefined || part.still) return
+      part.screen = part.pts.map(function(p) { return view(turn(p, part.axle, c, s)) })
+      part.whole = pieces(part, 0, part.len, 0, 0)
+    })
+    wheelLines = landed(true)
+    wheels = shade(true, false)
+  }
+
+  // The landed outlines by level, of the wheels or of the body.
+  function landed(wheel) {
+    var still = [[], [], [], [], []]
+    parts.forEach(function(part) {
+      if (clock >= part.end && (part.axle !== undefined) === wheel) still[part.level].push.apply(still[part.level], part.whole)
+    })
+    return still
   }
 
   // Convex hull of screen points (monotone chain): the silhouette of a solid.
@@ -186,10 +229,10 @@ Item {
 
   // Screen polyline of an outline from distance a to b along it, shifted by (dx, dy).
   function slice(part, a, b, dx, dy) {
-    var c = part.cum, s = part.screen
-    function at(d) { var p = pointAt(part, d); return Qt.point(p[0] + dx, p[1] + dy) }
+    var c = part.cum, s = part.screen, point = Qt.point
+    function at(d) { var p = pointAt(part, d); return point(p[0] + dx, p[1] + dy) }
     var out = [at(a)]
-    for (var i = 1; i < c.length - 1; i++) if (c[i] > a && c[i] < b) out.push(Qt.point(s[i][0] + dx, s[i][1] + dy))
+    for (var i = 1; i < c.length - 1; i++) if (c[i] > a && c[i] < b) out.push(point(s[i][0] + dx, s[i][1] + dy))
     out.push(at(b))
     return out
   }
@@ -197,6 +240,9 @@ Item {
   // The car never moves while it is drawn, so each outline is projected once, from the
   // front-left quarter (yaw 30deg, looking down 0.2rad), with a depth level for its shade.
   function project() {
+    // Width and height each report a resize, and the car completes at its size: project once per size.
+    if (projected.width === width && projected.height === height) return
+    projected = Qt.size(width, height)
     // About 480 units wide at this angle; roof to near wheel about 200 tall.
     var S = Math.min(width * 0.88 / 480, height * 0.8 / 200), cx = width / 2, cy = height / 2 - 4 * S, D = 1400
     var cyaw = Math.cos(Math.PI / 6), syaw = Math.sin(Math.PI / 6), cp = Math.cos(0.2), sp = Math.sin(0.2)
@@ -251,10 +297,37 @@ Item {
       part.runs = runs
       part.whole = pieces(part, 0, part.len, 0, 0)
     })
-    fills = shade(view)
+    bodywork = shade(false, true)
+    wheels = shade(true, true)
+    focusHeights = Qt.point(view([322, 62, -84])[1], view([300, 131, 64])[1])
+    glowing = parts.filter(function(part) { return part.lamp }).map(function(part) { return part.whole[0] })
+    // The drive-off moves the body's parked shapes by one flat transform: the least-squares fit, over
+    // every eighth of its outline points, from where they park to where its pose takes them. stance
+    // gives it as [a, b, c, d, e, f], taking (x, y) to (ax + by + c, dx + ey + f); centred on the
+    // points' mean, the fit's equations separate.
+    var fit = [], mx = 0, my = 0, xx = 0, xy = 0, yy = 0
+    parts.forEach(function(part) { if (part.axle === undefined) part.pts.forEach(function(p, i) { if (i % 8 === 0) fit.push(p) }) })
+    var at = fit.map(view)
+    at.forEach(function(q) { mx += q[0] / at.length; my += q[1] / at.length })
+    at.forEach(function(q) { xx += (q[0] - mx) * (q[0] - mx); xy += (q[0] - mx) * (q[1] - my); yy += (q[1] - my) * (q[1] - my) })
+    var det = xx * yy - xy * xy, last = [], fitted
+    stance = function(pitch, shake) {
+      if (!pitch && !shake) return [1, 0, 0, 0, 1, 0]
+      // The launch holds its pose.
+      if (pitch === last[0] && shake === last[1]) return fitted
+      last = [pitch, shake]
+      var s = [0, 0, 0, 0, 0, 0]
+      fit.forEach(function(p, i) {
+        var q = view(pitched(p, pitch, shake)), x = at[i][0] - mx, y = at[i][1] - my
+        s[0] += x * q[0]; s[1] += y * q[0]; s[2] += q[0]; s[3] += x * q[1]; s[4] += y * q[1]; s[5] += q[1]
+      })
+      var a = (yy * s[0] - xy * s[1]) / det, b = (xx * s[1] - xy * s[0]) / det
+      var d = (yy * s[3] - xy * s[4]) / det, e = (xx * s[4] - xy * s[3]) / det
+      return fitted = [a, b, s[2] / at.length - a * mx - b * my, d, e, s[5] / at.length - d * mx - e * my]
+    }
     // The paint has to cross every painted point: mirrors and bumper reach past the bodywork.
     var lo = Infinity, hi = -Infinity
-    fills.forEach(function(tone) { tone.forEach(function(poly) { poly.forEach(function(q) {
+    bodywork.concat(wheels).forEach(function(tone) { tone.forEach(function(poly) { poly.forEach(function(q) {
       if (q.x < lo) lo = q.x
       if (q.x > hi) hi = q.x
     }) }) })
@@ -284,9 +357,8 @@ Item {
     }
     heat[3] = heat[2]
     if (done !== finished) {
-      var still = [[], [], [], [], []]
-      for (i = 0; i < parts.length; i++) if (clock >= parts[i].end) still[parts[i].level].push.apply(still[parts[i].level], parts[i].whole)
-      lines = still
+      lines = landed(false)
+      wheelLines = landed(true)
       finished = done
     }
     tracing = drawn
@@ -297,37 +369,33 @@ Item {
   onFrontChanged: wavefront = painted > 0 && painted < 1 ? cuts() : []
   // Drive-off, in ms: the engine starts (lamps flicker on, body idles) until 300, the
   // wheels spin up and the rear squats until 500, then the car launches trailing speed
-  // streaks. Every frame reposes the car; the launch itself moves it as a texture.
+  // streaks. The body keeps its parked shapes and takes its pose as a transform; only the
+  // wheels are projected again, as they turn. The launch itself moves the car as a texture.
   onDriveChanged: {
     if (!view) return
     var t = drive * driveTime, u = Math.max(0, (t - 500) / (driveTime - 500))
     launch = u * u * u
     lamps = t === 0 ? 0 : t < 50 ? 0.8 : t < 110 ? 0.1 : Math.min(1, t / 250)
     // Wheels spin at 0.14rad a frame, under half the mesh's 18deg repeat, so they never seem to turn backwards.
+    var was = rolled
     rolled = t === 0 ? 0 : rolled + 0.14 * Math.min(1, Math.max(0, (t - 300) / 150))
+    if (rolled !== was) roll()
     var shake = t < 500 ? 1.2 * Math.sin(t * 0.16) : 0
     var pitch = 0.06 * Math.min(1, Math.max(0, (t - 300) / 200))
     pose = [pitch, shake]
-    var cp = Math.cos(pitch), sp = Math.sin(pitch)
     // Bodywork pitches nose-up about the rear axle and shakes; wheels only turn.
-    function body(p) {
-      var dx = p[0] - 322, dy = p[1] - 30
-      return view([322 + dx * cp + dy * sp, 30 - dx * sp + dy * cp + shake, p[2]])
+    var m = stance(pitch, shake)
+    bodyPose = Qt.matrix4x4(m[0], m[1], 0, m[2], m[3], m[4], 0, m[5], 0, 0, 1, 0, 0, 0, 0, 1)
+    function body(p) { var q = view(p); return [m[0] * q[0] + m[1] * q[1] + m[2], m[3] * q[0] + m[4] * q[1] + m[5]] }
+    focusHeights = Qt.point(focusHeights.x, body([300, 131, 64])[1])
+    if (u === 0) {
+      if (streaks[0].length) streaks = [[], [], [], []]
+      return
     }
-    for (var i = 0; i < parts.length; i++) {
-      var part = parts[i]
-      part.screen = part.pts.map(part.axle === undefined ? body : part.still ? view : function(p) { return view(turn(p, part.axle)) })
-      part.whole = pieces(part, 0, part.len, 0, 0)
-    }
-    fills = shade(body)
-    finished = -1
-    frame()
-    glowing = parts.filter(function(part) { return part.lamp }).map(function(part) { return part.whole[0] })
-    if (u === 0) return
     // Each streak reaches back as far as the car went in the last 120ms, in its scaled frame.
     var back = Math.min(width * 0.5, width * 1.2 * (launch - Math.pow(Math.max(0, u - 120 / (driveTime - 500)), 3)) / (1 + 0.3 * launch))
     var ml = Math.hypot(width * 1.2, height * 0.14), bx = width * 1.2 / ml * back, by = -height * 0.14 / ml * back
-    var heat = [comets[0].slice(), comets[1].slice(), comets[2].slice()]
+    var heat = [[], [], []]
     streakFrom.forEach(function(p) {
       var q = body(p)
       function at(f) { return Qt.point(q[0] + bx * f, q[1] + by * f) }
@@ -335,7 +403,7 @@ Item {
       heat[1].push([at(1 / 3), at(2 / 3)])
       heat[0].push([at(2 / 3), at(1)])
     })
-    comets = [heat[0], heat[1], heat[2], heat[2]]
+    streaks = [heat[0], heat[1], heat[2], heat[2]]
   }
   onWidthChanged: project()
   onHeightChanged: project()

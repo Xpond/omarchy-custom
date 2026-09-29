@@ -21,6 +21,11 @@ alert() {
 # Link the lock-screen designs before any QML can load them; edits apply on the next shell start.
 data=~/.local/share/omarchy-custom
 mkdir -p "$data" && ln -sfn "$REPO/lock" "$data/lock" || { alert "Could not link the lock-screen designs"; exit 1; }
+mkdir -p "$data/lock-session" &&
+  ln -sfn "$REPO/lock-session/Bridge.qml" "$data/lock-session/Bridge.qml" &&
+  ln -sfn "$REPO/lock-session/shell.qml" "$data/lock-session/shell.qml" &&
+  ln -sfn "$SHELL_DIR/plugins/lock" "$data/lock-session/Lock" &&
+  ln -sfn "$SHELL_DIR/Commons" "$data/lock-session/Commons" || { alert "Could not link the lockscreen worker"; exit 1; }
 
 # ------------------------------------------------------------------ plugins
 # Link plugins for live editing and register them idempotently via a temp file.

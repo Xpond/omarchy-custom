@@ -21,9 +21,6 @@ Item {
   property bool driving: false
   // True while the display is off.
   property bool blanked: false
-  // Set on wake. The picture can take seconds to come back and nothing reports when, so
-  // the design waits hidden and plays on the next key or click, when the screen is surely up.
-  property bool awaitingInput: false
   // Designs live outside the shell, a folder each; lock-design names the one shown.
   property string designs: Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock/"
   property string design: chosen.text().trim() || "rally"
@@ -90,15 +87,7 @@ Item {
   onDesignChanged: if (scene.status !== Loader.Null) showDesign()
   onLoadBackgroundChanged: if (loadBackground) tell("play")
   onDrivingChanged: if (driving) tell("leave")
-  onBlankedChanged: if (!blanked && loadBackground) { awaitingInput = true; tell("hide") }
-
-  // Called before an input reports the wake, so the input that wakes the screen
-  // doesn't also start the design.
-  function startOnInput() {
-    if (!awaitingInput) return
-    awaitingInput = false
-    tell("play")
-  }
+  onBlankedChanged: if (loadBackground && !driving) tell(blanked ? "hide" : "play")
 
   FileView {
     id: chosen
@@ -134,7 +123,7 @@ Item {
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true
-      onClicked: { root.startOnInput(); root.wakeRequested(); root.forcePasswordFocus() }
+      onClicked: { root.wakeRequested(); root.forcePasswordFocus() }
       onPositionChanged: root.wakeRequested()
     }
 
@@ -224,7 +213,6 @@ Item {
         }
 
         Keys.onPressed: function(event) {
-          root.startOnInput()
           root.wakeRequested()
           if (event.key === Qt.Key_Escape || (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_U)) {
             root.passwordTextEdited("")

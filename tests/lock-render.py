@@ -78,15 +78,19 @@ Window {
   readonly property var car: lock.testScene ? lock.testScene.testCar : null
   property var stages: STAGES
   property int stage: 0
+  property bool waitingForColony: false
+  property double preparationStarted: 0
   property var wingFills: null
   function prepare() {
     var s = stages[stage]
     if (s.design) {
+      waitingForColony = s.design === "mycelium"
+      preparationStarted = Date.now()
       lock.design = s.design
       lock.backgroundPath = OUTPUT + "/lock/rally/neon-city.png"
       lock.loadBackground = true
       // The wallpaper loads asynchronously.
-      capture.interval = 1500
+      capture.interval = waitingForColony ? 20 : 1500
       capture.restart()
       return
     }
@@ -98,43 +102,57 @@ Window {
     car.clock = s.paint !== undefined ? car.traced + s.paint * car.paintTime
       : s.clock || car.duration
     if (s.hideWing) {
-      wingFills = car.fills
-      car.fills = wingFills.map((paths, tone) => tone >= 62 && tone <= 71 ? [] : paths)
+      wingFills = car.bodywork
+      car.bodywork = wingFills.map((paths, tone) => tone >= 62 && tone <= 71 ? [] : paths)
     }
+    // The body's shapes stay parked; its pose moves them.
+    var posed = (x, y) => car.bodyPose.times(Qt.vector3d(x, y, 0))
     if (s.drive && s.drive < 0.9) {
       // Follow a point inside the sail panel through pitch, scale and translation.
-      var p = car.fills[45][1]
-      var q = car.mapToItem(lock, p[0].x * 0.2 + p[2].x * 0.35 + p[3].x * 0.45,
-        p[0].y * 0.2 + p[2].y * 0.35 + p[3].y * 0.45)
+      var p = car.bodywork[45][1]
+      var v = posed(p[0].x * 0.2 + p[2].x * 0.35 + p[3].x * 0.45, p[0].y * 0.2 + p[2].y * 0.35 + p[3].y * 0.45)
+      var q = car.mapToItem(lock, v.x, v.y)
       console.log("SAIL", s.name, Math.round(q.x), Math.round(q.y))
     }
     if (s.drive === 1) {
       var right = -Infinity
-      car.parts.forEach(part => part.screen.forEach(p => { right = Math.max(right, p[0]) }))
+      car.parts.forEach(part => part.screen.forEach(p => {
+        right = Math.max(right, part.axle === undefined ? posed(p[0], p[1]).x : p[0])
+      }))
       console.log("EXIT", car.mapToItem(lock, right, 0).x)
     }
     capture.restart()
   }
   // After every onCompleted, so the host has loaded its design.
   Component.onCompleted: Qt.callLater(prepare)
-  Timer { id: capture; interval: 450; onTriggered: lock.grabToImage(function(result) {
-    if (!result.saveToFile(OUTPUT + "/" + stages[stage].name + ".png")) {
-      console.error("FAIL capture"); Qt.exit(1); return
+  Timer { id: capture; interval: 450; onTriggered: {
+    // Colony preparation is incremental; measure growth after its textures are ready.
+    if (waitingForColony) {
+      if (Date.now() - preparationStarted > 10000) { console.error("FAIL colony preparation"); Qt.exit(1); return }
+      waitingForColony = !lock.testScene.colony || lock.testScene.drawn < 4
+      capture.interval = waitingForColony ? 20 : 1500
+      capture.restart()
+      return
     }
-    if (wingFills) { car.fills = wingFills; wingFills = null }
-    stage++
-    if (stage === stages.length) { console.log("PASS captures"); Qt.quit() }
-    else prepare()
-  }) }
+    lock.grabToImage(function(result) {
+      if (!result.saveToFile(OUTPUT + "/" + stages[stage].name + ".png")) {
+        console.error("FAIL capture"); Qt.exit(1); return
+      }
+      if (wingFills) { car.bodywork = wingFills; wingFills = null }
+      stage++
+      if (stage === stages.length) { console.log("PASS captures"); Qt.quit() }
+      else prepare()
+    })
+  } }
 }
 '''.replace("STAGES", json.dumps(stages)).replace("OUTPUT", json.dumps(str(output)))
 (output / "shell.qml").write_text(qml)
 env = dict(os.environ, QT_QPA_PLATFORM="wayland", QT_QPA_PLATFORMTHEME="generic",
            QT_QUICK_BACKEND="rhi", QSG_RHI_BACKEND="opengl", XDG_CACHE_HOME=str(output / "cache"))
-# File-backed logs also avoid a crash handler keeping subprocess pipes open.
+# Allow the full 4K capture and design-switch sequence; file logs avoid inherited pipes.
 with (output / "render.log").open("w") as log:
-    result = subprocess.run(["timeout", "150s", "quickshell", "--no-color", "-p", str(output / "shell.qml")],
-                            env=env, stdout=log, stderr=log, timeout=153)
+    result = subprocess.run(["timeout", "300s", "quickshell", "--no-color", "-p", str(output / "shell.qml")],
+                            env=env, stdout=log, stderr=log, timeout=303)
 log = (output / "render.log").read_text()
 assert result.returncode == 0 and "PASS captures" in log, log
 assert not re.search(r"ERROR|FATAL|ReferenceError|TypeError|Failed to|shader.*error", log, re.I), log
@@ -154,7 +172,7 @@ def lit(name, crop):
 for name in ("parked", "design-tunnel", "design-mycelium", "design-shore", "design-wallpaper", "design-missing"):
     assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
 assert lit("design-tunnel", "1920x880+0+0") > 0.01, "switching to the tunnel design drew no lines"
-# A second and a half in, the colony has grown about the centre, and no line shows beyond it, above
+# A second and a half after preparation, the colony has grown about the centre, with no line beyond it, above
 # the field's glow: only the dark ground, which never comes to a tenth of white.
 assert lit("design-mycelium", "600x600+660+240") > 0.003, "switching to the mycelium design grew nothing"
 beyond = subprocess.check_output(["magick", output / "design-mycelium.png", "-alpha", "off", "-fill", "black",

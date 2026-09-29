@@ -4,18 +4,29 @@
 #version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
+// From mark.vert: the mark's opacity, its grid units per screen pixel, and its comet's head along
+// the maze, 0 at its start and 1 at the far end.
+layout(location = 1) in float fade;
+layout(location = 2) in float pixel;
+layout(location = 3) in float head;
 layout(location = 0) out vec4 fragColor;
 
+// As mark.vert's.
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    // Grid units per screen pixel.
-    float pixel;
-    // The comet's head along the maze, 0 at its start and 1 at the far end, and how far back
-    // its tail reaches.
-    float head;
+    float flight;
+    float depth;
+    float near;
+    float span;
+    vec2 centre;
+    float focal;
+    float turn;
+    float size;
+    float start;
+    float pace;
+    // How far back the comet's tail reaches, and 1 to run it back in from the maze's ends.
     float tail;
-    // 1 runs the comet back in from the maze's ends.
     float inward;
     vec4 tint;
 };
@@ -39,6 +50,13 @@ void stretch(vec2 a, vec2 b, float da, float db) {
 
 void main() {
     p = qt_TexCoord0 * 34.0 - 2.0;
+    // Every stretch lies on one of these lines across the grid, so a point far from all of them is
+    // far from the maze: past 1.25 units the glow has faded below half a level.
+    vec2 off = min(min(abs(p - 1.0), abs(p - 5.0)), min(min(abs(p - 15.0), abs(p - 25.0)), abs(p - 29.0)));
+    if (min(off.x, off.y) > max(1.25, pixel)) {
+        fragColor = vec4(0.0);
+        return;
+    }
     stretch(vec2(15, 25), vec2(15, 29), 0.0, 4.0);
     stretch(vec2(15, 29), vec2(1, 29), 4.0, 18.0);
     stretch(vec2(1, 29), vec2(1, 15), 18.0, 24.0);
@@ -77,5 +95,5 @@ void main() {
     vec3 fire = mix(tint.rgb, vec3(1.0), 0.6 * hot * hot);
     vec3 line = mix(tint.rgb * 0.5, fire, hot) * core;
     // Premultiplied: the line covers what's behind it, the glow only adds light.
-    fragColor = vec4(line + tint.rgb * glow * 0.45, core) * qt_Opacity;
+    fragColor = vec4(line + tint.rgb * glow * 0.45, core) * qt_Opacity * fade;
 }

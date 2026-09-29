@@ -17,8 +17,9 @@ out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/mycelium-render").resolve
 design = out / "design"
 shutil.copytree(repo / "lock/mycelium", design, dirs_exist_ok=True)
 scene = (design / "Scene.qml").read_text()
-assert scene.count("running: !root.host.blanked") == 1, "cannot freeze the scene clock"
-(design / "Scene.qml").write_text(scene.replace("running: !root.host.blanked", "running: false"))
+clock = "running: !root.host.blanked && (root.spreading || leaving.running)"
+assert scene.count(clock) == 1, "cannot freeze the scene clock"
+(design / "Scene.qml").write_text(scene.replace(clock, "running: false"))
 # Inspect only line coverage, so ground texture and tip colour cannot disguise aliasing.
 shader = (design / "mycelium.frag").read_text()
 assert shader.count("vec4(mix(base, colour, line), 1.0)") == 1, "cannot isolate line coverage"
@@ -28,6 +29,7 @@ subprocess.run(["/usr/lib/qt6/bin/qsb", "--glsl", "100 es,120,150", "--hlsl", "5
 # Three fine, constant-width strands at a shallow angle: the original triangular teeth are
 # easiest to see here. Growth crosses the packed step's 255 -> 256 byte boundary.
 (design / "grow.js").write_text('''.pragma library
+function begin(aspect) { return function() { return grow(aspect) } }
 function grow(aspect) {
   var strands = [], fronts = [];
   [2, 3, 4].forEach(function(bin, n) {
@@ -54,10 +56,11 @@ Window {
     {name: "1080", scale: 1, grown: 1000}, {name: "4k", scale: 2, grown: 1000},
     {name: "before", scale: 1, grown: 255.25}, {name: "after", scale: 1, grown: 255.75}
   ]
+  Item { id: host; property bool blanked: false }
   Loader {
     id: scene; width: 1920 * stages[stage].scale; height: 1080 * stages[stage].scale
     source: "design/Scene.qml"
-    onLoaded: prepare()
+    onLoaded: { item.host = host; prepare() }
   }
   function prepare() { scene.item.time = 4; scene.item.grown = stages[stage].grown; snap.restart() }
   Timer { id: snap; interval: 500; onTriggered: scene.item.grabToImage(function(r) {

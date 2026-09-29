@@ -82,31 +82,33 @@ Item {
     Repeater {
       model: root.count
 
+      // mark.vert places each mark where it stands ahead as the flight goes on, and fades it in from
+      // the far end and out once past the screen's edges, at 16:9 even the smallest.
       ShaderEffect {
         required property int index
-        // How far ahead this mark stands.
+        anchors.fill: parent
+        readonly property real flight: root.flight
+        // How far ahead this mark stands. Once it has faded below a thousandth, as the far end's
+        // last tenth leaves it, it isn't drawn.
         readonly property real depth: root.near + ((index * root.gap - root.flight) % root.span + root.span) % root.span
-        readonly property point at: root.bend(root.flight + depth)
+        visible: depth - root.near < 0.9 * root.span
+        readonly property real near: root.near
+        readonly property real span: root.span
+        readonly property vector2d centre: Qt.vector2d(width / 2, height / 2)
+        readonly property real focal: root.focal
         // Its place along the corridor picks its size and turn; flown past, it comes back as another.
         readonly property int slot: Math.round((root.flight + depth - root.near) / root.gap)
-
-        // The mark's 30 units, and 2 each side for its glow.
-        width: 34
-        height: 34
-        x: tunnel.width / 2 - 17 + root.focal * ((at.x - root.here.x) / depth - root.slope.x)
-        y: tunnel.height / 2 - 17 + root.focal * ((at.y - root.here.y) / depth - root.slope.y)
-        rotation: 360 * root.random(slot, 1)
-        scale: (0.7 + 0.6 * root.random(slot, 2)) * root.focal / depth
-        // Fades in from the far end, and out once past the screen's edges, at 16:9 even the smallest.
-        opacity: Math.min(1, (depth - root.near) / 1.5) * Math.pow(1 - (depth - root.near) / root.span, 3)
+        readonly property real turn: 2 * Math.PI * root.random(slot, 1)
+        readonly property real size: 0.7 + 0.6 * root.random(slot, 2)
 
         // Its own hue between cyan and magenta, and its comet's start, pace in laps a second at
         // cruise, tail and way round. The comets keep time with the flight.
         readonly property color tint: Qt.hsla((185 + 135 * root.random(slot, 3)) / 360, 1, 0.72, 1)
-        readonly property real head: (root.random(slot, 4) + (0.3 + 0.5 * root.random(slot, 5)) * root.flight / root.cruise) % 1
+        readonly property real start: root.random(slot, 4)
+        readonly property real pace: (0.3 + 0.5 * root.random(slot, 5)) / root.cruise
         readonly property real tail: 0.12 + 0.23 * root.random(slot, 6)
         readonly property real inward: root.random(slot, 7) < 0.3 ? 1 : 0
-        readonly property real pixel: 1 / scale
+        vertexShader: Qt.resolvedUrl("mark.vert.qsb")
         fragmentShader: Qt.resolvedUrl("mark.frag.qsb")
       }
     }

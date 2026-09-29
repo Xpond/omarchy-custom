@@ -4,7 +4,7 @@ const path = require("node:path")
 
 // The mycelium design's colony, grown outside Qt from fixed seeds (mulberry32), at 1080 units high.
 const source = fs.readFileSync(path.join(__dirname, "../lock/mycelium/grow.js"), "utf8").replace(/^\.pragma .*$/m, "")
-const { grow } = new Function(`${source}\nreturn { grow }`)()
+const { grow, begin } = new Function(`${source}\nreturn { grow, begin }`)()
 let seed = 1
 Math.random = () => {
   seed = (seed + 0x6D2B79F5) >>> 0
@@ -43,3 +43,20 @@ for (const aspect of [4 / 3, 16 / 9, 21 / 9, 9 / 16]) for (let n = 0; n < 6; n++
     assert.ok(arrival(right >> 1, bottom >> 1) < arrival(x, y), "light reaches a corner before the centre")
 }
 console.log("ok: the colony and its light take the whole screen at 4:3, 16:9, 21:9 and portrait, every line with its step")
+
+// Interrupt at every boundary, including tapering, and require the same complete colony.
+const realNow = Date.now
+for (const aspect of [4 / 3, 16 / 9, 21 / 9, 9 / 16]) {
+  seed = 123
+  const expected = grow(aspect)
+  seed = 123
+  const advance = begin(aspect)
+  let now = 0, actual, slices = 0
+  Date.now = () => now++
+  try {
+    while (!(actual = advance(2))) assert.ok(++slices < 10000, "growth never completes")
+  } finally { Date.now = realNow }
+  assert.ok(slices > 100, "test did not interrupt growth")
+  assert.deepEqual(actual, expected, "yielding changes the colony")
+}
+console.log("ok: interrupted growth preserves every point, arrival step and light pixel")

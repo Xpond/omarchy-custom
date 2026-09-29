@@ -26,7 +26,8 @@ const paint = qml.match(/readonly property var paint: (\[[^\]]*\])/)[1]
 const traced = Math.ceil(Math.max(...parts.map(part => part.end)))
 const paintTime = Number(qml.match(/readonly property int paintTime: (\d+)/)[1])
 const car = new Function("model", "parts", "Qt", `
-  var paint = ${paint}, width = 1920, height = 1080, clock = 0, lines, tracing, comets = [[], [], [], []], fills, finished, view, focusHeights
+  var paint = ${paint}, width = 1920, height = 1080, clock = 0, lines, wheelLines, tracing, comets = [[], [], [], []], streaks = [[], [], [], []]
+  var bodywork, wheels, finished, view, stance, projected = {}, focusHeights, bodyPose
   var drive = 0, driveTime = 1100, launch = 0, lamps = 0, rolled = 0, glowing = [], pose, streakFrom = ${streakFrom}
   var traced = ${traced}, paintTime = ${paintTime}, painted = 1, span = null, front = 0, wavefront = []
   ${code}
@@ -38,12 +39,16 @@ const car = new Function("model", "parts", "Qt", `
     frame()
     wavefront = painted > 0 && painted < 1 ? cuts() : []
   }
+  // Every tone's surfaces as drawn: the body's parked, which bodyPose moves as a whole, and the wheels'.
+  function fills() { return bodywork.map(function(tone, n) { return tone.concat(wheels[n]) }) }
   return {
     project: project,
     view: function(p) { return view(p) },
-    at: function(t) { tick(t); return { lines: lines, tracing: tracing, comets: comets, fills: fills, front: front, wavefront: wavefront } },
-    drive: function(v) { drive = v; onDrive(); return { lines: lines, comets: comets, glowing: glowing, fills: fills } }
-  }`)(model, parts, { point: (x, y) => ({ x, y }) })
+    pitched: pitched,
+    stance: function(pitch, shake) { return stance(pitch, shake) },
+    at: function(t) { tick(t); return { lines: lines, tracing: tracing, comets: comets, fills: fills(), front: front, wavefront: wavefront } },
+    drive: function(v) { drive = v; onDrive(); return { lines: lines.concat(wheelLines), streaks: streaks, glowing: glowing, fills: fills() } }
+  }`)(model, parts, { point: (x, y) => ({ x, y }), size: (width, height) => ({ width, height }), matrix4x4: (...m) => m })
 car.project()
 
 const finite = groups => groups.every(group => group.every(line => line.every(p => isFinite(p.x) && isFinite(p.y))))
@@ -176,8 +181,25 @@ console.log("ok: both tyres remain solid across their full width throughout driv
 let off
 for (let t = 0; t <= 1100; t += 7) {
   off = car.drive(t / 1100)
-  assert.ok(finite([...off.lines, ...off.comets, ...off.fills, off.glowing]), "non-finite point driving off at " + t + "ms")
+  assert.ok(finite([...off.lines, ...off.streaks, ...off.fills, off.glowing]), "non-finite point driving off at " + t + "ms")
 }
 assert.equal(off.glowing.length, 3, "lamps that glow")
-assert.equal(off.comets[2].length, new Function("return " + streakFrom)().length, "one streak per streak point")
+assert.equal(off.streaks[2].length, new Function("return " + streakFrom)().length, "one streak per streak point")
 console.log("ok: the drive-off stays finite, lights three lamps and trails every streak")
+
+// The body takes its pose as one flat transform of its parked shapes: none while parked, the shake to
+// within half a pixel, and the squat to within the parallax a flat transform can't show.
+const body = parts.filter(part => part.axle === undefined).flatMap(part => part.pts)
+  .concat(model.surfaces.filter(s => s.axle === undefined).flatMap(s => s.pts))
+function strays(pitch, shake) {
+  const m = car.stance(pitch, shake)
+  return body.map(p => {
+    const q = car.view(p), exact = car.view(car.pitched(p, pitch, shake))
+    return Math.hypot(m[0] * q[0] + m[1] * q[1] + m[2] - exact[0], m[3] * q[0] + m[4] * q[1] + m[5] - exact[1])
+  })
+}
+assert.deepEqual(car.stance(0, 0), [1, 0, 0, 0, 1, 0], "the parked body is transformed")
+assert.ok(Math.max(...strays(0, 1.2)) < 0.5, "the shaking body strays from its true pose")
+const squat = strays(0.06, 0), mean = squat.reduce((a, b) => a + b) / squat.length
+assert.ok(mean < 5 && Math.max(...squat) < 21, `the squatting body strays ${mean.toFixed(1)}px on average, up to ${Math.max(...squat).toFixed(1)}px`)
+console.log(`ok: the body's flat pose keeps the shake within half a pixel, and the squat within ${mean.toFixed(1)}px on average`)
