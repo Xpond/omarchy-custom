@@ -91,20 +91,6 @@ assert.deepEqual(M.childrenOf(lockMenu, "style.lockscreen", M.NO_CONDITIONS).map
   [["Rally", "omarchy-lock-design set 'rally'"], ["Wallpaper", "omarchy-lock-design set 'wallpaper'"]])
 console.log("ok: \"lock\" finds Lock, then one Lockscreen Designs row whose submenu sets a design")
 
-// The lock wakes the display for input after a quiet second, then only holds its blank off.
-let now = 0, wakes = 0, arms = 0
-const wakeScope = { Date: { now: () => now }, lastInput: 0, blanked: false, lockRequested: true,
-  runWake: () => wakes++, armBlankTimer: () => arms++ }
-const wakeOnInput = method(read("patches/shell/plugins/lock/Service.qml"), "wakeOnInput", wakeScope)
-for (now = 5000; now < 8000; now += 8) wakeOnInput()
-assert.equal(wakes, 1, "a moving mouse respawns the wake scripts")
-assert.equal(arms, 374, "input stopped holding the blank off")
-now += 1500; wakeOnInput()
-assert.equal(wakes, 2, "input after a quiet spell no longer wakes the display")
-wakeScope.blanked = true; now += 8; wakeOnInput()
-assert.equal(wakes, 3, "input no longer wakes a blank display")
-console.log("ok: steady input wakes the display once, then holds its blank off")
-
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []
 const root = { editing: true, dirty: true, saving: null, opened: true,

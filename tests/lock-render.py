@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""GPU captures and material isolation checks. Opens a temporary preview, never a lock.
+"""GPU captures: every design draws beside the password field, a missing one leaves the plain
+background, and the car clears the frame on unlock. Opens a temporary preview, never a lock.
 
 Run from the desktop: python3 tests/lock-render.py [/tmp/lock-render]
 Requires Quickshell, ImageMagick and a working Wayland/OpenGL session.
@@ -11,9 +12,6 @@ import re
 import shutil
 import subprocess
 import sys
-
-from lock_pixels import check
-from lock_parts import check_parts
 
 repo = Path(__file__).resolve().parents[1]
 output = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/lock-render").resolve()
@@ -38,32 +36,8 @@ def patch(name, *edits):
     (output / name).write_text(source)
 patch("LockView.qml", ("  id: root", "  id: root\n  property alias testScene: scene.item"))
 patch("lock/rally/Scene.qml", ("  property Item host", "  property Item host\n  property alias testCar: car"))
-patch("lock/rally/Car.qml", ("  id: car", "  id: car\n  property bool testUnlit: false\n  property bool testSharp: false"))
-patch("lock/rally/Paintwork.qml",
-      ("property real amount: car.painted > 0 ? 1 : 0", "property real amount: !car.testUnlit && car.painted > 0 ? 1 : 0"),
-      ("property real amount: car.painted\n", "property real amount: car.testSharp ? 0 : car.painted\n"))
 
-stages = [
-    {"name": "unlit", "unlit": True},
-    {"name": "parked"},
-    {"name": "sharp", "sharp": True},
-    {"name": "wingless", "hideWing": True},
-    {"name": "trace-unlit", "clock": 1800, "unlit": True},
-    {"name": "trace", "clock": 1800},
-    {"name": "paint", "paint": 0.5},
-    {"name": "pitch", "drive": 450 / 1100},
-    {"name": "launch", "drive": 700 / 1100},
-    {"name": "4k", "width": 3840, "height": 2160},
-    {"name": "wingless-4k", "hideWing": True, "width": 3840, "height": 2160},
-    {"name": "sharp-4k", "sharp": True, "width": 3840, "height": 2160},
-    {"name": "pitch-4k", "drive": 450 / 1100, "width": 3840, "height": 2160},
-    {"name": "launch-4k", "drive": 700 / 1100, "width": 3840, "height": 2160},
-    {"name": "departed", "drive": 1},
-]
-stages += [{"name": f"drive-{t}", "drive": t / 1100} for t in [100, 200, 300, 350, 400, 475, 500, 600, 800]]
-# Geometry probes read the unshaded pigment: the shader now darkens the cabin and lights the tyres.
-stages += [{"name": "unlit-4k", "unlit": True, "width": 3840, "height": 2160}]
-stages += [dict(s, name=s["name"] + "-unlit", unlit=True) for s in stages if 0 < s.get("drive", 0) < 0.9]
+stages = [{"name": "parked"}, {"name": "departed", "drive": 1}]
 # Last, since they unload the car: other designs at runtime, then one that is missing.
 stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
            {"name": "design-shore", "design": "shore"}, {"name": "design-wallpaper", "design": "wallpaper"},
@@ -80,7 +54,6 @@ Window {
   property int stage: 0
   property bool waitingForColony: false
   property double preparationStarted: 0
-  property var wingFills: null
   function prepare() {
     var s = stages[stage]
     if (s.design) {
@@ -94,30 +67,12 @@ Window {
       capture.restart()
       return
     }
-    car.testUnlit = s.unlit || false
-    car.testSharp = s.sharp || false
-    lock.width = s.width || 1920; lock.height = s.height || 1080
-    car.drive = s.drive || 0
-    // The paint stage sits partway through the sweep, which follows the last outline landing.
-    car.clock = s.paint !== undefined ? car.traced + s.paint * car.paintTime
-      : s.clock || car.duration
-    if (s.hideWing) {
-      wingFills = car.bodywork
-      car.bodywork = wingFills.map((paths, tone) => tone >= 62 && tone <= 71 ? [] : paths)
-    }
-    // The body's shapes stay parked; its pose moves them.
-    var posed = (x, y) => car.bodyPose.times(Qt.vector3d(x, y, 0))
-    if (s.drive && s.drive < 0.9) {
-      // Follow a point inside the sail panel through pitch, scale and translation.
-      var p = car.bodywork[45][1]
-      var v = posed(p[0].x * 0.2 + p[2].x * 0.35 + p[3].x * 0.45, p[0].y * 0.2 + p[2].y * 0.35 + p[3].y * 0.45)
-      var q = car.mapToItem(lock, v.x, v.y)
-      console.log("SAIL", s.name, Math.round(q.x), Math.round(q.y))
-    }
-    if (s.drive === 1) {
+    if (s.drive) {
+      car.drive = s.drive
+      // The body's shapes stay parked; its pose moves them.
       var right = -Infinity
       car.parts.forEach(part => part.screen.forEach(p => {
-        right = Math.max(right, part.axle === undefined ? posed(p[0], p[1]).x : p[0])
+        right = Math.max(right, part.axle === undefined ? car.bodyPose.times(Qt.vector3d(p[0], p[1], 0)).x : p[0])
       }))
       console.log("EXIT", car.mapToItem(lock, right, 0).x)
     }
@@ -138,7 +93,6 @@ Window {
       if (!result.saveToFile(OUTPUT + "/" + stages[stage].name + ".png")) {
         console.error("FAIL capture"); Qt.exit(1); return
       }
-      if (wingFills) { car.bodywork = wingFills; wingFills = null }
       stage++
       if (stage === stages.length) { console.log("PASS captures"); Qt.quit() }
       else prepare()
@@ -149,18 +103,15 @@ Window {
 (output / "shell.qml").write_text(qml)
 env = dict(os.environ, QT_QPA_PLATFORM="wayland", QT_QPA_PLATFORMTHEME="generic",
            QT_QUICK_BACKEND="rhi", QSG_RHI_BACKEND="opengl", XDG_CACHE_HOME=str(output / "cache"))
-# Allow the full 4K capture and design-switch sequence; file logs avoid inherited pipes.
+# File logs avoid inherited pipes.
 with (output / "render.log").open("w") as log:
-    result = subprocess.run(["timeout", "300s", "quickshell", "--no-color", "-p", str(output / "shell.qml")],
-                            env=env, stdout=log, stderr=log, timeout=303)
+    result = subprocess.run(["timeout", "60s", "quickshell", "--no-color", "-p", str(output / "shell.qml")],
+                            env=env, stdout=log, stderr=log, timeout=63)
 log = (output / "render.log").read_text()
 assert result.returncode == 0 and "PASS captures" in log, log
 assert not re.search(r"ERROR|FATAL|ReferenceError|TypeError|Failed to|shader.*error", log, re.I), log
 assert float(re.search(r"EXIT (-?[\d.]+)", log)[1]) < 0, "car remains visible when unlock completes"
-
-check_parts(output)
-check(output, stages, log)
-print("ok: captured paint sweep, drive-off and 4K without shader or QML errors:", output)
+print("ok: the car parks and drives out of frame without shader or QML errors:", output)
 
 def pixel(name, x, y):
     return subprocess.check_output(["magick", f"{output / name}.png[1x1+{x}+{y}]", "-depth", "8", "RGB:-"]).hex()

@@ -114,10 +114,6 @@ done
 (( ${#applied[@]} )) && printf 'installed: %s\n' "${applied[*]}"
 (( ${#applied[@]} + ${#conflicts[@]} + ${#foreign[@]} + ${#failed[@]} )) || echo "already up to date"
 
-# Assets an older install copied for its lock screen; each design now carries its own.
-cmp -s "$SHELL_DIR/plugins/lock/LockView.qml" "$REPO/patches/shell/plugins/lock/LockView.qml" &&
-  rm -f "$data"/{car-paint.frag.qsb,car-focus.frag.qsb,neon-city.png}
-
 broken=("${conflicts[@]}" "${foreign[@]}" "${failed[@]}")
 if (( ${#broken[@]} )); then
   msg=("Not patched: ${broken[*]}")

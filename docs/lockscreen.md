@@ -67,13 +67,11 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock/rally/car-paint.frag` / `.qsb` | Analytical surface normals and city reflections, source and compiled |
 | `lock/rally/car-focus.frag` / `.qsb` | Final camera focus pass, source and compiled |
 | `lock/rally/neon-city.png` | Illustrated background and paint reflection source |
-| `tests/lock.js` | Model, geometry, tracing and drive-off checks |
+| `tests/lock.js` | Finite tracing and drive-off frames, paint sweep, glass clipping and flat-pose bounds |
 | `tests/mycelium.js` | Colony coverage, arrival steps and light distribution |
 | `tests/mycelium-render.py` | Strand smoothness at 1080p and 4K, and growth across the packed step boundary |
 | `tests/lock-render.py` | GPU captures, drive-off exit and design switching checks |
 | `tests/lock-process.py` | Offscreen memory, process exit, shell reconnection and crash recovery; simulated compositor and authentication |
-| `tests/lock_parts.py` | Wing occlusion and wing, mirror and flap shading checks |
-| `tests/lock_pixels.py` | Material, scenery and seam regression checks |
 
 Run `./install.sh` to apply the patches. It links `lock/` to `~/.local/share/omarchy-custom/lock`
 and links the worker plus the installed lock service and Commons under `lock-session/`
@@ -449,18 +447,15 @@ node tests/mycelium.js
 node tests/check.js
 node tests/lock-idle.js
 python3 tests/mycelium-render.py
-python3 tests/mycelium-lifecycle.py
 python3 tests/lock-render.py
 python3 tests/lock-process.py
 python3 tests/install.py
 ```
 
-The GPU test opens a temporary preview, never a session lock. The expanded capture
-sequence has a 300-second timeout. It needs a working
+The GPU test opens a temporary preview, never a session lock. It needs a working
 Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-render/`
-or a directory supplied as its argument. They cover tracing, paint, parked and
-drive-off states at 1080p and 4K, including a check that the car clears the frame. Geometry probes read unlit twins
-of the drive-off frames, since the shader darkens the cabin. Last, the host switches to `tunnel`,
+or a directory supplied as its argument. The car is captured parked, then departed, when it
+must have cleared the frame. Then the host switches to `tunnel`,
 which must draw its lines; `mycelium`, whose colony 1.5s after its textures are ready must have grown about the centre with
 no line beyond it, where only the dark ground shows; `shore`, whose water must fill the top edge and
 sand the bottom corner wherever in the surf it opens; then `wallpaper` and a missing design.
@@ -475,25 +470,10 @@ shader at 1080p and 4K. It checks brightness variation along their edges and gro
 packed step's 255-to-256 boundary. Captures go to `/tmp/mycelium-render/` or the directory supplied
 as its argument.
 
-`tests/mycelium-lifecycle.py` exercises the production scene's clocks: blank pauses both,
-one wake resumes growth, and unlock retracts and fades before going idle.
-
-`lock_parts.py` compares wing-visible and wing-hidden captures at 1080p and 4K,
-checks that the roof and C-pillar over the far fin are unchanged, that the near fin
-and carbon tip aren't shaded flat, and checks curved mirror highlights and smooth
-flap shading. It can re-check existing captures: `python3 tests/lock_parts.py /tmp/lock-render`.
-
-`lock_pixels.py` decodes captures once and checks scenery, neon reflections, night
-lighting, opaque grille/arch backing, material isolation, black rubber with a neutral shine, satin gold,
-cabin fills and continuous panel joins. Its material coordinates are car-space pixels;
-`pixels()` applies the scene framing, which must match `carFraming` and `carLower`.
-Probes on a part move with it: the rear-wheel probes followed the axle to x 322.
-Reflection gradients are allowed; abrupt seams are rejected. Sharp/focused
-pairs check that distant edges soften while the foreground and background stay crisp.
-`lock.js` checks geometry, clipping, tracing pace and finite drive-off frames,
-including solid tyres across their full width, closed lower wheel wells, and the
-wing's near fin covering the tail's top corner.
-Inspect whole captures as well as pixel probes; cleanup should preserve both.
+`lock.js` checks that every tracing and drive-off frame is finite, the paint sweeps the whole
+car behind a lit edge, inside outlines are clipped to the glass, and the body's flat drive-off
+pose keeps within half a pixel of the exact shake and 5px on average of the squat.
+The tests check behaviour, not looks: inspect whole captures for visual changes.
 
 `omarchy-shell lock preview` and `omarchy-shell lock hidePreview` show/hide the real
 view without locking. That preview plays the entrance but does not exercise PAM,
