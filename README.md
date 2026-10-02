@@ -24,6 +24,8 @@ A radial control center, a file browser and centered shell panels for
   `shore`: where the wash meets the sand, seen close from high above: the water's edge surges
   across the middle of the screen under a rope of foam and slides back, with ripples, glints and
   caustics in the shallow water; unlocking brings the tide in.
+  `meadow`: wildflowers grow into “omarchy” above a low meadow, under a starlit sunset sky
+  with drifting fireflies. The flowers sway gently and fade on unlock.
   `wallpaper`: Omarchy's own blurred wallpaper. Try one without locking:
   `omarchy-shell lock preview`. Work in progress; see
   [`docs/lockscreen.md`](docs/lockscreen.md).

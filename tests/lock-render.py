@@ -40,7 +40,8 @@ patch("lock/rally/Scene.qml", ("  property Item host", "  property Item host\n  
 stages = [{"name": "parked"}, {"name": "departed", "drive": 1}]
 # Last, since they unload the car: other designs at runtime, then one that is missing.
 stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
-           {"name": "design-shore", "design": "shore"}, {"name": "design-wallpaper", "design": "wallpaper"},
+           {"name": "design-shore", "design": "shore"}, {"name": "design-meadow", "design": "meadow"},
+           {"name": "design-wallpaper", "design": "wallpaper"},
            {"name": "design-missing", "design": "missing"}]
 qml = '''import QtQuick
 import Quickshell
@@ -63,7 +64,7 @@ Window {
       lock.backgroundPath = OUTPUT + "/lock/rally/neon-city.png"
       lock.loadBackground = true
       // The wallpaper loads asynchronously.
-      capture.interval = waitingForColony ? 20 : 1500
+      capture.interval = waitingForColony ? 20 : s.design === "meadow" ? 4000 : 1500
       capture.restart()
       return
     }
@@ -120,7 +121,7 @@ def lit(name, crop):
                                           "-threshold", "25%", "-format", "%[fx:mean]", "info:"]))
 
 # The field is the host's: it stays on every design, and when a design fails to load.
-for name in ("parked", "design-tunnel", "design-mycelium", "design-shore", "design-wallpaper", "design-missing"):
+for name in ("parked", "design-tunnel", "design-mycelium", "design-shore", "design-meadow", "design-wallpaper", "design-missing"):
     assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
 assert lit("design-tunnel", "1920x880+0+0") > 0.01, "switching to the tunnel design drew no lines"
 # A second and a half after preparation, the colony has grown about the centre, with no line beyond it, above
@@ -135,5 +136,6 @@ assert float(beyond) == 0, "the mycelium shows lines its growth hasn't reached"
 sea, sand = bytes.fromhex(pixel("design-shore", 960, 10)), bytes.fromhex(pixel("design-shore", 200, 1040))
 assert sea[2] > sea[0] + 5 and sand[0] > sand[2] + 40, f"switching to the shore design drew no beach: {sea.hex()} {sand.hex()}"
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
+assert lit("design-meadow", "1920x880+0+0") > 0.005, "switching to the meadow design grew no flowers"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
 print("ok: designs switch at runtime, and a missing one leaves the plain background and the field")
