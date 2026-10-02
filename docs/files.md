@@ -290,8 +290,8 @@ edit verbs are kept. Hover, clicks and the click-outside shield stop moving the
 selection for the same reason.
 
 **It edits plain source, not the rendering.** What the preview draws is pygments
-HTML or Qt's Markdown; editing a rendering saves the rendering — `<span
-class="k">def</span>` into your Python file. So the colour drops away for the
+markup or Qt's Markdown; editing a rendering saves the rendering — `<font
+color="#C678DD">def</font>` into your Python file. So the colour drops away for the
 length of the edit, which is also the clearest signal that you are looking at
 bytes rather than at a picture of them. The heading says `editing`, `unsaved`,
 `saved` or `write failed` while it lasts.
@@ -326,20 +326,29 @@ Colour comes from **pygments**, not from a tokeniser written here. One process
 per settled selection buys every language it knows, correctly, against a
 hand-rolled pass that would get shell quoting wrong on its first day.
 
-    python3 -c <script> <path>     one interpreter, style=one-dark
+    python3 highlight.py <path> <lines>     one interpreter, style=one-dark
 
 One interpreter does the lexer lookup and the formatting together. Naming the
 lexer with `pygmentize -N` was a second Python start and a shell to pipe them a
 third: that cost 239 ms, and this costs 105 ms. A 60 ms debounce means arrowing
 through a directory does not spawn a process per row.
 
-**The uncoloured file travels through the same `<pre>` the coloured one does.**
-Qt collapses runs of spaces in rich text, which would flatten every indent, so
-the markup is needed either way — but the reason it goes in from the *first*
-frame is that swapping a plain-text item for a rich-text one steps the whole
-file down the page the instant the highlighter answers. Rendering both states
-through one path makes the arrival of colour nothing but a change of colour.
-`margin: 0` on the `<pre>` is part of the same fix.
+**The uncoloured file travels through the same markup the coloured one does.**
+Swapping a plain-text item for a marked-up one steps the whole file down the
+page the instant the highlighter answers; rendering both states through one
+path makes the arrival of colour nothing but a change of colour.
+
+**That markup is StyledText, drawn exactly as a rich-text `<pre>` drew it.**
+The `<pre>` held the GUI thread for about 100 ms per 500-line file, twice per
+selection; StyledText takes about 11. `styledCode()` and `highlight.py` keep the
+`<pre>` rules: no newline straight after the opening tag or before the closing
+one, no `\r`, every other whitespace character kept, as entities StyledText
+cannot collapse. Rich text put each baseline 4/5 down its fixed-height line
+whatever the fonts; StyledText puts it at the line's ascent, so `onLineLaidOut`
+moves every line back, measuring with a hidden probe any line that leaves
+printable ASCII. NEL goes in as U+0080, another glyphless control, because Qt
+reads `&#133;` as an ellipsis. `tests/files-preview.py` holds all of it to the
+old rendering pixel for pixel.
 
 The gutter is generated from `head()`, which appends an ellipsis line when it
 truncates. The Python truncates the same way, from the same `previewLines`

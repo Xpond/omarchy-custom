@@ -19,6 +19,39 @@ Item {
     panel.editing ? FilesIndex.numbers(editor.text)
     : panel.showsMarkdown ? "" : FilesIndex.numbers(panel.previewText)
 
+  // StyledText sets each line's baseline at its ascent. The rich text it replaced
+  // set it 4/5 down a fixed-height line whatever the fonts; keep that placement.
+  // Measured as each layout starts: a binding could still hold the previous font.
+  property real codeBaseline: 0
+  property real codeAscent: 0
+  property var codeLines: []
+  // Text lays out only once its implicit size is wanted, and baselineOffset needs the layout.
+  Text {
+    id: probe
+    visible: false
+    width: implicitWidth
+    textFormat: Text.StyledText
+    renderType: Text.NativeRendering
+  }
+
+  function measure(markup) {
+    root.codeLines = markup.split("<br>")
+    root.codeBaseline = Math.floor(rendered.lineHeight * 256 / 5) / 64
+    probe.font = rendered.font
+    probe.text = "x"
+    root.codeAscent = probe.baselineOffset
+  }
+
+  // Printable ASCII is drawn in the code font; anything else may fall back to another.
+  // Every line but the last also ends in a line separator drawn in the code font.
+  function ascentOf(n) {
+    var markup = root.codeLines[n]
+    if (!/[^\x20-\x7e]|&#(?!(?:32|9|39);)/.test(markup)) return root.codeAscent
+    probe.text = markup
+    return n < root.codeLines.length - 1 ? Math.max(root.codeAscent, probe.baselineOffset)
+                                         : probe.baselineOffset
+  }
+
   function scrollBy(dy) {
     scroller.contentY = Util.clamp(scroller.contentY + dy, 0,
                                    Math.max(0, scroller.contentHeight - scroller.height))
@@ -73,7 +106,7 @@ Item {
       left: parent.left; leftMargin: Style.spacing.lg
       right: parent.right; rightMargin: Style.spacing.lg
     }
-    visible: panel.showsDir || !!panel.previewBody || panel.editing
+    visible: panel.showsDir || panel.showsCode || !!panel.previewBody || panel.editing
     contentWidth: panel.showsDir ? folderView.width : content.width
     // Include both vertical insets so the last line remains reachable.
     contentHeight: (panel.showsDir ? folderView.height : content.height)
@@ -143,6 +176,7 @@ Item {
       }
 
       Text {
+        id: rendered
         visible: !panel.editing
         text: panel.previewBody
         color: Color.menu.text
@@ -150,7 +184,7 @@ Item {
         width: panel.showsMarkdown ? scroller.width : implicitWidth
         wrapMode: panel.showsMarkdown ? Text.Wrap : Text.NoWrap
         textFormat: panel.showsMarkdown ? Text.MarkdownText
-                    : panel.showsCode ? Text.RichText
+                    : panel.showsCode ? Text.StyledText
                     : Text.PlainText
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.subtitle
@@ -158,6 +192,12 @@ Item {
         lineHeightMode: panel.showsMarkdown ? Text.ProportionalHeight
                                            : Text.FixedHeight
         lineHeight: panel.showsMarkdown ? 1.0 : panel.lineHeight
+        onLineLaidOut: function (line) {
+          if (!panel.showsCode) return
+          if (line.number === 0) root.measure(text)
+          // Absolute: Text has already lowered the line to the foot of its fixed height.
+          line.y = line.number * lineHeight + root.codeBaseline - root.ascentOf(line.number)
+        }
       }
     }
   }

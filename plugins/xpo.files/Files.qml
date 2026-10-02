@@ -130,21 +130,7 @@ Item {
   // Highlight only the settled selection, in one Pygments process.
   property string previewHtml: ""
   readonly property string highlightScript:
-    "import sys\n"
-    + "from pygments import highlight\n"
-    + "from pygments.lexers import get_lexer_for_filename\n"
-    + "from pygments.lexers.special import TextLexer\n"
-    + "from pygments.formatters import HtmlFormatter\n"
-    + "p = sys.argv[1]\n"
-    + "parts = open(p, errors='replace').read().split('\\n')\n"
-    + "src = '\\n'.join(parts[:" + root.previewLines + "])\n"
-    + "if len(parts) - (parts[-1] == '') > " + root.previewLines + ": src += '\\n\u2026'\n"
-    + "try:\n"
-    + "    lx = get_lexer_for_filename(p, stripnl=False)\n"
-    + "except Exception:\n"
-    + "    lx = TextLexer()\n"
-    + "sys.stdout.write(highlight(src, lx,\n"
-    + "    HtmlFormatter(nowrap=True, noclasses=True, style='one-dark')))\n"
+    decodeURIComponent(String(Qt.resolvedUrl("highlight.py")).replace(/^file:\/\//, ""))
   readonly property bool showsCode: !!root.previewText && !root.showsMarkdown
 
   Timer {
@@ -152,7 +138,7 @@ Item {
     interval: 60
     onTriggered: {
       if (!root.previewText || root.showsMarkdown) return
-      highlighter.command = ["python3", "-c", root.highlightScript, root.previewPath]
+      highlighter.command = ["python3", root.highlightScript, root.previewPath, String(root.previewLines)]
       highlighter.running = true
     }
   }
@@ -183,9 +169,7 @@ Item {
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
     root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
-    : root.showsCode
-      ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
-                            Style.font.menuFamily, Style.font.subtitle)
+    : root.showsCode ? root.previewHtml || FilesIndex.styledCode(root.previewText)
       : ""
   onSelChanged: { if (root.opened) settle.restart(); ops.doomed = "" }
   // Clear stale folder and image data before the next preview loads.
@@ -213,7 +197,7 @@ Item {
     root.editing ? ""
     : !root.settledSel ? (root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
-    : root.previewBody ? ""
+    : root.showsCode || root.previewBody ? ""
     : (root.showsImage && preview.imageStatus !== Image.Error) ? ""
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
 
