@@ -354,20 +354,23 @@ function search(index, query, limit, uses) {
   var hits = []
   for (var i = 0; i < index.length; i++) {
     var e = index[i]
-    var haystack = words(e.keywords)
-    var ident = e.ident ? words(e.ident) : ""
+    // Rows are replaced when their sources refresh; normalize once on first search.
+    var text = e._search || (e._search = {
+      keywords: words(e.keywords), ident: e.ident ? words(e.ident) : ""
+    })
     var matched = true
     for (var t = 0; t < terms.length; t++) {
       if (!terms[t]) continue
-      if (startsWord(haystack, terms[t])) continue
-      if (ident && wholeWord(ident, terms[t])) continue
+      if (startsWord(text.keywords, terms[t])) continue
+      if (text.ident && wholeWord(text.ident, terms[t])) continue
       matched = false; break
     }
     if (!matched) continue
+    if (text.squashed === undefined) text.squashed = squash(e.label)
     var rank = e.kind === KIND.window ? 0
-             : squash(e.label).indexOf(squashed) === 0 ? 0
-             : startsWord(words(e.label), spaced) ? 1 : 2
-    hits.push({ rank: rank, exact: squash(e.label) === squashed ? 0 : 1,
+             : text.squashed.indexOf(squashed) === 0 ? 0
+             : startsWord(text.label || (text.label = words(e.label)), spaced) ? 1 : 2
+    hits.push({ rank: rank, exact: text.squashed === squashed ? 0 : 1,
                 uses: -(uses[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
   // An exact label beats a more-used one it prefixes: "lock" locks before it lists designs.

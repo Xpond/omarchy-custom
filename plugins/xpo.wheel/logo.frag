@@ -49,6 +49,14 @@ void main() {
     float ink = s.a;
 
     float hot = trail(s.r);
+    float a = ink * hot;
+    // Keep just a faint contact edge. The layer adds the diffuse shadow.
+    float side = coverage(qt_TexCoord0 - pixel);
+    float sideAlpha = side * 0.25 * (1.0 - a);
+    if (a == 0.0 && sideAlpha == 0.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
 
     // Unpremultiply before decoding normals so antialiased edges keep their direction.
     vec2 normalXY = s.gb / max(ink, 0.001) * 2.0 - 1.0;
@@ -68,10 +76,6 @@ void main() {
     face += hot * (tint.rgb * diffuse * 0.08 + vec3(0.28) * reflection);
     face = clamp(face, 0.0, 1.0);
 
-    // Keep just a faint contact edge. The layer adds the diffuse shadow.
-    float side = coverage(qt_TexCoord0 - pixel);
-    float a = ink * hot;
-    float sideAlpha = side * 0.25 * (1.0 - a);
     // Qt Quick composites premultiplied.
     fragColor = vec4(face * a + tint.rgb * 0.16 * sideAlpha,
                      a + sideAlpha) * qt_Opacity;

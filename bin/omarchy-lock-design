@@ -6,7 +6,10 @@ choice=~/.config/omarchy-custom/lock-design
 case ${1:-} in
   list)
     shopt -s nullglob
-    for scene in "$designs"/*/Scene.qml; do basename "${scene%/Scene.qml}"; done
+    for scene in "$designs"/*/Scene.qml; do
+      name=${scene%/Scene.qml}
+      printf '%s\n' "${name##*/}"
+    done
     ;;
   set)
     [[ -f $designs/${2:-}/Scene.qml ]] || { echo "No lock-screen design named '${2:-}'" >&2; exit 1; }

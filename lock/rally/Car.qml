@@ -309,7 +309,7 @@ Item {
   }
 
   function frame() {
-    if (!parts[0].whole) return
+    if (!parts[0].whole || (finished === parts.length && clock >= traced)) return
     var done = 0, drawn = [[], [], [], [], []], heat = [[], [], []]
     for (var i = 0; i < parts.length; i++) {
       var part = parts[i]
