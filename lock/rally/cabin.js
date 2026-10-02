@@ -4,14 +4,11 @@
 var crown = Shape.crown, flip = Shape.flip, inset = Shape.inset, lift = Shape.lift, rrect = Shape.rrect,
   smooth = Shape.smooth, zAt = Shape.zAt
 
-// The cabin, seen through the glass: dashboard, steering wheel, roll cage, harness and seats.
 function build(m) {
   var add = m.add, surface = m.surface, doorFrame = m.doorFrame, doorGlass = m.doorGlass,
     quarterGlass = m.quarterGlass, i
-  // A seat back around centre c, leaning back 1 in 4 from y 60 to its top: front outline with
-  // bolsters, centre panel, and the back's top and near edges, 5 behind, for depth; then a
-  // headrest block on two posts; painted in tones for back, face and panel. Each line comes with
-  // the solid it outlines, if any.
+  // Seat back leans 1:4 from y=60, with its rear surface 5 units behind.
+  // Return outlines with their occlusion groups.
   function seat(x0, c, top, tones) {
     function at(z, y, back) { return [x0 + (y - 60) * 0.25 + back, y, c + z * 1.35] }
     function curve(pts, back) { return smooth(pts.map(function(p) { return at(p[0], p[1], back) }), 3) }
@@ -29,8 +26,7 @@ function build(m) {
     return out.concat([[front, "head"], [back, "head"], [[front[4], back[0]]], [[front[10], back[6]]],
       [[at(-4, top + 1, 4), [x, top + 4, c - 5.4]]], [[at(4, top + 1, 4), [x, top + 4, c + 5.4]]]])
   }
-  // Inside, shown only through the panes: dashboard and instrument hood, steering wheel with
-  // its hub and spokes, rear-view mirror, and the far side's window frames.
+  // Dashboard, steering and far window frames show only through the panes.
   function wheelAt(a, r) { return [188 + r * Math.sin(a) * 0.48, 95 + r * Math.sin(a) * 0.88, -38 + r * Math.cos(a)] }
   var steering = [], hub = []
   for (i = 0; i <= 36; i++) { steering.push(wheelAt(i / 36 * 2 * Math.PI, 9)); hub.push(wheelAt(i / 36 * 2 * Math.PI, 2.5)) }
@@ -47,21 +43,15 @@ function build(m) {
     piece.inside = true
     if (i < 2) piece.group = "dash"
   }
-  // Painted, the steering wheel's rim, thick, then the dash's top from the windscreen's foot to its edge,
-  // with the instrument binnacle (reversed, so the two merge): drawn over the seats and the wheel's lower
-  // half, which are behind and below it.
+  // Reverse the binnacle so winding merges it with the dash over the seats and lower steering rim.
   var dash = []
   for (i = 0; i <= 12; i++) dash.push(crown(152, 93.8, 2, 72 * (i / 6 - 1)))
   surface(26, steering)
   surface(31, dash.concat(flip(inside[0])))
   surface(31, flip(inside[1]))
-  // The front seats; a race car has none behind. The far one is deeper in shadow, darker, and painted first.
-  // Each seat's back and headrest are solid: their outlines hide the inside lines behind them, other than
-  // the seat's own.
+  // Seat backs and headrests occlude other groups, never their own.
   var seats = [[238, -40, 106, [23, 24, 25]], [238, 40, 106, [42, 43, 44]]]
-  // Behind and around them, a stripped rally cabin after a Sport quattro S1, its shell mid grey. The far
-  // side from inside: below the belt, the sail, B-pillar and C-pillar trim (shaded from the belt down), and
-  // the windows, showing out; the parcel shelf, and the bulkhead sloping from behind the seats up to it.
+  // Inner shell, far window trim, parcel shelf and sloped bulkhead.
   function shell(x, y, s) { return [x, y, s * zAt(x, y)] }
   function inner(x, y, s) { return [x, y, s * (zAt(x, y) - 7)] }
   surface(55, lift(inset(doorGlass, 2.5), 1))
@@ -72,11 +62,7 @@ function build(m) {
   surface(45, lift([[296, 128], [334, 96], [360, 97], [333, 117], [300, 131]], 1))
   surface(54, [shell(334, 96, -1), shell(360, 97, -1), shell(360, 97, 1), shell(334, 96, 1)])
   surface(46, [shell(270, 45, -1), shell(334, 96, -1), shell(334, 96, 1), shell(270, 45, 1)])
-  // The roll cage hugs the shell, as the S1's does, so it reads as a second frame just inside the windows.
-  // Per side: the front hoop's leg up the A-pillar, 5 in from the windscreen's edge, and on along the roof's
-  // edge; two door bars with a gusset; the main hoop's leg just ahead of the B-pillar, 7 in from the body
-  // and leaning in with it; a stay back to the rear. Across: the front hoop's top, tight under the
-  // windscreen's header; the main hoop's top, following the roof's crown; a harness bar and a lower bar.
+  // Cage follows the shell just inside the windows; roof and harness bars cross the car.
   function tubes(s) {
     var corner = inner(256, 126, s)
     return [
@@ -86,9 +72,8 @@ function build(m) {
       [corner, [324, 88, s * 58]]
     ]
   }
-  // A tube 4.5 across: per segment, a band facing the camera (square to the segment and the view), as its
-  // shadow side, its lit body toward the sky, and a highlight; a disc at each bend. Bands are turned to wind
-  // one way on screen, so a tone's overlaps merge.
+  // 4.5-unit tubes use camera-facing bands, highlights and bend discs.
+  // Keep winding consistent so overlapping bands merge.
   var depth = [0.49, -0.199, 0.849], up = [0.0993, 0.98, 0.172], rightward = [0.866, 0, -0.5]
   function vcross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]] }
   function vdot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] }

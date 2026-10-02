@@ -1,12 +1,8 @@
 import QtQuick
 import QtQuick.Shapes
 
-// The car's layers: a material mask, the paint the shader lights by it, and the outlines and comets.
-// They're focused as one, inside the car's framing and departure transforms. Each layer's shapes on
-// the body take its drive-off pose as a whole (Car.qml's bodyPose); those on the wheels turn instead,
-// in shapes of their own between them.
+// Mask, shaded paint and outlines share focus; body layers take bodyPose, wheels turn separately.
 Item {
-  // The car these layers draw (Car.qml).
   property Item car
 
   anchors.fill: parent
@@ -28,30 +24,23 @@ Item {
     PathMultiline { id: polylines }
   }
 
-  // Outlines by level (see Car.qml's lines), settling as the paint comes in: inside and far, fine,
-  // panels (as are those beneath paint) and the outline.
   component Far: Stroke { strokeColor: car.settle(0.35, car.gapColor, 0.2); strokeWidth: car.base * 0.7 }
   component Fine: Stroke { strokeColor: car.settle(0.6, car.gapColor, 0.3); strokeWidth: car.base * (0.8 - 0.1 * car.painted) }
   component Panel: Stroke { strokeColor: car.settle(0.85, car.gapColor, 0.45); strokeWidth: car.base * (1 - 0.2 * car.painted) }
   component Outline: Stroke { strokeColor: car.settle(1, car.lineColor, 0.35); strokeWidth: car.base * (1.5 - 0.8 * car.painted) }
-  // A comet's or streak's glow, tail, middle and head (see Car.qml's comets).
   component Glow: Stroke { strokeColor: Qt.alpha(car.glowColor, 0.18); strokeWidth: car.base * 5 }
   component Tail: Stroke { strokeColor: Qt.alpha(car.glowColor, 0.35); strokeWidth: car.base * 1.2 }
   component Middle: Stroke { strokeColor: Qt.alpha(car.glowColor, 0.7); strokeWidth: car.base * 1.6 }
   component Head: Stroke { strokeColor: car.glowColor; strokeWidth: car.base * 2.2 }
 
-  // A shape covering the car, holding one level of its outlines.
   component Ink: Shape {
     anchors.fill: parent
     preferredRendererType: Shape.CurveRenderer
   }
   component BodyInk: Ink { transform: Matrix4x4 { matrix: car.bodyPose } }
 
-  // A shape holding paint, cut off at the wavefront so only what has been laid down shows.
-  // Sliding the clip costs nothing, where reshaping every surface each frame would have to
-  // retessellate the whole car. Once the paint is on, the clip lifts: the drive-off poses the
-  // car past where it parked, and the span was measured there. Before the paint starts the clip
-  // hides it all, and it isn't drawn: transparent rather than invisible, so it keeps its shapes.
+  // Sliding a clip avoids retessellation; lift it before the drive-off moves beyond the parked span.
+  // Zero opacity retains the shapes before painting starts.
   component Coat: Shape {
     width: car.coating ? car.front : car.width
     height: car.height
@@ -61,9 +50,7 @@ Item {
   }
   component BodyCoat: Coat { transform: Matrix4x4 { matrix: car.bodyPose } }
 
-  // Shapes of the panel mask, below, with the same clip as a Coat, but on an Item around the shape:
-  // inside a layer a shape does not clip its own paths, and the mask has to stop where the paint
-  // does or the metal would shade a panel the wavefront hasn't reached yet.
+  // Inside a layer, a Shape cannot clip its own paths; wrap it so the mask stops with the paint.
   component Mask: Item {
     default property alias fills: shape.data
     width: car.coating ? car.front : car.width
@@ -86,16 +73,13 @@ Item {
     PathMultiline { id: polygons }
   }
   component Cabin: Fill { fillColor: Qt.rgba(15/16, 0, 0, 1) }
-  // A tone's surfaces in its paint, or stroked at its ink width (see Car.qml's paint): on the body, or
-  // on the wheels.
   component Paint: Fill { property int tone; fillColor: car.paint[tone]; paths: car.bodywork[tone] }
   component Inked: Stroke { property int tone; strokeColor: car.paint[tone]; strokeWidth: car.base * car.ink[tone]; paths: car.bodywork[tone] }
   component Wheel: Paint { paths: car.wheels[tone] }
   component WheelInked: Inked { paths: car.wheels[tone] }
 
-  // Panel mask in car coordinates: R is the surface kind, G the top's height / 160 or, on black
-  // plastic, whether it is a spotlight can.
-  // It uses the same even-odd cutouts as the paint, so glass and wheel wells stay clear.
+  // Mask R encodes surface kind; G encodes top height / 160 or spotlight cans on black plastic.
+  // Match the paint's cutouts so glass and wheel wells stay clear.
   Item {
     id: paintPanels
     anchors.fill: parent
@@ -162,9 +146,8 @@ Item {
       Fill { fillColor: Qt.rgba(14/16, 0, 0, 1); paths: car.bodywork[17] }
       Fill { fillColor: Qt.rgba(13/16, 0, 0, 1); paths: car.bodywork[59] }
       Fill { fillColor: "black"; paths: car.bodywork[60] }
-      // The intake has green 0.4, mesh blue 1 and reveal blue 0.5; the wing's carbon tips green 0.25, the
-      // far one blue 1. Mirrors/flaps use panel 16; the wing is a top shaded along its chord (green 1). Its
-      // fins are sides standing at z = 200 green - 100, not the flank's -84.
+      // Intake: G=0.4, mesh B=1, reveal B=0.5. Carbon tips: G=0.25, far B=1.
+      // Fins encode z = 200G - 100; mirrors/flaps use panel 16, the wing uses top G=1.
       // One fill each: the intake's recess and rear wall overlap, and would cancel in one path.
       Fill { fillColor: Qt.rgba(12/16, 0.4, 0, 1); paths: car.bodywork[75] }
       Fill { fillColor: Qt.rgba(12/16, 0.4, 1, 1); paths: car.bodywork[73] }
@@ -175,9 +158,7 @@ Item {
     }
   }
 
-  // Shade the paint and its livery together, with the cabin, tyres and the nose's plastic, lamps
-  // and chrome. Glass and outlines keep their own colours. The enclosing car also supplies the wet-floor
-  // reflection.
+  // Shade paint and livery together; glass and outlines keep their own colours.
   Item {
     anchors.fill: parent
     layer.enabled: true
@@ -189,12 +170,10 @@ Item {
       property vector2d resolution: Qt.vector2d(car.width, car.height)
       property real pitch: car.pose[0]
       property real shake: car.pose[1]
-      // Shading covers whatever the panel mask holds, which is only the paint laid down so far.
       property real amount: car.painted > 0 ? 1 : 0
       fragmentShader: Qt.resolvedUrl("car-paint.frag.qsb")
     }
-    // Construction edges sit under paint.
-    // Only their exposed silhouettes keep ink once the surfaces are filled.
+    // Paint covers construction edges; exposed silhouettes keep their ink.
     BodyInk {
       Panel { paths: car.lines[4] }
       Panel { paths: car.tracing[4] }
@@ -210,13 +189,10 @@ Item {
     }
     Coat { Wheel { tone: 61 } }
     BodyCoat {
-      // The far mirror, then the inside, then the window trim and tinted glass: the bodywork covers them but
-      // for the windows.
+      // Bodywork covers the far mirror and cabin except through the windows.
       Paint { tone: 36 }
       Paint { tone: 37 }
       Inked { tone: 38 }
-      // The cabin: the far windows, the far side lit from its windows and darkening down, the parcel shelf and
-      // bulkhead, then the cage's far tubes, which merge where they overlap (winding).
       Paint { tone: 55 }
       Fill {
         // Solid cabin panels: odd-even curve tessellation drops triangles as the body pitches.
@@ -299,7 +275,6 @@ Item {
       Inked { tone: 15 }
       Inked { tone: 16 }
     }
-    // The wheels' centre caps and lettering.
     Coat {
       Wheel { tone: 18 }
       WheelInked { tone: 15 }
@@ -311,14 +286,12 @@ Item {
     Ink {
       Fine { paths: car.wheelLines[1] }
     }
-    // Only the near fin and its tip sit in front of the body. The top and far side
-    // are drawn behind it, so the roof and hatch correctly hide them.
+    // Only the near fin and tip sit in front; the roof and hatch hide the far side.
     BodyCoat {
       Paint { tone: 63; strokeColor: Qt.alpha(car.gapColor, 0.6); strokeWidth: car.base * 0.7 }
       Paint { tone: 66; strokeColor: car.paint[67]; strokeWidth: car.base * 0.8 }
     }
-    // The spotlights stand in front of everything on the nose, so they're painted over its fine lines (the
-    // grille's slats would show through them), their rims edged dark in place of their own.
+    // Paint spotlights over the nose's fine lines so the grille cannot show through them.
     BodyCoat {
       Paint { tone: 58; fillRule: ShapePath.WindingFill }
       Paint { tone: 17; strokeColor: Qt.alpha(car.gapColor, 0.6); strokeWidth: car.base * 0.7 }
@@ -333,7 +306,7 @@ Item {
   Ink {
     Outline { paths: car.wheelLines[3] }
   }
-  // The wipers, painted over their own fine lines.
+  // Paint wipers over their fine lines.
   BodyCoat {
     Inked { tone: 40 }
     Inked { tone: 41 }
@@ -343,8 +316,6 @@ Item {
     Outline { paths: car.tracing[3] }
     Stroke { strokeColor: Qt.alpha(car.glowColor, 0.3 * car.lamps); strokeWidth: car.base * 8; paths: car.glowing }
     Stroke { strokeColor: Qt.alpha(car.glowColor, car.lamps); strokeWidth: car.base * 1.8; paths: car.glowing }
-    // The paint's lit edge, in the comets' own blue: the outlines were traced by light, and the
-    // paint is laid down behind it the same way.
     Stroke { strokeColor: Qt.alpha(car.glowColor, 0.22); strokeWidth: car.base * 7; paths: car.wavefront }
     Stroke { strokeColor: Qt.alpha(car.glowColor, 0.85); strokeWidth: car.base * 1.6; paths: car.wavefront }
     Glow { paths: car.comets[2] }
@@ -352,7 +323,6 @@ Item {
     Middle { paths: car.comets[1] }
     Head { paths: car.comets[2] }
   }
-  // The speed streaks, as the comets, trailing on screen from where the posed body is.
   Ink {
     Glow { paths: car.streaks[2] }
     Tail { paths: car.streaks[0] }

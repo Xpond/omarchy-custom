@@ -1,7 +1,6 @@
 .pragma library
 
-// The car's shape, and the curves every part is drawn with. Design units are about centimetres:
-// x along the car, y up, z across it, the near side negative.
+// Design units are about centimetres: x along the car, y up, z across (near side negative).
 
 // Half-width: the doors 84 up to the shoulder (y 72), leaning in to the belt (y 90) and on to the roof.
 // Box flares stand 4 proud below the shoulder: the front one steps out over 2 units up to x 143;
@@ -19,16 +18,9 @@ function zAt(x, y) {
   return flare
 }
 function lift(pts, s) { return pts.map(function(p) { return [p[0], p[1], s * zAt(p[0], p[1])] }) }
-// The nose is drawn 10 longer than the car's: every outline and surface is warped as it's added, the
-// front face (x 8 and ahead) moving back whole and the fender ahead of the front arch (x 8-58) closing
-// up, so from the arch back nothing moves. unwarp places a decal there undistorted.
-// Before that the bumper is shaped, after the S1's: below the lamp panel (y 53) it leans forward toward
-// the bottom, 0.35 a unit down to its foot (y 23), so its ledge is a bevel and its foot and chin jut; and
-// its near corner is rounded in plan, radius 8, easing out over the last 4 below the panel, so it wraps
-// round into the flank, its edge leaning with the face (a radius growing downward undid the lean there).
-// The far corner, seen edge-on, stays square: rounded, its bulge stood past the face's outline. The round
-// moves the face back onto it and the flank's front edge back to its end, but leaves the flank behind that.
-// level() stands a part upright on the lean: the spotlights.
+// Shorten the nose 10 units ahead of the front arch; unwarp places decals in source coordinates.
+// Below y=53 the bumper leans 0.35 per unit down to y=23, with a radius-8 near corner.
+// Keep the far corner square to avoid a bulge past its outline; level cancels the lean for spotlights.
 function slope(y) { return y >= 53 ? 0 : (Math.max(23, y) - 36) * 0.35 }
 function level(pts) { return pts.map(function(p) { return [p[0] - slope(p[1]), p[1], p[2]] }) }
 function faceAt(y) { return y <= 18 ? -9 : y <= 23 ? -9 + (y - 18) * 0.8 : y <= 49 ? -5 : -5 + (y - 49) * 2 / 3 }
@@ -41,8 +33,7 @@ function shape(p) {
 }
 function warp(p) { p = shape(p); var x = p[0]; return [x <= 8 ? x + 10 : x < 58 ? 18 + (x - 8) * 0.8 : x, p[1], p[2]] }
 function unwarp(x) { return x <= 18 ? x - 10 : x < 58 ? 8 + (x - 18) / 0.8 : x }
-// Wheels are drawn at radius 30 and grown to 32 about their axle (at height 30), so the tyres fill
-// their arches as the real car's do.
+// Scale wheel radii from 30 to 32 about their axle at height 30.
 function grow(p, axle) { return [axle + (p[0] - axle) * 16 / 15, 30 + (p[1] - 30) * 16 / 15, p[2]] }
 // A flank line at height y, every 2 units, so it follows the flares.
 function along(y, x0, x1) {
@@ -70,8 +61,7 @@ function arc(cx, cy, r, a0, a1, n, z) {
   for (var i = 0; i <= n; i++) { var a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a), z]) }
   return pts
 }
-// Both edges of a wheel opening use the same two-degree grid. Independently
-// tessellated arcs left slivers where the body and its inner return meet.
+// Both arch edges share a two-degree grid to avoid tessellation slivers.
 function arch(x, a0, a1, z) {
   var pts = [], step = a1 > a0 ? 2 : -2
   function at(a) { a *= Math.PI / 180; return [x + 36 * Math.cos(a), 30 + 36 * Math.sin(a), z] }
@@ -80,8 +70,7 @@ function arch(x, a0, a1, z) {
   pts.push(at(a1))
   return pts
 }
-// Exact meeting of the projected z=-88 opening and z=-80 inner edge.
-// Camera matches Car.qml's project(): yaw pi/6, pitch 0.2, distance 1400.
+// Join z=-88 and z=-80 at Car.qml's camera: yaw pi/6, pitch 0.2, distance 1400.
 function wallAngles(x) {
   var camera = [221 - 700 * Math.cos(0.2), 60 + 1400 * Math.sin(0.2), -1400 * Math.cos(Math.PI / 6) * Math.cos(0.2)]
   var k = (-80 - camera[2]) / (-88 - camera[2]), lo = 0, hi = Math.PI / 2, q
@@ -129,8 +118,7 @@ function disc(x, y, z, r) {
   for (var j = 0; j <= 32; j++) { var a = j / 32 * 2 * Math.PI; pts.push([x, y + r * Math.sin(a), z + r * Math.cos(a)]) }
   return pts
 }
-// Six grille slats on one side, from the frame to the outer ring, as one serpentine that
-// steps along the frame and along the ring, so no step shows.
+// Connect six grille slats along their frame and ring so the joins stay hidden.
 function slats(side) {
   var pts = [], zc = side * 12.75
   function edge(y) { return [4, y, zc + side * Math.sqrt(36 - (y - 63) * (y - 63))] }
@@ -166,15 +154,10 @@ function inset(poly, d) {
 function screen(x, z) { var p = crown(x, 90 + (x - 146) * 0.625, 2, z); p[1] += 0.6; return p }
 function flip(pts) { return pts.slice().reverse() }
 
-// The outlines and surfaces the parts add, in order. Parts also hand on, through it, what later ones use.
 function builder() {
   var list = [], surfaces = []
-  // Each outline is traced at a comet's pace: 900 units a second, never quicker than 300ms,
-  // and drawn at a weight: 3 the body's outline, 2 its panels (the default), 1 fine detail.
-  // They set off in the order they're added, one every pace ms, so the same handful is ever in
-  // flight and the car builds at an even rate: sills, wheels, body, glass, then the cabin seen
-  // through it. Timing each group from its own base instead let groups overlap, which stalled
-  // the trace between them and then landed half the car at once.
+  // Trace at 900 units/s, at least 300ms; weights: 3 outline, 2 panels, 1 detail.
+  // Stagger all parts on one timeline to avoid groups landing together.
   var pace = 22
   function add(pts, weight) {
     pts = pts.map(warp)
@@ -186,10 +169,8 @@ function builder() {
     return part
   }
 
-  // Painted surfaces by tone (see Car.qml's paint). A tone fills even-odd, so an outline inside another is a hole:
-  // windows and grille; the wheel wells have dark backing. Rubber and the dash fill by winding
-  // instead (the rim's hole runs backwards). Surfaces on a wheel
-  // carry its axle and turn with it, but for those that are still, like the treads.
+  // Tones fill even-odd; rubber and dash use winding to merge overlaps (rim holes run backward).
+  // axle marks rotating wheel surfaces; still keeps treads fixed.
   function surface(tone, pts, axle, still) { surfaces.push({ tone: tone, pts: pts.map(function(p) { return warp(axle === undefined ? p : grow(p, axle)) }), axle: axle, still: still }) }
   function solid(tone, pts, axle, still) { surface(tone, pts, axle, still); surfaces[surfaces.length - 1].hull = true }
   return { parts: list, surfaces: surfaces, add: add, surface: surface, solid: solid }

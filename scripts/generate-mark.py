@@ -32,14 +32,12 @@ left,right=run(ink,1,False),run(ink,1,True)
 vt,ht=up+down+1,left+right+1
 BAR=int(np.min(np.minimum(vt,ht)[ink])); print(f"bar thickness = {BAR}px at {W}px")
 
-# centreline of a bar: centred in its own cross-section, and that cross-section
-# is a bar thickness (not a junction, where it runs the length of the crossing bar)
+# Keep centrelines where the cross-section is a bar, rather than a junction.
 cH = ink & (np.abs(up-down)<=T) & (vt<=BAR*1.5)
 cV = ink & (np.abs(left-right)<=T) & (ht<=BAR*1.5)
 
 def bridge(c, ink, axis):
-    """close gaps in a centreline, but only where the source mask is solid across
-    them -- a junction is filled ink, the logo's own breaks are not."""
+    """Close gaps across solid junctions, preserving the logo's breaks."""
     out=c.copy()
     for i in range(c.shape[1-axis]):
         line = out[i,:] if axis==1 else out[:,i]
@@ -51,12 +49,8 @@ def bridge(c, ink, axis):
     return out
 
 def extend(c, ink, axis, cap):
-    """carry each centreline on into a corner block, far enough to reach the
-    crossing and no further. An L corner has no centreline on its far side to
-    bridge to, so it stays open otherwise; unbounded, the line instead runs the
-    length of the block and out to the mark's edge, turning every corner into a
-    plus. The centreline stops half a bar short of the crossing, so half a bar
-    is exactly the distance to travel. A free bar end stops where the ink does."""
+    """Extend into solid corners by half a bar; farther turns an L into a plus.
+    Free ends stop at the mask edge."""
     out=c.copy()
     for i in range(c.shape[1-axis]):
         line = out[i,:] if axis==1 else out[:,i]
@@ -78,13 +72,8 @@ cH2=extend(cH,ink,1,BAR//2); cV2=extend(cV,ink,0,BAR//2)
 keep=(cH2|cV2)&ink
 print(f"T={T}: coverage {ink.mean():.4f} -> {keep.mean():.4f}")
 
-# --- how far along the maze each pixel is -------------------------------
-# The reveal draws the mark rather than washing it in, so every stroke pixel
-# needs to know its own distance along the path from where the drawing starts.
-# That is a geodesic, not a radius: a BFS that can only travel down the strokes.
-# Each connected piece is seeded at its own innermost pixel, so the drawing
-# starts against the wheel and runs outward through the labyrinth, and every
-# piece starts at once instead of waiting for a front that can never reach it.
+# BFS measures reveal distance along strokes. Seed each disconnected piece at
+# its innermost pixel so all pieces draw outward together.
 ys,xs=np.nonzero(keep)
 NB=[(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]
 seen=np.zeros(keep.shape,bool); comp=[]
@@ -114,9 +103,8 @@ for cur in comp:
 mx=dist.max(); print(f"longest run along the maze: {mx}px")
 prog=np.where(keep, dist/max(mx,1), 0.0)
 
-# Spread the progress a few pixels into the background. The shader samples this
-# with linear filtering, and at a stroke's edge that would otherwise mix the
-# stroke's own value with the zero outside it, reading as drawn-too-early.
+# Extend progress past stroke edges so linear filtering cannot mix in zero
+# and reveal their edges early.
 sp=prog.copy(); m=keep.copy()
 for _ in range(3):
     g=sp.copy(); gm=m.copy()
@@ -125,8 +113,7 @@ for _ in range(3):
         take=shm&~m&(sh>g); g=np.where(take,sh,g); gm|=take
     sp,m=g,gm
 
-# Round the relief without changing coverage. A small Gaussian smooths the
-# height at corners too; its gradient gives the surface normal for lighting.
+# Smooth relief without changing coverage; its gradient gives the lighting normal.
 height=keep.astype(float)
 for axis in (0,1):
     height=sum(np.roll(height,offset,axis)*weight

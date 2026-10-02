@@ -19,7 +19,6 @@ Item {
   property bool syncingPasswordText: false
   // Set once authentication succeeds: the design plays its exit before the lock releases.
   property bool driving: false
-  // True while the display is off.
   property bool blanked: false
   // Designs live outside the shell, a folder each; lock-design names the one shown.
   property string designs: Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock/"
@@ -28,16 +27,13 @@ Item {
   readonly property string placeholderText: "Enter Password"
   readonly property int fieldWidth: 380
   readonly property int fieldHeight: 56
-  // Room each side of the text, clear of the rounded ends.
   readonly property int fieldInset: 28
   readonly property int fieldFontSize: Style.font.heading
   readonly property int passwordDotFontSize: Math.round(Style.font.heading * 1.125)
   readonly property int passwordDotLetterSpacing: Math.round(Style.font.heading * 0.25)
-  // Space to keep clear on each side of the field for the fingerprint icon
-  // (icon width plus a gap) so the centered dots never run under it.
+  // Reserve the fingerprint icon's width on both sides to keep the dots centered.
   readonly property real fingerprintReserve: fingerprintConfigured ? Math.round(fingerprintIcon.implicitWidth + 12) : 0
-  // Shrink the dots to fit once the password outgrows the field, so every
-  // keystroke stays visible — otherwise long passwords clip with no feedback.
+  // Shrink long passwords so every keystroke remains visible.
   readonly property real passwordDotScale: dotMetrics.advanceWidth > 0
     ? Math.min(1, (passwordInput.width - 4) / dotMetrics.advanceWidth)
     : 1
@@ -99,8 +95,7 @@ Item {
     printErrors: false
   }
 
-  // Measures the masked password at full size; passwordDotScale compares this
-  // against the field width to decide how far the dots must shrink to fit.
+  // Measure dots at full size before scaling them to fit.
   TextMetrics {
     id: dotMetrics
     font.family: Style.font.family
@@ -195,8 +190,6 @@ Item {
       TextInput {
         id: passwordInput
         anchors.fill: parent
-        // Reserve the fingerprint icon's width on both sides so the centered
-        // dots stay symmetric and never slide under the icon as they grow.
         anchors.rightMargin: root.fieldInset + root.fingerprintReserve
         anchors.leftMargin: root.fieldInset + root.fingerprintReserve
         verticalAlignment: TextInput.AlignVCenter
@@ -257,9 +250,6 @@ Item {
         elide: Text.ElideRight
       }
 
-      // Fingerprint hint pinned inside the field's right edge when a sensor is
-      // enrolled, so the user knows they can touch to unlock instead of typing.
-      // Matches hyprlock, which draws its fingerprint icon in the same spot.
       Text {
         id: fingerprintIcon
         objectName: "fingerprintIndicator"

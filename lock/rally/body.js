@@ -5,7 +5,6 @@ var across = Shape.across, along = Shape.along, arc = Shape.arc, arch = Shape.ar
   disc = Shape.disc, flip = Shape.flip, level = Shape.level, lift = Shape.lift, lip = Shape.lip,
   mesh = Shape.mesh, plate = Shape.plate, ring = Shape.ring, rrect = Shape.rrect
 
-// Painted panels: bodywork, glass and trim, the front, wheels, mirrors, lamps and the wing.
 function build(m) {
   var surface = m.surface, solid = m.solid, atZ = m.atZ, blade = m.blade, chord = m.chord, deck = m.deck,
     face = m.face, fin = m.fin, glass = m.glass, grille = m.grille, hood = m.hood, mirrorArms = m.mirrorArms,
@@ -14,8 +13,7 @@ function build(m) {
   surface(0, lift([[4, 72]].concat(tail.slice(1)), -1).concat(flip(arch(322, 202.9, -22.9, -88)), [[284.5, 16, -88]],
     flip(lift(along(24, 142, lip(322, 24, -1)), -1)), [[142, 16, -88]], flip(arch(100, 202.9, -22.9, -88)), lift(face.slice(0, 7), -1)))
   surface(7, lift(along(24, 142, 282.5), -1).concat([[284.5, 16, -88], [282.5, 16, -78], [147.5, 16, -78]]))
-  // Above the shoulder, leaning in to the sky, lit like the highlights: fender tops, flanks and pillars
-  // around the window frames.
+  // Fender tops and window pillars share the highlight tone.
   surface(3, lift([[4, 72]].concat(hood, glass.slice(1), deck.slice(1), tail.slice(0, 2),
     [[403, 72]], flip(along(72, 4, 403))), -1))
   // The side windows' opening, B-pillar included: the S1's frames and B-pillar are black.
@@ -24,8 +22,7 @@ function build(m) {
   surface(5, panes[0])
   surface(5, panes[1])
   surface(56, panes[2])
-  // Round the windscreen, facing forward, one ring in body colour: the cowl, both A-pillars and the roof's
-  // front edge; inside it a thin black seal round the glass.
+  // The inset seal cuts the windscreen opening out of the body surround.
   var seal = []
   for (i = 0; i <= 12; i++) seal.push(crown(149.3, 92.06, 2, 74 * (i / 6 - 1)))
   for (i = 0; i <= 12; i++) seal.push(crown(207.2, 128.25, 3, 60 * (1 - i / 6)))
@@ -34,20 +31,15 @@ function build(m) {
   surface(3, seal)
   surface(27, seal)
   surface(27, panes[2])
-  // The C-pillar behind the quarter glass, in the livery's navy, painted over the decals so it hides
-  // the far deck stripe where that runs behind it.
+  // Paint the C-pillar over decals to hide the far deck stripe behind it.
   surface(32, lift([[296, 128]].concat(glass.slice(20), [[334, 96]]), -1))
   // Black trim round the side windows: each frame with its glass cut out.
   ;[windows, panes[0], panes[1]].forEach(function(pts) { surface(27, pts) })
   surface(2, lift(hood, -1).concat(across(146, 90, 2), flip(lift(hood, 1)), flip(across(8, 76, 2))))
   surface(2, lift(roof.slice(8), -1).concat(across(300, 131, 3), flip(lift(roof.slice(8), 1)), flip(across(210, 130, 3))))
-  // Behind the roof the rear glass faces away and the roof's crowned end hides it, so what shows is
-  // the deck: from the roof's near corner to the tail's far top corner, across the tail and back
-  // along the near side. The near C-pillar, painted later, covers the far corner.
+  // Only the deck shows behind the roof; the near C-pillar covers its far corner.
   surface(2, flip(across(403, 98, 1)).concat(flip(lift(deck.slice(0, 2), -1)), flip(lift(glass.slice(20), -1)).slice(1)))
-  // The front as two faces, each one outline so no edge is shared within a fill (the GPU renderer
-  // leaves gaps and slivers along shared edges): lamp panel and hood lip round the grille; chin and
-  // bumper face. Between them the bumper's ledge.
+  // Single outlines avoid GPU fill gaps at shared edges; the grille cuts out the lamp panel.
   var lip72 = across(4, 72, 0), chin18 = across(-9, 18, 0), face23 = across(-5, 23, 0)
   var nose = across(4, 53, 0).concat([[4, 69, 88], lip72[lip72.length - 1]], flip(across(8, 76, 2)), [lip72[0], [4, 69, -88]])
   surface(1, nose)
@@ -55,7 +47,6 @@ function build(m) {
   // The rounded bumper shares the flank's pigment; the shader supplies its lighting.
   surface(28, across(-9, 15, 0).concat([chin18[chin18.length - 1], face23[face23.length - 1]], flip(across(-5, 49, 0)), [face23[0], chin18[0]]))
   surface(2, across(-5, 49, 0).concat(flip(across(4, 53, 0))))
-  // Light catches the flares' tops.
   surface(3, lift(along(69, 4, 142).concat(flip(along(72, 4, 142))), -1))
   surface(3, lift(along(69, 286, 403).concat(flip(along(72, 286, 403))), -1))
   // The lips' inner walls; tyre walls round the rims, and the treads where they show.
@@ -64,23 +55,19 @@ function build(m) {
     surface(4, arch(wheel.x, -22.9, wheel.wall[1], -88).concat(flip(arch(wheel.x, -22.9, wheel.wall[0], -80))))
     surface(7, ring(wheel.x, 30, 30, 72, -84), wheel.x)
     surface(7, flip(ring(wheel.x, 30, 22, 60, -86)), wheel.x)
-    // Matte rubber surrounds the gold rim lip, mesh spokes, hub and dark centre cap.
     surface(8, ring(wheel.x, 30, 22, 60, -86), wheel.x)
     surface(22, ring(wheel.x, 30, 19.5, 60, -85), wheel.x)
     surface(29, mesh(wheel.x, 0), wheel.x)
     surface(29, mesh(wheel.x, 1), wheel.x)
     surface(30, ring(wheel.x, 30, 9, 36, -76), wheel.x)
     surface(18, ring(wheel.x, 30, 5.5, 24, -77), wheel.x)
-    // A complete cylinder behind the sidewall. Project both ends as one convex solid;
-    // the body occludes it naturally, including when the suspension lifts on launch.
+    // Convex tyre volume stays behind the body when the suspension lifts.
     solid(61, ring(wheel.x, 30, 30, 144, -84).concat(ring(wheel.x, 30, 30, 144, -64)), wheel.x, true)
-    // A thin rubber mud flap hanging from inside the arch behind the near tyre, its lower corners rounded,
-    // bending back slightly at the foot and shaded continuously up under the arch.
+    // Mudflaps bend backward at the foot.
     var flap = wheel.x + 37
     surface(76, rrect(flap, 1, 24, -88, -64, 2).map(function(p) { return [p[0] + 2 * Math.pow(Math.max(0, 16 - p[1]) / 13, 2), p[1], p[2]] }))
   })
-  // Mirror shells use one pigment and a rounded-box surface normal. The far one is painted before the
-  // cabin and body, which hide its inner side. Then the wipers and aluminium fuel cap.
+  // Paint the far mirror before the cabin and body hide its inner side.
   ;[[18, 34, 33], [36, 37, 38]].forEach(function(tones, k) {
     surface(tones[0], mirrorArms[k])
     solid(tones[1], mirrors[k].shell)
@@ -94,9 +81,7 @@ function build(m) {
   surface(11, lift([[403, 78], [387, 78], [387, 92], [403, 92], [403, 78]], -1))
   surface(21, lift([[403, 88.5], [387, 88.5], [387, 92], [403, 92]], -1))
   surface(20, lift([[389, 86.5], [393, 86.5], [392.3, 85.3], [388.3, 85.3]], -1))
-  // The wing on its fins. The Martini stripes run on over it from the roof. The far fin shows its inner face
-  // over the deck and its tip above the plane; the near fin hides the plane's end, and its tip's top edge
-  // catches the sky.
+  // Far fin sits over the deck; near fin hides the plane's end.
   surface(64, atZ(fin, 76))
   surface(65, atZ(blade, 77))
   surface(63, atZ(fin, -76))
@@ -108,9 +93,7 @@ function build(m) {
     })
   })
   surface(66, atZ(blade, -77))
-  // Headlamps: a chrome bezel round the glass lens, lighter along its top where it catches the sky, with a
-  // glint at its upper left: a small slanted bar on the face plane x around height y, from z back toward
-  // the camera's right. An amber indicator on the bumper's corner.
+  // Lens glints are slanted bars on the face plane.
   function glint(x, y, z) { return [[x, y + 0.8, z], [x, y + 0.8, z - 3], [x, y - 0.8, z - 4.5], [x, y - 0.8, z - 1.5]] }
   for (side = -1; side <= 1; side += 2) {
     var lens = rrect(4, 58.5, 67.5, side * 46, side * 84, 2.5)
@@ -121,8 +104,7 @@ function build(m) {
     surface(20, glint(4, 65.5, side < 0 ? -48.5 : 81.5))
     surface(21, rrect(-5, 38.5, 45.5, side * 70, side * 84, 1))
   }
-  // The spotlights: a can, 4 deep, as a disc every unit back (they merge, winding) and the lower four's bar;
-  // a chrome rim round a glass lens, and a glint.
+  // Spotlight depth slices merge via winding fill.
   surface(58, [[-6, 45, -52], [-6, 45, 52], [-6, 47.5, 52], [-6, 47.5, -52], [-6, 45, -52]])
   spots.forEach(function(l) {
     ;[4, 3, 2, 1, 0].forEach(function(d) { surface(58, level(disc(l[0] + d, l[1], l[2], l[3]))) })

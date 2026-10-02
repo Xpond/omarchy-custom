@@ -1,17 +1,14 @@
 import QtQuick
 import "grow.js" as Grow
 
-// A new colony grows each lock, lighting the ground as the camera drifts; unlocking draws it back.
 Item {
   id: root
 
-  // The lock screen's view (LockView.qml): whether the display is on.
   property Item host
   // Edges the password field.
   readonly property color accent: "#8ee8e0"
 
-  // How many of the colony's steps have grown, 45 a second while it spreads: every tip moves 3
-  // units a step, the screen being 1080 high.
+  // Growth steps at 45/s; each tip moves 3 units in a 1080-unit-high frame.
   property real grown: 0
   property bool spreading: false
   property var colony: null
@@ -32,8 +29,7 @@ Item {
       if (ready) { root.growing = null; root.colony = ready }
     }
   }
-  // The canvases draw it on a thread of their own, the arrival map for a quarter of a second, rather
-  // than holding up the lock; growth waits until all four have.
+  // Growth waits for all four threaded canvases to finish their initial paint.
   property int drawn: 0
   onColonyChanged: { drawn = 0; web.requestPaint(); times.requestPaint(); shine.requestPaint(); deeper.requestPaint() }
 
@@ -45,8 +41,7 @@ Item {
       if (root.spreading && root.colony && root.drawn >= 4) root.grown = Math.min(root.colony.fronts.length, root.grown + 45 * frameTime)
     }
   }
-  // The camera's slow drift, over a minute or so: its pan in pixels, zoom and roll, zoomed in
-  // enough that the colony's edges never show.
+  // Camera [pan x/y in pixels, zoom, roll]; zoom hides the colony's edges during drift.
   readonly property vector4d camera: {
     var m = Math.min(width, height)
     return Qt.vector4d(0.006 * m * Math.sin(time / 7), 0.005 * m * Math.sin(time / 9 + 1),
@@ -57,14 +52,13 @@ Item {
   function hide() { leaving.stop(); spreading = false; grown = 0 }
   function leave() { spreading = false; leaving.start() }
 
-  // Drawn back into the centre, gone by the time the lock releases.
   ParallelAnimation {
     id: leaving
     NumberAnimation { target: root; property: "grown"; to: 0; duration: 550; easing.type: Easing.OutQuad }
     NumberAnimation { target: root; property: "opacity"; to: 0; duration: 550; easing.type: Easing.InQuart }
   }
 
-  // The colony's lines, anti-aliased, the runs of each width in one stroke.
+  // Batch strands of each width into one antialiased stroke.
   Canvas {
     id: web
     anchors.fill: parent
@@ -91,10 +85,8 @@ Item {
     }
   }
 
-  // The step that reaches each pixel of those lines, in red and green. Drawn without antialiasing
-  // to store exact steps, then sampled smoothly by the shader. A pixel and a half wider each side
-  // covers their smoothed edges though Qt draws the finest a pixel wide and unsmoothed strokes sit
-  // up to half a pixel off. Where lines meet, the earliest step is drawn last and wins.
+  // RG encodes arrival steps without antialiasing; 1.5px padding covers smoothed strand edges.
+  // Draw earliest steps last so intersections reveal at their first arrival.
   Canvas {
     id: times
     anchors.fill: parent
@@ -122,8 +114,7 @@ Item {
     }
   }
 
-  // The colony again, for the deep hyphae: soft, at half the resolution, each line coloured with
-  // the step that reaches it in eighths. Earliest last, so it wins where lines meet.
+  // Deep hyphae encode arrival step / 8 at half resolution, earliest drawn last.
   Canvas {
     id: deeper
     width: root.width / 2
@@ -150,7 +141,7 @@ Item {
     }
   }
 
-  // The light the colony casts, a pixel to about 32 units, which the shader magnifies smoothly.
+  // One light-map pixel covers about 32 design units.
   Canvas {
     id: shine
     width: root.colony ? root.colony.light.cols : 1

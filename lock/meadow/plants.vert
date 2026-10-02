@@ -1,5 +1,4 @@
 #version 440
-layout(location = 0) in vec4 qt_Vertex;
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec4 shape;  // along and across in garden units, part, half width
 layout(location = 1) out vec4 paint;  // ribbon colour, or leaf and flower sizes

@@ -1,11 +1,7 @@
 .pragma library
 
-// A mycelium colony, grown out from the centre of a screen 1080 units high and aspect times as
-// wide. Every tip steps 3 units at a time: it wanders, bends outward, steers clear of other hyphae
-// and branches into open space. It dies where it meets another hypha, fusing with it, or 20 units
-// past the screen's edge. Returns its lines as strands, runs of one width by width in quarter
-// units, and as fronts, each stretch as a pair of points by the step that reaches it, then by
-// width; and the light it casts on the ground, as a small image (see light).
+// Grow a colony in a 1080-unit-high frame, 3 units per step.
+// Return strands by quarter-unit width, fronts by arrival step/width, and ground light.
 
 // Resume between whole growth steps and hyphae, keeping randomness and point order unchanged.
 function begin(aspect) {
@@ -16,10 +12,8 @@ function begin(aspect) {
   function at(x, y) { return Math.floor((y + halfH) / cell) * cols + Math.floor((x + halfW) / cell) }
   function taken(x, y, h) { var c = at(x, y); return owner[c] && owner[c] !== h + 1 ? 1 : 0 }
 
-  // Tips growing, and waiting to, by the step they first move on.
   var hyphae = [], tips = [], waking = []
-  // A branch turns from its parent's heading; one sprouting at start first moves the step after.
-  // For its first 5 steps a hypha neither fuses nor holds cells, so it can get clear of its parent.
+  // Give branches five fusion-free steps to clear their parent.
   function sprout(x, y, heading, turn, start, parent) {
     hyphae.push({ points: [x, y], start: start, parent: parent, from: parent < 0 ? 0 : hyphae[parent].points.length / 2 - 1, feeds: {} });
     (waking[start + 1] = waking[start + 1] || []).push({ h: hyphae.length - 1, x: x, y: y, a: heading + turn, turn: turn, bend: 0, grace: 5 })
@@ -39,15 +33,13 @@ function begin(aspect) {
       for (var n = 0; n < growing.length; n++) {
         var tip = growing[n], h = hyphae[tip.h]
         var ca = Math.cos(tip.a), sa = Math.sin(tip.a)
-        // A branch that wakes to find no room ahead turns as far the other way, and failing that
-        // never grows: late branches find the gaps left.
+        // Try the opposite turn if a late branch starts blocked.
         if (step === h.start + 1 && h.parent >= 0 && taken(tip.x + 24 * ca, tip.y + 24 * sa, tip.h)) {
           tip.a -= 2 * tip.turn
           ca = Math.cos(tip.a); sa = Math.sin(tip.a)
           if (taken(tip.x + 24 * ca, tip.y + 24 * sa, tip.h)) continue
         }
-        // Wander smoothly, lean outward (by the sine of the turn to it) and turn from the nearer of
-        // two hyphae sensed ahead.
+        // Wander, lean outward, and steer away from nearby hyphae.
         tip.bend = 0.8 * tip.bend + 0.04 * (Math.random() - 0.5)
         tip.a += tip.bend + 0.02 * (tip.y * ca - tip.x * sa) / (Math.sqrt(tip.x * tip.x + tip.y * tip.y) || 1)
           + 0.12 * (taken(tip.x + 20 * (ca * C + sa * S), tip.y + 20 * (sa * C - ca * S), tip.h)
@@ -69,9 +61,7 @@ function begin(aspect) {
       }
     }
 
-    // A hypha tapers with the length it feeds beyond each point, its own and its branches': cords
-    // near the centre carry the colony, the fine hyphae at its edge only themselves. Point j of a
-    // hypha is reached at step start + j. Branches come after their parents, so go from the last.
+    // Reverse parent order so branch feed load contributes to each hypha's taper.
     if (remaining === undefined) remaining = hyphae.length - 1
     for (; remaining >= 0; remaining--) {
       if (Date.now() >= until) return null
@@ -93,9 +83,7 @@ function begin(aspect) {
   }
 }
 
-// The colony's light on the ground, as an image cols by rows over the screen, magnified smoothly
-// where it's used: in red, how much of the colony lies in each square, weighing its stretches by
-// width; in green, the step that reaches it on average, in eighths.
+// Ground light R: density weighted by width; G: mean arrival step / 8.
 function light(dense, late, cols, rows) {
   var px = new Uint8ClampedArray(4 * cols * rows)
   for (var c = 0; c < cols * rows; c++) {

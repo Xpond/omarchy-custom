@@ -5,6 +5,7 @@ layout(location = 2) in vec4 facing;
 layout(location = 3) in vec4 petal;
 layout(location = 4) in vec4 stone;
 layout(location = 0) out vec4 fragColor;
+// Block must match plants.vert, including fields only that stage uses.
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;

@@ -1,4 +1,3 @@
-// The space around the tunnel: a glow at its far end, and dust drifting past as it flies.
 #version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -11,8 +10,7 @@ layout(std140, binding = 0) uniform buf {
     // The tunnel's far end on screen, in pixels, and the camera's bank, in radians.
     vec2 vanish;
     float roll;
-    // Distance flown, wrapped to the dust's 160-unit cycle, in the marks' grid units, and the
-    // tunnel's focal length: a unit off the axis, a unit ahead, is this many pixels out.
+    // Flight wraps at 160 grid units; focal length is pixels per unit at depth 1.
     float flight;
     float focal;
     vec4 glow;
@@ -24,12 +22,9 @@ void main() {
     vec2 q = (qt_TexCoord0 * resolution - vanish) / focal;
     float r = length(q);
 
-    // Near black, lit towards the far end.
     vec3 colour = vec3(0.008, 0.011, 0.024) + glow.rgb * (0.3 * exp(-r * r * 30.0) + 0.07 * exp(-r * r * 2.0));
 
-    // Dust: one mote in each of many directions out from the far end, 16 to 76 units off the
-    // axis and 4 to 164 ahead, coming nearer as the flight goes on. Each is a dot of its own
-    // size, 0.6 to 2 pixels in radius at 1080p.
+    // Dust motes occupy angular cells, with radii of 0.6-2px at 1080p.
     float angle = atan(q.y, q.x) - roll;
     vec2 toward = vec2(cos(angle), sin(angle)) * r;
     for (int layer = 0; layer < 3; ++layer) {
