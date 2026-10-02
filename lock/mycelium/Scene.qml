@@ -7,6 +7,8 @@ Item {
 
   // The lock screen's view (LockView.qml): whether the display is on.
   property Item host
+  // Edges the password field.
+  readonly property color accent: "#8ee8e0"
 
   // How many of the colony's steps have grown, 45 a second while it spreads: every tip moves 3
   // units a step, the screen being 1080 high.

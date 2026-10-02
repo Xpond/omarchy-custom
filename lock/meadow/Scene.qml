@@ -5,6 +5,8 @@ import "foreground.js" as Foreground
 Item {
   id: root
   property Item host
+  // Edges the password field.
+  readonly property color accent: "#ffd7a3"
   property var garden: null
   property var near: []
   property int drawn: 0

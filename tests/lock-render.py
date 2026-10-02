@@ -18,7 +18,7 @@ output = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/lock-render").resolve(
 output.mkdir(parents=True, exist_ok=True)
 # Standalone theme values, with the production host, car, shader, scenery and animations.
 colors = {"background": "#080a0f", "lock.borderError": "#ff4444", "lock.text": "#ffffff",
-          "lock.placeholder": "#929575", "lock.selection": "#445577", "lock.textError": "#ff4444"}
+          "lock.selection": "#445577", "lock.textError": "#ff4444"}
 def standalone(source):
     source = source.replace("import qs.Commons", "")
     source = source.replace("Style.font.heading", "16").replace("Style.font.family", '"monospace"')
@@ -42,7 +42,7 @@ stages = [{"name": "parked"}, {"name": "departed", "drive": 1}]
 stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
            {"name": "design-shore", "design": "shore"}, {"name": "design-meadow", "design": "meadow"},
            {"name": "design-wallpaper", "design": "wallpaper"},
-           {"name": "design-missing", "design": "missing"}]
+           {"name": "design-missing", "design": "missing"}, {"name": "unlocking", "unlock": 1}]
 qml = '''import QtQuick
 import Quickshell
 Window {
@@ -68,6 +68,8 @@ Window {
       capture.restart()
       return
     }
+    // The shortest release, mycelium's, comes 550ms after the password is accepted.
+    if (s.unlock) { lock.driving = true; capture.interval = 500; capture.restart(); return }
     if (s.drive) {
       car.drive = s.drive
       // The body's shapes stay parked; its pose moves them.
@@ -120,9 +122,12 @@ def lit(name, crop):
     return float(subprocess.check_output(["magick", output / f"{name}.png", "-crop", crop, "-colorspace", "gray",
                                           "-threshold", "25%", "-format", "%[fx:mean]", "info:"]))
 
-# The field is the host's: it stays on every design, and when a design fails to load.
+# The field is the host's: it stays on every design, and when a design fails to load, its top
+# edge in the design's accent, white for designs without one.
 for name in ("parked", "design-tunnel", "design-mycelium", "design-shore", "design-meadow", "design-wallpaper", "design-missing"):
-    assert pixel(name, 960, 922) == "8fd0ff", name + ": the password field's edge is missing"
+    scene = repo / "lock" / ("rally" if name == "parked" else name.removeprefix("design-")) / "Scene.qml"
+    accent = scene.exists() and re.search(r'accent: "#(\w{6})"', scene.read_text())
+    assert pixel(name, 960, 938) == (accent[1] if accent else "ffffff"), name + ": the password field's edge is missing"
 assert lit("design-tunnel", "1920x880+0+0") > 0.01, "switching to the tunnel design drew no lines"
 # A second and a half after preparation, the colony has grown about the centre, with no line beyond it, above
 # the field's glow: only the dark ground, which never comes to a tenth of white.
@@ -138,4 +143,9 @@ assert sea[2] > sea[0] + 5 and sand[0] > sand[2] + 40, f"switching to the shore 
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
 assert lit("design-meadow", "1920x880+0+0") > 0.005, "switching to the meadow design grew no flowers"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
-print("ok: designs switch at runtime, and a missing one leaves the plain background and the field")
+# Once the password is accepted the field clears ahead of the design, before the shortest release:
+# only the plain background is left where it was.
+field = subprocess.check_output(["magick", output / "unlocking.png", "-crop", "520x180+700+880",
+                                 "-unique-colors", "-format", "%w", "info:"])
+assert field == b"1", "the password field outlasts the unlock"
+print("ok: designs switch at runtime, a missing one leaves the plain background and the field, which clears on unlock")

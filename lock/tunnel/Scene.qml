@@ -8,6 +8,8 @@ Item {
 
   // The lock screen's view (LockView.qml): whether the display is on.
   property Item host
+  // Edges the password field.
+  readonly property color accent: "#c99cff"
 
   // Distance flown and pace, in the mark's own grid units: it is 30 across.
   property real flight: 0
