@@ -401,17 +401,17 @@ function termOf(query) {
 
 var NO_FILES = { paths: [], lower: [] }
 
-// fd marks directories with trailing slashes; fold case once per scan.
+// fd marks directories with trailing slashes; fold case and find names once per scan.
 function parseFiles(raw) {
   var paths = lines(raw)
-  var lower = []
-  for (var i = 0; i < paths.length; i++) lower.push(paths[i].toLowerCase())
-  return { paths: paths, lower: lower }
-}
-
-function nameOf(path) {
-  var end = path.charAt(path.length - 1) === "/" ? path.length - 1 : path.length
-  return path.slice(path.lastIndexOf("/", end - 1) + 1, end)
+  var lower = [], starts = []
+  for (var i = 0; i < paths.length; i++) {
+    var low = paths[i].toLowerCase()
+    lower.push(low)
+    // The name follows the last slash, skipping a directory's trailing one.
+    starts.push(low.lastIndexOf("/", low.length - 2) + 1)
+  }
+  return { paths: paths, lower: lower, starts: starts }
 }
 
 function fileRow(path, home) {
@@ -449,12 +449,16 @@ function fileRows(files, term, limit, home) {
       if (low.indexOf(terms[t]) === -1) { matched = false; break }
     }
     if (!matched) continue
-    var name = nameOf(low)
-    var at = name.indexOf(q)
-    var rank = at === 0 ? 0 : (at !== -1 ? 1 : 2)
+    // Search the name in place; a match running into a directory's slash is outside it.
+    var start = src.starts[i]
+    // 47 is "/"; charAt would allocate a string per path.
+    var end = low.charCodeAt(low.length - 1) === 47 ? low.length - 1 : low.length
+    var at = low.indexOf(q, start)
+    if (at + q.length > end) at = -1
+    var rank = at === start ? 0 : (at !== -1 ? 1 : 2)
     var lengths = buckets[rank]
-    var ties = lengths[name.length]
-    if (!ties) ties = lengths[name.length] = []
+    var ties = lengths[end - start]
+    if (!ties) ties = lengths[end - start] = []
     if (ties.length < limit) ties.push(i)
   }
   var out = []

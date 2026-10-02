@@ -61,7 +61,7 @@ console.log("ok: complete UTF-8 validation and 500-line boundaries")
 function reference(files, query, limit) {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  return files.paths.map((p, i) => ({ p, i, name: M.nameOf(p.toLowerCase()) }))
+  return files.paths.map((p, i) => ({ p, i, name: p.toLowerCase().replace(/\/$/, "").split("/").pop() }))
     .filter(e => q.split(/\s+/).every(t => e.p.toLowerCase().includes(t)))
     .map(e => ({ ...e, rank: e.name.startsWith(q) ? 0 : e.name.includes(q) ? 1 : 2 }))
     .sort((a, b) => a.rank - b.rank || a.name.length - b.name.length || a.i - b.i)
@@ -72,7 +72,8 @@ const paths = Array.from({ length: 5000 }, (_, i) =>
   "/home/test/" + words[random() % words.length] + "/" + i + "/" + words[random() % words.length]
   + (i % 4 ? "" : "/"))
 const files = M.parseFiles(paths.join("\n"))
-for (const query of ["", "a", "e", "home", "wheel", " WHEEL ", "a beta", "space name", "é", "zzz"])
+for (const query of ["", "a", "e", "home", "wheel", " WHEEL ", "a beta", "space name", "é", "zzz",
+  "/", "beta/", "a/", "/beta", "1/a"])
   for (const limit of [0, 1, 8, 40, 5001])
     assert.deepEqual(M.fileRows(files, query, limit, "/home/test"), reference(files, query, limit))
 assert.deepEqual(M.fileRows(null, "a", 40, "/home/test"), [])
