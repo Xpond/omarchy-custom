@@ -1,10 +1,5 @@
-// Places one mark of the tunnel where it stands ahead as the flight goes on: the corridor's
-// centreline wanders on a few sine waves and the camera flies along it looking down its tangent
-// (Scene.qml banks it into the turns). The mark fades in at the far end, and out once past the
-// screen's edges.
 #version 440
 
-layout(location = 0) in vec4 qt_Vertex;
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec2 qt_TexCoord0;
 // The mark's opacity, its grid units per screen pixel, and its comet's head along the maze.
@@ -15,18 +10,15 @@ layout(location = 3) out float head;
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
-    // Distance flown and how far ahead the mark stands, how near the nearest stands, and the span
-    // after which one flown past returns, in the mark's grid units.
+    // Distances in the mark's grid units; span is the recycling interval.
     float flight;
     float depth;
     float near;
     float span;
-    // The tunnel's centre and focal length, in pixels: a unit off the axis, a unit ahead, is this
-    // many pixels out.
+    // Tunnel centre and focal length in pixels.
     vec2 centre;
     float focal;
-    // Its turn in radians and size, its comet's start and pace in laps per unit flown, and the
-    // tail, way round and hue mark.frag draws it with.
+    // Turn in radians; comet pace in laps per flight unit. Block must match mark.frag.
     float turn;
     float size;
     float start;

@@ -1,11 +1,6 @@
 import QtQuick
 import qs.Commons
 
-// Key and word are told apart by weight rather than by space, so the pairs
-// group themselves.
-//
-// The row is the panel's status line as much as its legend -- it is where a
-// held file says what ctrl+v would do with it.
 Item {
   id: root
 
@@ -13,9 +8,7 @@ Item {
 
   implicitHeight: hints.height
 
-  // A delete waiting for its second press owns the whole row and says so in
-  // red: being asked a destructive question quietly is worse
-  // than not being asked.
+  // Delete confirmation takes priority over the key legend.
   readonly property bool arming: !!panel && !!panel.doomed
 
   readonly property var pairs:

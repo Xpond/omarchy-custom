@@ -2,13 +2,9 @@ import QtQuick
 import qs.Commons
 import "FilesIndex.js" as FilesIndex
 
-// The directory, one row per entry, and the bar that says which one you are
-// standing on. Rows are the panel's only pointer target: the preview beside
-// them is a reading surface, not a second list.
 Item {
   property var panel: null
   property var operations: null
-  // The scroller, so the panel can keep the selection in view after a jump.
   property alias view: list
 
   ListView {
@@ -24,18 +20,12 @@ Item {
       required property int index
       required property var modelData
       readonly property bool active: panel.index === entry.index
-      // Waiting on a second Del. The row is where you are looking, so the row
-      // is what has to say so.
       readonly property bool doomed: panel.doomed === entry.modelData.path
 
       width: list.width
       height: panel.rowHeight
 
-      // The wheel's selection signature, unchanged: a capsule, the accent
-      // tint, and the accent hairline a selected search bead wears. One shape
-      // for "this is the thing Return runs", whichever of the three surfaces
-      // you are standing on. The fill stops short of the preview so the
-      // selection never touches it.
+      // Match the wheel's selection capsule, stopping before the preview.
       Rectangle {
         anchors.fill: parent
         anchors.rightMargin: Style.spacing.md
@@ -51,7 +41,6 @@ Item {
         id: pointer
         anchors.fill: parent
         hoverEnabled: true
-        // Real pointer motion only, for the reason panel.hoverMoved gives.
         onPositionChanged: function (mouse) {
           if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) panel.index = entry.index
         }
@@ -66,9 +55,7 @@ Item {
         anchors.rightMargin: Style.spacing.rowPaddingX + Style.spacing.md
         spacing: Style.spacing.controlGap
 
-        // Folders carry a little of the accent even when they are not
-        // selected. It is the only cue that survives a list where every
-        // other row is a file with a long ordinary name.
+        // Folder colour remains distinct in a list of files.
         Text {
           id: glyph
           anchors.verticalCenter: parent.verticalCenter
@@ -92,8 +79,6 @@ Item {
           font.pixelSize: Style.font.body
         }
 
-        // A size for files. For the folder you are standing on, the
-        // chevron that says Return goes in there.
         Text {
           id: trail
           anchors.verticalCenter: parent.verticalCenter
@@ -109,8 +94,7 @@ Item {
     }
   }
 
-  // The same indicator the preview carries, for the same reason: a
-  // directory of 977 files is otherwise a list with no bottom.
+  // Show the scroll position in long directories.
   Rectangle {
     visible: list.contentHeight > list.height + 1
     anchors.right: list.right

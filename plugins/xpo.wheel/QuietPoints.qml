@@ -7,8 +7,7 @@ Item {
   required property real progress
   required property real quietRadius
   required property color tint
-  // The night is when these are worth having: full sun washes them out, and
-  // the haze a low sun carries softens what is left before it takes them.
+  // Daylight and twilight wash out the stars.
   required property real daylight
   required property real haze
 

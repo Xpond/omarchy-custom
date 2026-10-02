@@ -17,7 +17,7 @@ function library(file) {
 
 // Runs the car's own model, projection, tracing and drive-off outside Qt, at 1080p.
 const model = library("model.js").carModel(), parts = model.parts
-const code = qml.slice(qml.indexOf("  // Screen polylines of an outline from a to b"), qml.indexOf("  onClockChanged"))
+const code = qml.slice(qml.indexOf("  function pieces("), qml.indexOf("  onClockChanged"))
 const drive = qml.match(/onDriveChanged: \{([^]*?)\n  \}\n  onWidthChanged/)[1]
 const streakFrom = qml.match(/readonly property var streakFrom: (\[[^]*?\]\])\n/)[1]
 const paint = qml.match(/readonly property var paint: (\[[^\]]*\])/)[1]

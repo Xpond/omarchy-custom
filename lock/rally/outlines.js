@@ -7,17 +7,12 @@ var across = Shape.across, along = Shape.along, arc = Shape.arc, arch = Shape.ar
   rrect = Shape.rrect, screen = Shape.screen, slats = Shape.slats, slope = Shape.slope,
   smooth = Shape.smooth, wallAngles = Shape.wallAngles
 
-// The traced outlines: sills and wheels, the body shell, flank and front, then details and the wing.
 function build(m) {
   var add = m.add, i
-  // Per wheel: its axle, and the angles this camera sees, worked out by projection: the tread's
-  // inner edge under the arch, from where the arch hides it to the tyre's silhouette; and the
-  // arch's rolled lip turning in 8 to its inner wall, seen in the arch's rear half up to wall[0], where its edge passes behind the opening's, at wall[1].
+  // Projection angles for visible tread and arch lips joining the z=-88 opening to the z=-80 wall.
   var wheels = [{ x: 100, tread: [224, 238.7], wall: wallAngles(100) },
     { x: 322, tread: [225, 246.6], wall: wallAngles(322) }]
-  // Flares' bottom edges with round arch openings, the front flare's rear edge, and the rocker
-  // set in under the doors, from where it clears that edge on screen (x 147.5) to its step out
-  // to the rear flare; then the wheels, then the flare lips around them.
+  // Arch and sill silhouettes, then wheels and flare lips.
   add([[-9, 15, -88]].concat(arch(100, 202.9, -22.9, -88), [[142, 16, -88]]), 3)
   add([[284.5, 16, -88]].concat(arch(322, 202.9, -22.9, -88), [[397, 16, -88]]), 3).underPaint = true
   add(lift([[142, 16], [142, 69], [142, 72]], -1), 1)
@@ -32,9 +27,7 @@ function build(m) {
     ]
     // Wheel parts carry their axle: they turn, and don't pitch with the body. Tyre outline, rim lip panel, the rest fine.
     for (var k = 0; k < wheel.length; k++) add(wheel[k].map(function(p) { return grow(p, x) }), [3, 2, 1][Math.min(k, 2)]).axle = x
-    // The tread stays where the camera sees it: it follows the wheel but doesn't turn. Its inner
-    // edge runs on into its silhouette line, back to the tyre face. The rim's barrel gets no line:
-    // seen through the mesh, it read as the tyre's far side showing through the rim.
+    // Tread follows the wheel without turning; omit the rim barrel so it cannot read as a far tyre wall.
     var tread = wheels[w].tread
     var part = add(arc(x, 30, 30, tread[0], tread[1], 10, -64).concat([arc(x, 30, 30, tread[1], tread[1], 1, -84)[0]])
       .map(function(p) { return grow(p, x) }), 2)
@@ -45,29 +38,24 @@ function build(m) {
     add(arch(x, -22.9, wheels[w].wall[0], -80))
   }
 
-  // Body shell: the near side's whole outline; of the far side, the front corner and
-  // the top edge over hood, glass and deck. Hood, glass and roof edges are soft curves.
+  // Near silhouette and visible far edges; soften hood and roof curves.
   var face = [[-9, 15], [-9, 18], [-5, 23], [-5, 49], [-3, 52], [4, 53], [4, 69], [4, 72], [8, 76]]
   var hood = smooth([[8, 76], [80, 85], [146, 90]], 8)
   var roof = smooth([[146, 90], [178, 110], [210, 130]], 4).concat(smooth([[210, 130], [255, 134], [300, 131]], 6).slice(1))
   var glass = roof.concat(smooth([[300, 131], [333, 117], [360, 97]], 8).slice(1))
-  // The deck runs flat to the tail, as the S1's: its wing's fins stand on the corners a Quattro's lip had.
   var deck = [[360, 97], [393, 98], [403, 98]]
   var tail = [[403, 90], [403, 76], [403, 72], [403, 69], [403, 50], [405, 46], [405, 22], [397, 16]]
   add(lift(face.slice(0, 6), -1), 3).underPaint = true
   add(lift(face.slice(5).concat(hood.slice(1), smooth([[146, 90], [262, 92], [360, 97]], 6).slice(1), deck.slice(1), tail), -1), 3)
   add(lift(glass, -1), 3)
   add(lift(face, 1), 3)
-  // The rear glass faces away from the camera: the far C-pillar, the glass's base and the
-  // far deck edge are hidden behind the near C-pillar.
+  // Near C-pillar hides the rear glass, far C-pillar and far deck edge.
   add(lift(hood.concat(roof.slice(1)), 1), 3)
   var cross = [across(8, 76, 2), across(146, 90, 2), across(210, 130, 3), across(300, 131, 3),
     across(403, 98, 1), across(4, 72, 0), across(4, 53, 0), across(-3, 52, 0), across(-5, 23, 0), across(-9, 18, 0), across(-9, 15, 0)]
   for (i = 0; i < cross.length; i++) add(cross[i])
 
-  // Flank: bumper tops, sill, the door (one outline: down from its window frame's ends, round the corners
-  // and along just above the sill), glass in its frames, hood creases.
-  // The door's window frame runs up beside the A-pillar; the glass starts behind the mirror's panel.
+  // Door glass starts behind the mirror panel.
   var doorFrame = [[154, 93], [206, 126], [262, 128], [262, 93], [154, 93]]
   var doorGlass = [[200, 93], [200, 122.2], [206, 126], [262, 128], [262, 93], [200, 93]]
   var quarterGlass = [[268, 93], [268, 128], [296, 128], [334, 96], [268, 93]]
@@ -83,10 +71,7 @@ function build(m) {
   // The hood creases, last, are fine.
   for (i = 0; i < flank.length; i++) add(flank[i], i < flank.length - 2 ? 2 : 1)
 
-  // Front, on the lamp panel (x 4) and the bumper face (x -5). Per side: one big headlamp, the S1's, its
-  // chrome bezel round the lens; an indicator low on the bumper's corner; grille slats. Then the grille, the
-  // rings, and six spotlights, rally style, each a rim round its lens: two big ones before the grille, four
-  // on a bar over the bumper (face x, height, across, radius).
+  // Headlamps, indicators and grille, then six spotlights as [face x, height, z, radius].
   var front = [], bezels = []
   var low = -8 + slope(46.5), spots = [[-3, 67.5, -33, 9], [-3, 67.5, 33, 9], [low, 46.5, -47, 8.5], [low, 46.5, -19, 8.5], [low, 46.5, 19, 8.5], [low, 46.5, 47, 8.5]]
   for (var side = -1; side <= 1; side += 2) {
@@ -99,9 +84,7 @@ function build(m) {
   // Headlamp bezels glow when the engine starts. They and the grille are panels, the rest fine.
   for (i = 0; i < front.length; i++) add(front[i], bezels.indexOf(front[i]) >= 0 || front[i] === grille ? 2 : 1).lamp = bezels.indexOf(front[i]) >= 0
 
-  // Details: the windscreen's frame; the mirror at the door glass's front corner, a rounded housing on a short arm
-  // from the belt (the outline a light rim, like the silhouette, so it shows on the black trim); then, fine, two parked
-  // wipers and door handle; fuel flap and taillamp (it glows too).
+  // Windscreen, mirrors, wipers, handle, fuel flap and taillamp.
   var windscreen = []
   for (i = 0; i <= 12; i++) windscreen.push(crown(150.5, 92.8, 2, 72 * (i / 6 - 1)))
   for (i = 0; i <= 12; i++) windscreen.push(crown(206, 127.5, 3, 58 * (1 - i / 6)))
@@ -125,17 +108,15 @@ function build(m) {
   var mirrorArms = [-1, 1].map(function(side) {
     return [[163, 93, 80], [170, 93, 80], [170, 99, 94], [166, 99, 94]].map(function(p) { return [p[0], p[1], side * p[2]] })
   })
-  // A parked wiper, from its pivot at z toward the far side: the arm climbs gently from the foot of the glass
-  // to the middle of the blade, which lies along it, 44 long.
+  // Parked wiper arm meets a 44-unit blade.
   function wiper(z) {
     var arm = [], blade = []
     for (var i = 0; i <= 4; i++) { arm.push(screen(152.5 + i * 0.375, z + i * 10)); blade.push(screen(154, z + 18 + i * 11)) }
     return { arm: arm, blade: blade, line: blade.concat([blade[3]], flip(arm)) }
   }
   var wipers = [wiper(-50), wiper(0)]
-  // The S1's wing (painted with the other surfaces), kept compact: a thin symmetric NACA section, 2 thick on a
-  // 24 chord, pitched 1.5 up to its trailing edge just past the tail. wingAt gives its upper (1) or lower (-1)
-  // surface at chord fraction c. From above, the plane shows along its top.
+  // Symmetric NACA wing: 2-unit thickness, 24-unit chord, 1.5-unit rise.
+  // wingAt samples upper (+1) or lower (-1) surface at chord fraction c.
   function wingAt(c, s, z) {
     var f = 0.2969 * Math.sqrt(c) - 0.126 * c - 0.3516 * c * c + 0.2843 * c * c * c - 0.1036 * c * c * c * c
     return [384 + 24 * c, 120 + 1.5 * c + s * 10 * f, z]
@@ -143,10 +124,7 @@ function build(m) {
   var chord = [0, 0.004, 0.012, 0.03, 0.06, 0.1, 0.16, 0.24, 0.34, 0.46, 0.6, 0.75, 0.88, 1]
   function wingEdge(z) { return [0.06, 0.03, 0.012, 0.004].map(function(c) { return wingAt(c, -1, z) }).concat(chord.map(function(c) { return wingAt(c, 1, z) })) }
   var wing = wingEdge(-76).concat(flip(wingEdge(76)), [wingAt(0.06, -1, -76)])
-  // It stands on the S1's white fins, flush with the deck's edges and closing over the plane's ends: from a
-  // short foot on the deck, their rear edges rise from the tail's top corner and their front edges sweep
-  // forward to the plane's nose, so they stay no bigger than the plane. A carbon tip on each sweeps up from
-  // the nose to stand above the trailing edge.
+  // White fins close the plane's ends; carbon tips sweep above its trailing edge.
   var fin = [[393, 98], [403, 98], [409.5, 122.1]]
     .concat(flip(chord).map(function(c) { var p = wingAt(c, 1, 0); return [p[0], p[1] + 0.3] }), [[383, 119.7], [393, 98]])
   var blade = smooth([[383, 120.4], [394, 123.6], [404, 126.6], [409, 129.6], [411.8, 129.2], [411.4, 125.6], [409.5, 122.1]], 3)

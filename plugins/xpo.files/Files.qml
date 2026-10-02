@@ -76,7 +76,6 @@ Item {
   }
   readonly property var crumbs: FilesIndex.crumbs(root.listedDir, root.home)
 
-  // ------------------------------------------------------------- surfaces
   readonly property color edge: Util.alpha(Color.menu.text, 0.13)
   readonly property color hoverFill: Util.alpha(Color.menu.text, 0.05)
   readonly property color activeFill: Util.alpha(Color.accent, 0.14)
@@ -187,7 +186,6 @@ Item {
       ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
                             Style.font.menuFamily, Style.font.subtitle)
       : ""
-  // Changing selection disarms delete.
   onSelChanged: { settle.restart(); ops.doomed = "" }
   // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
@@ -301,8 +299,6 @@ Item {
     root.move(Math.max(0, Math.min(i, root.rows.length - 1)) - root.index)
   }
 
-  // ------------------------------------------------------------------- edit
-  //
   // Editing is modal so printable keys cannot also reach the filter.
   property bool editing: false
   property bool dirty: false
@@ -350,7 +346,6 @@ Item {
 
   Timer { id: discardArmed; interval: 2000; onTriggered: root.discarding = false }
   Timer { id: savedFlash; interval: 1500 }
-  // ---------------------------------------------------------- rename, delete
   // Rename and create share the header's editable name field.
   property string naming: ""
   property string renameTo: ""

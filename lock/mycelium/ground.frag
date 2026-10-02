@@ -1,5 +1,4 @@
-// The ground the colony grows over, drawn once for the camera to move across: in red, where it
-// clouds up; in green, its grain. The colony's shader colours it.
+// Ground texture R: clouds; G: grain. mycelium.frag supplies the colour.
 #version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -27,8 +26,7 @@ float noise(vec3 p) {
 }
 
 void main() {
-    // In screen heights from the centre: clouds a few tenths across, their octaves turned so no
-    // grid shows, over a grain of a few pixels.
+    // Rotate cloud octaves to hide the grid; coordinates are screen heights from centre.
     vec2 p = (qt_TexCoord0 - 0.5) * resolution / resolution.y, g = p * 2.5;
     float warp = noise(vec3(g * 1.7, 5.0)), cloud = 0.0, weight = 0.55;
     for (int octave = 0; octave < 4; ++octave) {

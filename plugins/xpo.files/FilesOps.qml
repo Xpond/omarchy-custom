@@ -16,7 +16,7 @@ Item {
 
   function hold(e, move) {
     if (!e) return
-    root.held = { path: e.path, name: e.name, isDir: !!e.isDir, move: !!move }
+    root.held = { path: e.path, name: e.name, move: !!move }
     root.note((move ? "moving " : "copying ") + e.name)
   }
 

@@ -2,7 +2,6 @@ import QtQuick
 import qs.Commons
 import "FilesIndex.js" as FilesIndex
 
-// Breadcrumb, active filter/name, item count, and preview metadata on one line.
 Item {
   id: root
 
@@ -11,9 +10,7 @@ Item {
   height: Style.font.title + Style.spacing.controlPaddingY * 2
   clip: true
 
-  // One caret, blinking in one place: at the end of the path you are typing, or
-  // in the filter chip. Both wear the same beat rather than each running a
-  // timer of its own.
+  // Path, filter and rename share one caret timer.
   property bool caretLit: true
   Timer {
     running: panel.opened && (!!panel.naming || panel.filter.length > 0)
@@ -40,16 +37,11 @@ Item {
     font.pixelSize: Style.font.subtitle
   }
 
-  // Path, query, count: one left-flowing group. Right-aligning the
-  // count instead put it directly above the preview's own size and
-  // date, where two dim figures in a column read as two facts about one
-  // file -- and squeezing it over the narrow list column alone leaves
-  // it nowhere to go the moment the path or the query grows.
+  // Keep the count beside the path so it cannot be mistaken for preview metadata.
   Row {
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
-    // Wide enough that the count is not read as part of the path the
-    // caret is still sitting at the end of.
+    // Separate the count from the path's trailing caret.
     spacing: Style.spacing.xxl
 
     Row {
@@ -69,8 +61,7 @@ Item {
           Text {
             text: modelData
             color: Color.menu.text
-            // While a path is being typed the trail is all context and
-            // the tail is the live word, so nothing in the trail is lit.
+            // Only the unfinished path segment is active during completion.
             opacity: !panel.pathMode && index === panel.crumbs.length - 1 ? 0.95 : 0.5
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.subtitle
@@ -78,9 +69,7 @@ Item {
         }
       }
 
-      // The tail of a typed path, written as the next segment of the
-      // trail it extends. The crumbs already ARE the path typed so far;
-      // this is only the word they do not know yet.
+      // Completed segments are already in the breadcrumbs.
       Row {
         visible: panel.pathMode
 
@@ -97,14 +86,9 @@ Item {
       }
     }
 
-    // What you have typed to narrow the list. It sits in a pill of its
-    // own rather than trusting the accent to distinguish it: plenty of
-    // themes set `accent` to the same colour as the foreground, and
-    // then a coloured word next to the path is just another segment.
+    // A pill distinguishes the filter even when accent and foreground match.
     Rectangle {
-      // The same pill holds the new name while one is being typed -- see
-      // `beginRename`. It is lit differently so that a rename in progress can
-      // never be mistaken for a filter narrowing the list.
+      // Rename uses a separate colour so it cannot be mistaken for filtering.
       visible: !!panel.naming || (panel.filter.length > 0 && !panel.pathMode)
       anchors.verticalCenter: parent.verticalCenter
       width: field.width + Style.spacing.md * 2
@@ -113,9 +97,7 @@ Item {
       color: panel.naming ? Util.alpha(Color.accent, 0.16)
                             : Util.alpha(Color.menu.text, 0.07)
 
-      // Written in two halves with the caret between them, so it stands where
-      // the next character will go rather than always at the end. A filter is
-      // only ever typed at, so its caret is always the trailing one.
+      // Rename has a movable caret; filtering appends at the end.
       Row {
         id: field
         anchors.left: parent.left
@@ -153,7 +135,6 @@ Item {
     }
   }
 
-  // Preview heading, aligned over the preview column.
   Row {
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter

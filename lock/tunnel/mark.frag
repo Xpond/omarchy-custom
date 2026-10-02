@@ -1,17 +1,14 @@
-// One mark of the tunnel: the wheel's maze of centrelines, with a comet running through it as
-// the wheel's does, out from where the bottom bar meets the inner square and splitting at every
-// junction. Drawn on the icon's 30-unit grid, with 2 units around it for the glow.
+// Maze on the icon's 30-unit grid with 2 units of glow padding; comet splits at junctions.
 #version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
-// From mark.vert: the mark's opacity, its grid units per screen pixel, and its comet's head along
-// the maze, 0 at its start and 1 at the far end.
+// From mark.vert: opacity, grid units per pixel, and normalized comet progress.
 layout(location = 1) in float fade;
 layout(location = 2) in float pixel;
 layout(location = 3) in float head;
 layout(location = 0) out vec4 fragColor;
 
-// As mark.vert's.
+// Block must match mark.vert, including fields only that stage uses.
 layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
@@ -50,8 +47,7 @@ void stretch(vec2 a, vec2 b, float da, float db) {
 
 void main() {
     p = qt_TexCoord0 * 34.0 - 2.0;
-    // Every stretch lies on one of these lines across the grid, so a point far from all of them is
-    // far from the maze: past 1.25 units the glow has faded below half a level.
+    // Cull beyond the maze's grid lines once glow falls below half a colour level.
     vec2 off = min(min(abs(p - 1.0), abs(p - 5.0)), min(min(abs(p - 15.0), abs(p - 25.0)), abs(p - 29.0)));
     if (min(off.x, off.y) > max(1.25, pixel)) {
         fragColor = vec4(0.0);
@@ -78,20 +74,17 @@ void main() {
     // 97 is the farthest the comet runs.
     float a = along / 97.0;
     if (inward > 0.5) a = 1.0 - a;
-    // How far behind the head, as a share of the run: negative just ahead of it, where the
-    // front softens over about a unit, as the glow does to the side.
+    // Negative just ahead of the head, allowing a soft leading edge.
     float behind = fract(head - a + 0.01) - 0.01;
     float hot = smoothstep(-0.01, 0.0, behind) * (1.0 - smoothstep(0.0, tail, behind));
 
-    // The line is 0.07 wide, the comet up to twice that. Thinner than a pixel, it is drawn a
-    // pixel wide and dimmer, so distant marks fade instead of breaking up.
+    // Widen subpixel lines to one pixel and dim them so distant marks fade without breaking up.
     float width = 0.07 * (1.0 + hot);
     float drawn = max(width, pixel);
     float core = (1.0 - smoothstep(drawn * 0.5 - pixel * 0.5, drawn * 0.5 + pixel * 0.5, nearest))
                * min(1.0, width / pixel);
     float glow = hot * exp(-nearest * nearest * 4.0);
 
-    // The resting line in the mark's own hue, whitening towards the comet's head.
     vec3 fire = mix(tint.rgb, vec3(1.0), 0.6 * hot * hot);
     vec3 line = mix(tint.rgb * 0.5, fire, hot) * core;
     // Premultiplied: the line covers what's behind it, the glow only adds light.
