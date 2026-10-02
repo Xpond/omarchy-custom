@@ -21,10 +21,7 @@ Item {
   height: resultList.height
   layer.enabled: true
   layer.effect: MultiEffect {
-    autoPaddingEnabled: true
     shadowEnabled: true
-    shadowColor: "#000000"
-    shadowBlur: 1.0
     blurMax: 16
     shadowOpacity: 0.4
     shadowVerticalOffset: Style.space(3)
@@ -69,7 +66,6 @@ Item {
         MouseArea {
           anchors.fill: parent
           hoverEnabled: true
-          // Ignore synthetic hover moves caused by rows shifting under the cursor.
           onPositionChanged: function (mouse) {
             if (wheel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) wheel.resultIndex = resultCard.row
           }

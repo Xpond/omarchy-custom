@@ -62,8 +62,8 @@ vec2 unproject(vec2 q, vec2 a, vec2 b, out vec2 du, out vec2 dv) {
 }
 
 // A ring of petals or sepals, each a flat blade growing from the centre's rim, tilted open
-// radians out from the axis. Its outline follows garden.js's petal: widest at 70% of its
-// length, with rounded shoulders and a shallow notch at the tip.
+// radians out from the axis. Its outline: widest at 70% of its length, with rounded shoulders
+// and a shallow notch at the tip.
 void whorl(vec2 q, vec3 n, vec3 e1, vec3 e2, float petals, float open, float rim, float size, float breadth,
            float turn, float opacity, vec3 base, vec3 tip, vec3 back) {
     float loosen = sin(3.1416 * paint.y);

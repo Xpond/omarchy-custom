@@ -73,7 +73,6 @@ Item {
           radius: width / 2
           color: field.tint
           opacity: 0.035
-          antialiasing: true
         }
       }
 
@@ -88,7 +87,6 @@ Item {
           GradientStop { position: 1; color: Qt.darker(field.tint, 1.6) }
         }
         rotation: 45
-        antialiasing: true
       }
 
       Rectangle {
@@ -100,7 +98,6 @@ Item {
         color: "white"
         opacity: 0.75
         visible: point.depth === 2
-        antialiasing: true
       }
     }
   }

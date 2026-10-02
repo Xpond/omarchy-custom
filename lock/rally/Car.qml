@@ -13,7 +13,7 @@ Item {
   property Item environment
   property color lineColor: Color.lock.text
   // A fixed blue, so the comets read as trails against the lines: the theme accent can be
-  // darker than the lines (#8d8d8d here), and the lines' own color hides the comets in them.
+  // darker than the lines, and the lines' own color hides the comets in them.
   property color glowColor: "#7fd4ff"
   property real clock: duration
   // Drive-off timeline, 0..1 over driveTime.
@@ -371,7 +371,6 @@ Item {
   // streaks. The body keeps its parked shapes and takes its pose as a transform; only the
   // wheels are projected again, as they turn. The launch itself moves the car as a texture.
   onDriveChanged: {
-    if (!view) return
     var t = drive * driveTime, u = Math.max(0, (t - 500) / (driveTime - 500))
     launch = u * u * u
     lamps = t === 0 ? 0 : t < 50 ? 0.8 : t < 110 ? 0.1 : Math.min(1, t / 250)

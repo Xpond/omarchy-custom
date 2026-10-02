@@ -58,7 +58,7 @@ Window {
     if (s.design) {
       waitingForColony = s.design === "mycelium"
       preparationStarted = Date.now()
-      lock.design = s.design
+      lock.design = s.design; lock.showDesign()
       lock.backgroundPath = OUTPUT + "/lock/rally/neon-city.png"
       lock.loadBackground = true
       // The wallpaper loads asynchronously.

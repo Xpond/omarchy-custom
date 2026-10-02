@@ -38,7 +38,6 @@ ShellRoot {
     } else if (pending.action === "hidePreview") service.previewVisible = false
     serial = pending.serial
     pending = null
-    publish()
   }
   onSnapshotChanged: publish()
   onServiceChanged: dispatch()

@@ -46,14 +46,11 @@ PanelWindow {
   property int contentHeight: Style.space(200)
   property var borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
   property bool centerOnBar: false
-  // Center the card inside its existing full-screen surface.
-  property bool centerOnScreen: true
   property int openMotionDuration: 260
   property int closeMotionDuration: 150
   property int fadeDuration: 180
   property int closeFadeDuration: 130
   property real emergeScale: 0.96
-  property real travelFraction: 0.12
   property real maxTravel: Style.space(56)
   property bool open: false
   property int gap: Style.gapsOut  // distance between bar edge and panel
@@ -105,22 +102,10 @@ PanelWindow {
       dir = bar.lastSwitchDirection
       bar.lastSwitchDirection = 0
     }
-    if (popoutSwitching && dir !== 0) {
-      card.slideX = dir * maxTravel
-      card.slideY = 0
-      card.originScale = 1
-    } else {
-      card.slideX = offsetToAnchor.x
-      card.slideY = offsetToAnchor.y
-      card.originScale = emergeScale
-    }
+    var switching = popoutSwitching && dir !== 0
+    card.slideX = switching ? dir * maxTravel : 0
+    card.originScale = switching ? 1 : emergeScale
     entryMotion.restart()
-  }
-
-  function startExitMotion() {
-    exitX.to = offsetToAnchor.x
-    exitY.to = offsetToAnchor.y
-    exitMotion.restart()
   }
 
   // --- screen + lifetime ---------------------------------------------------
@@ -243,28 +228,8 @@ PanelWindow {
   // centering the card under the icon.
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
-  // Center of the owning bar button in surface coordinates.
-  readonly property point anchorCenter: {
-    anchorWatcher.transform  // reactive dependency
-    if (barPos === "bottom") return Qt.point(anchorScreenPos.x + anchorW / 2, screenH - barH / 2)
-    if (barPos === "top")    return Qt.point(anchorScreenPos.x + anchorW / 2, barH / 2)
-    if (barPos === "left")   return Qt.point(barW / 2, anchorScreenPos.y + anchorH / 2)
-    return Qt.point(screenW - barW / 2, anchorScreenPos.y + anchorH / 2)
-  }
-
-  // Short, capped entry offset toward the owning button.
-  readonly property point offsetToAnchor: {
-    if (centerOnScreen) return Qt.point(0, 0)
-    var dx = anchorCenter.x - (cardOrigin.x + contentWidth / 2)
-    var dy = anchorCenter.y - (cardOrigin.y + contentHeight / 2)
-    var length = Math.sqrt(dx * dx + dy * dy)
-    if (length < 1) return Qt.point(0, 0)
-    var travel = Math.min(length * travelFraction, maxTravel)
-    return Qt.point(dx / length * travel, dy / length * travel)
-  }
-
   readonly property point cardOrigin: {
-    if (centerOnScreen && screenW > 0 && screenH > 0) {
+    if (screenW > 0 && screenH > 0) {
       return Qt.point(Math.round(screenW / 2 - contentWidth / 2),
                       Math.round(screenH / 2 - contentHeight / 2))
     }
@@ -324,7 +289,7 @@ PanelWindow {
       popoutSwitching = false
       if (bar.activePopout === coordinatorKey) bar.releasePopout(coordinatorKey)
       if (popoutSwitchClosing) closeSwitchTimer.restart()
-      else startExitMotion()
+      else exitMotion.restart()
       entryPlayed = false
       syncSurfaceCount()
     }
@@ -343,14 +308,12 @@ PanelWindow {
   ParallelAnimation {
     id: entryMotion
     NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
-    NumberAnimation { target: card; property: "slideY"; to: 0; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
     NumberAnimation { target: card; property: "originScale"; to: 1; duration: root.openMotionDuration; easing.type: Easing.OutQuint }
   }
 
   ParallelAnimation {
     id: exitMotion
-    NumberAnimation { id: exitX; target: card; property: "slideX"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
-    NumberAnimation { id: exitY; target: card; property: "slideY"; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
+    NumberAnimation { target: card; property: "slideX"; to: 0; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
     NumberAnimation { target: card; property: "originScale"; to: root.emergeScale; duration: root.closeMotionDuration; easing.type: Easing.OutCubic }
   }
 
@@ -486,7 +449,6 @@ PanelWindow {
 
     // Transform offsets avoid fighting cardOrigin bindings.
     property real slideX: 0
-    property real slideY: 0
     property real originScale: 1
 
     // Scale before translation so scale does not shrink the offset.
@@ -497,7 +459,7 @@ PanelWindow {
         xScale: card.originScale
         yScale: card.originScale
       },
-      Translate { x: card.slideX; y: card.slideY }
+      Translate { x: card.slideX }
     ]
 
     Behavior on opacity {

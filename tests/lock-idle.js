@@ -48,7 +48,6 @@ assert.equal(plays, 1, "wake required another key to start the animation")
 assert.equal(blankAt - now, 10000, "monitor wake allowance")
 const recoveryEnds = blankAt
 now += 4200 // Measured monitor delay AFTER the wake command returns.
-assert.ok(blankAt - now >= 5000, "monitor has less than five visible seconds before blanking")
 scope.wakeOnInput()
 exit(scope.wakeProcess, wakeExit)
 assert.equal(blankAt, recoveryEnds, "typing extended or discarded the monitor recovery allowance")

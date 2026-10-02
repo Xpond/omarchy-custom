@@ -3,8 +3,7 @@
 A keyboard-driven directory browser, reached by typing `files` into the wheel.
 
 Two columns on one card: the directory on the left, what the selection *is* on
-the right. It answers where is it, what is in it, and open it — which is what a
-file manager actually gets reached for.
+the right.
 
     plugins/xpo.files/
       manifest.json     kind: "overlay", keepLoaded
@@ -31,8 +30,7 @@ a terminal.
 
 Every one that writes can cost you data when it is wrong, so none of them are
 quiet. Nothing is overwritten, a delete goes to the trash and is asked twice in
-red, and a save is confirmed by reading the file back. There is still no undo
-beyond the trash; `yazi` is installed and does the rest properly.
+red, and a save is confirmed by reading the file back.
 
 ## Keys
 
@@ -101,10 +99,6 @@ Both prefixes mean the same place, because home is the only root this panel
 has: `/xpo/omarchy-custom` and `~/xpo/omarchy-custom` are the same path. A
 leading slash is how you say "from the top", and the top here is `$HOME`.
 
-This is what makes the jail liveable. The original worry about a floor was that
-`Backspace` could walk you somewhere with no way back; typing a path *is* the
-way back, and `Home` is the other one.
-
 **A typed path is written into the trail, not beside it.** The breadcrumb
 already *is* the directory being listed, so the tail still being typed is drawn
 as the next segment of it — accent-coloured, with the caret at its end — and the
@@ -116,10 +110,8 @@ place read as two places. The count reads off the same tail (`root.query`), so
 ## Ordering
 
 Folders first and then alphabetically, until `Ctrl+O` asks for something else:
-**newest** first, then **largest** first, then back to name. The listing already
-prints a size and a date beside every name, and a browser that cannot order by
-them is asking you to read the rows. The header says which one you are in, and
-the order stays with the panel — it is a way of looking, not a place, so unlike
+**newest** first, then **largest** first, then back to name. The header says
+which one you are in, and the order stays with the panel — it is a way of looking, not a place, so unlike
 a remembered directory it cannot go stale.
 
 Where the filter landed only ranks under **name**: once you have asked for
@@ -157,9 +149,7 @@ stacked directly above the preview's size and date, and two dim figures in a
 column read as two facts about one file.
 
 The foot of the card carries the keys, centred, in key-and-word pairs: the key
-lit, the verb whispered. Weight is what separates them, not the run of spaces
-that used to — six phrases at one size and one opacity read as a list you have
-to parse to find the pairs. A hairline above it makes the row a band rather than
+lit, the verb whispered. A hairline above it makes the row a band rather than
 text floating in the padding.
 
 ## The preview
@@ -174,7 +164,7 @@ Four kinds of thing, one scroller:
 | any other text | the first 500 lines, syntax highlighted, with line numbers |
 | anything else | its size and `no preview` |
 
-The first four are read-only renderings. `Ctrl+E` replaces the fourth with the
+The first four are read-only renderings. `Ctrl+E` replaces the third or fourth with the
 file itself — see [Editing](#editing).
 
 A folder previews in the same scroller a file does, rather than in a second
@@ -210,11 +200,6 @@ The foot names what is held and what `Ctrl+V` would do with it; the heading says
 what happened. A move spends its source and the hold is released; a copy keeps
 it, so it can be placed again somewhere else.
 
-These are the operations the "browser, not a manager" rule was really about.
-They earn the exception on the same grounds editing did: a move between two
-directories is what people open a second pane for, and not having it is what
-sends you to a terminal.
-
 **Rename types into the filter chip**, which is already a text box with a caret
 in it, sitting where the name reads — so a rename needs no second field, only a
 different fill, so it cannot be mistaken for a filter narrowing the list. A name
@@ -234,11 +219,10 @@ freedesktop trash with its original path recorded, so it can be got back — the
 difference between a delete you can survive and one you cannot. It is still
 asked twice, because it is the one verb here that takes something away.
 
-The question is asked where you are looking. A note in the heading was missed
-entirely: the row itself now fills with the theme's urgent colour and the foot
-turns urgent and reads `del  again to trash <name>`. Any key that is not the
-second `Del` cancels it, and so does moving the selection — a second `Del` can
-never land on a row you did not aim it at.
+The question is asked where you are looking: the row itself fills with a fixed
+red and the foot turns red and reads `del  again to trash <name>`. Any key that
+is not the second `Del` cancels it, and so does moving the selection — a second
+`Del` can never land on a row you did not aim it at.
 
 **One process, one contract.** Every write goes through the same `Process` and
 the same exit codes: `0` done, `17` the name is taken, anything else failed.
@@ -258,10 +242,7 @@ back as `a wheel.md is already here` rather than being resolved by inventing a
 predict. Directories go with `cp -r`, and `mv` refuses to move one into itself
 without any help from here.
 
-**`Ctrl+Shift+N` makes one**, into the same chip a rename types into. It is the
-one gap the "browser, not a manager" line left that a browser trips over: you
-have walked to where the thing belongs, and making it there is the last reason to
-open a terminal.
+**`Ctrl+Shift+N` makes one**, into the same chip a rename types into.
 
 **The name says which of the two it is.** A dot in it is an extension, and an
 extension is what a file has — which is how the listing above reads them back
@@ -282,10 +263,7 @@ so both cross the same collision test and come back as the same `17`.
 
 **`Ctrl+Y` copies the selection's path**, through `wl-copy` with the path as an
 argument rather than spliced into the script — the discipline the move commands
-are written with. It was the one thing the panel could not do with a file it was
-showing you: name it to something else.
-
-There is no undo beyond the trash. That stays with `yazi`.
+are written with.
 
 The pasted row arrives on its own: `FolderListModel` watches the directory, so
 the paste only has to name what to land on — `pending`, the same mechanism the
@@ -294,7 +272,7 @@ wheel uses to hand a file over.
 ## Editing
 
 `Ctrl+E` turns the preview into a `TextEdit` over the same file, `Ctrl+S`
-writes it, `Esc` comes back. It is the only thing in this panel that writes.
+writes it, `Esc` comes back.
 
 | | |
 |---|---|
@@ -308,12 +286,7 @@ What makes it safe rather than merely possible:
 **It is modal, because the keyboard is a filter.** Every printable key in this
 panel lands in the search field; nothing can type into a file and into a search
 box at once. While `editing`, the whole keyboard goes to the editor and only the
-edit verbs are kept. `Keys.priority: Keys.BeforeItem` means the card's handler
-sees every key *before* the editor, focused or not — the same thing Omarchy's
-own `PanelKeyCatcher` documents — so what makes typing work is that the guard
-returns without accepting. The clipboard verbs are spelled out rather than left
-to `TextEdit`'s own handling: a panel this modal should not have verbs that only
-work by accident. Hover, clicks and the click-outside shield stop moving the
+edit verbs are kept. Hover, clicks and the click-outside shield stop moving the
 selection for the same reason.
 
 **It edits plain source, not the rendering.** What the preview draws is pygments
@@ -321,7 +294,7 @@ HTML or Qt's Markdown; editing a rendering saves the rendering — `<span
 class="k">def</span>` into your Python file. So the colour drops away for the
 length of the edit, which is also the clearest signal that you are looking at
 bytes rather than at a picture of them. The heading says `editing`, `unsaved`,
-`saved` or `write failed` in the accent while it lasts.
+`saved` or `write failed` while it lasts.
 
 **It refuses anything it did not read whole.** `head()` cuts a file past 500
 lines and marks the cut with `…`; saving that back would delete the rest of the
@@ -405,8 +378,7 @@ folders first *and* the filter's best match first *and* then alphabetical.
 Retyping a query re-lays the rows out under a cursor that has not moved, and
 `entered` fires on every row that slides beneath it — which drags the selection
 around mid-keystroke and leaves you unsure what `Return` will run. Real pointer
-motion is the only thing that should claim it. The same reasoning is written out
-at length in `WheelResults.qml`, which hit it first.
+motion is the only thing that should claim it.
 
 **A change handler can see a stale binding.** `showsCode` is a binding on
 `previewText`, and `onPreviewTextChanged` can run *before* that binding
@@ -433,9 +405,8 @@ with no pane covering for it, silence reads as a key that did nothing.
 
 **`FileView` does not tell you whether a write worked.** Neither `saved` nor
 `saveFailed` fires for `setText`; a permission failure only prints a warning.
-Verified by measurement, not assumption — see [Editing](#editing). A `reload()`
-in the same tick as the write is also swallowed, which is what the 150 ms is
-for.
+A `reload()` in the same tick as the write is also swallowed, which is what the
+150 ms is for.
 
 **`TextEdit` has no `lineHeight`.** It is a `Text` property, not a
 `QQuickTextEdit` one, so an edited file is set at the font's own leading rather
@@ -480,35 +451,22 @@ appearing under an open panel, which raises `count` with the model already
 
 ## Wiring
 
-`install.sh` does both halves — it links every `plugins/*/` into
-`~/.config/omarchy/plugins/`, registers the id in `shell.json`, and puts the
-opener on `PATH`:
-
-    ln -s ~/xpo/omarchy-custom/plugins/xpo.files ~/.config/omarchy/plugins/
-    ln -s ~/xpo/omarchy-custom/bin/omarchy-open-path ~/.local/bin/
-
 `bin/omarchy-open-path` is on `PATH` because a plugin directory is private to
 its owner. It routes by handler rather than calling `xdg-open` blindly:
 `text/plain` resolves to `nvim.desktop` here, and `xdg-open` launches that with
 no terminal attached, so nvim hangs invisibly and `Enter` looks like it did
 nothing.
 
-Nothing here opens an editor. A terminal handler, or no handler at all, is a
+Nothing here opens an editor. A terminal handler is a
 decline — the script exits `3`, and the browser keeps its place, because the
 file it is being asked about is already open in the preview pane. An image, a
 PDF, a video goes to `xdg-open`, and a zero exit is what tells the browser to
 step aside for it.
 
-The wheel no longer calls the script at all: a path picked out of `/` mode
-opens this browser instead, standing in the directory the path lives in with
-the path itself selected (`MenuIndex.pathPayload`).
-
 The wheel registers it in `MenuIndex.js` as an `EXTRAS` entry — searchable
 without consuming a ring slice, so the default ring keeps the even count that
 fills 3 and 9 o'clock. Being a slice rather than an app is what puts it above
-GNOME Files, whose entry is also called "Files". `Wheel.qml` lists `xpo.files`
-among the surfaces `closeAll` sweeps, so `SUPER+W` closes it instead of falling
-through to `killactive`.
+GNOME Files, whose entry is also called "Files".
 
 The backdrop is not this surface's. The wash and the blur behind the card
 belong to one scrim owned by the bar, which the panels, the wheel and the
@@ -516,18 +474,12 @@ clipboard hold a count on too — so opening the browser from the wheel changes
 what stands on the backdrop without the backdrop itself going anywhere. This
 surface only asks for that count when it opens (`Files.qml` `onOpenedChanged`)
 and lets it go when it closes; the bar holds the scrim 150 ms past the last
-release, which covers the ~55 ms a replacement surface takes to map. The layer
-rule for `omarchy-files` in `~/.config/hypr/looknfeel.lua` no longer carries
-blur — only `no_anim`, to stop Hyprland fading the map and unmap.
-
-Editing the plugin needs `omarchy-restart-shell` — QML components are cached, so
-`rescanPlugins` alone will not reload changed code.
+release, which covers the ~55 ms a replacement surface takes to map.
 
 ## Known limits
 
-- **Colour lands a beat after the text.** ~165 ms of debounce plus interpreter
-  start on every selection. There is no jump any more, but there is a wait.
-  Caching the last few results, or keeping one Python process alive to serve
+- **Colour lands a beat after the text.** Debounce plus interpreter start on
+  every selection. Caching the last few results, or keeping one Python process alive to serve
   requests, would be the next step.
 - Markdown is rendered by Qt, and Qt's importer is lossy: an indented code block
   keeps its indentation but not its distinction from surrounding prose, and a
@@ -541,15 +493,3 @@ Editing the plugin needs `omarchy-restart-shell` — QML components are cached, 
 - An image's pixel size comes from `identify`. Colour and dimensions are both
   niceties rather than dependencies: without ImageMagick there are no numbers,
   and the size and the date still stand.
-- **Only files the preview read whole are editable** — at most 500 lines and
-  256 KiB, valid UTF-8, not binary. Other encodings remain preview-only.
-- Only the first 500 lines of a file are ever shown, and only the first 400
-  entries of a previewed folder.
-- ~~**Opening the browser from the wheel flashes.**~~ Fixed. The flash was
-  never a timing problem — it was that each surface drew its own backdrop, so
-  the backdrop unmapped with the surface and took Hyprland's blur with it. Two
-  attempts to overlap the fades failed because they were treating the symptom.
-  The browser, the wheel and the clipboard now hold a count on the bar's one
-  scrim, the way the centered panels already did. Verified by sampling
-  `hyprctl layers` across a handover: `omarchy-panel-scrim` is present in every
-  sample, so there is no frame without the blur.

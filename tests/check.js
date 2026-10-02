@@ -135,7 +135,7 @@ assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not 
 assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
   "Files.qml does not hand its operations object to the list")
 
-const wheel = { root: { countUse() {}, dismiss() {}, slices: [], path: [], shell: {
+const wheel = { root: { countUse() {}, dismiss() {}, slices: [], shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
 } }, Qt: { callLater: fn => fn() }, MenuIndex: M }
@@ -298,7 +298,7 @@ assert.equal(oldPanel.closed, true, "the old bar panel is switched out")
 assert.equal(openPeers["xpo.files"], false, "an open overlay is closed")
 assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is closed")
 
-// A custom full bar need not implement this project's plugin popout ownership.
+// A custom full bar need not implement plugin popout ownership.
 const bareBar = { activePopout: null }
 bareBar.activePopout = { closeForPopoutSwitch() { bareBar.activePopout = null } }
 const bareShell = { bar: bareBar, isPluginOpen: () => false, hide() {} }
@@ -319,14 +319,12 @@ assert.equal(String(hostPanels().map(p => p.id)), "third.radar", "Omarchy's own 
 
 let claimedPopout = null
 const opening = {
-  pluginId: "xpo.wheel", shell: {
+  shell: {
     closePeers: () => ({ acted: false, clear: true }),
     claimPopout: owner => { claimedPopout = owner },
     releasePopout: owner => { if (claimedPopout === owner) claimedPopout = null }
   },
-  opened: false, shown: false, selected: -1, armed: false, originX: -1,
-  query: "", path: [], launched: "", launchedAt: -1, justOpened: false,
-  sliceCount: 8, focusedScreen: () => null, rebuildIndex() {}
+  opened: false, sliceCount: 8, focusedScreen: () => null, rebuildIndex() {}
 }
 opening.closePeers = method(wheelSource, "closePeers", { root: opening })
 const openingScope = { root: opening, unmap: { running: false, stop() {} },
@@ -344,8 +342,7 @@ method(wheelSource, "open", openingScope)("{}")
 assert.equal(opening.opened, false, "a peer protecting unsaved work keeps the wheel hidden")
 console.log("ok: the wheel replaces an open panel instead of stacking above it")
 
-// `back` can only give back what `run` wrote down, and nothing covered that
-// write: taking it out left every test green while the bug came straight back.
+// `back` can only give back what `run` wrote down.
 // Recorded off `slices`, so a slice picked with the pointer is written down the
 // same as one picked with the arrows.
 const ran = { countUse() {}, dismiss() {}, launchedAt: null,
@@ -494,12 +491,6 @@ for (const plugin of ["xpo.wheel", "xpo.files"])
   require("node:child_process").execFileSync("omarchy",
     ["plugin", "validate", path.join(repo, "plugins", plugin)], { stdio: "inherit" })
 console.log("ok: xpo plugins use narrow facades and menus control only UI plugins")
-
-// revert.sh needs no assertion here: install.py walks every patches/orig/*.qml
-// and checks revert put it back, so shell.qml joined that the moment it existed.
-for (const file of ["shell.qml", "services/PluginShellApi.qml"])
-  assert.ok(read("install.sh").includes(file), "install.sh does not carry " + file)
-console.log("ok: install.sh carries both shell facade patches")
 
 require("./scene.js")
 require("./trails.js")

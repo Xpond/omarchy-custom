@@ -26,8 +26,8 @@ assert shader.count("vec4(mix(base, colour, line), 1.0)") == 1, "cannot isolate 
 (design / "mycelium.frag").write_text(shader.replace("vec4(mix(base, colour, line), 1.0)", "vec4(vec3(line), 1.0)"))
 subprocess.run(["/usr/lib/qt6/bin/qsb", "--glsl", "100 es,120,150", "--hlsl", "50", "--msl", "12",
                 "-o", str(design / "mycelium.frag.qsb"), str(design / "mycelium.frag")], check=True)
-# Three fine, constant-width strands at a shallow angle: the original triangular teeth are
-# easiest to see here. Growth crosses the packed step's 255 -> 256 byte boundary.
+# Three fine, constant-width strands at a shallow angle: triangular teeth are easiest to see
+# here. Growth crosses the packed step's 255 -> 256 byte boundary.
 (design / "grow.js").write_text('''.pragma library
 function begin(aspect) { return function() { return grow(aspect) } }
 function grow(aspect) {
@@ -86,8 +86,8 @@ for name, scale in [("1080", 1), ("4k", 2)]:
         width = 260 * scale
         data = pixels(name, f"{width}x{60*scale}+{810*scale}+{(350+65*strand)*scale}")
         peaks = [max(data[x::width]) for x in range(width)]
-        # A uniform strand should not develop regularly spaced bright teeth. The old bilinear
-        # reconstruction fluctuates by 19% at 1080p; smooth reconstruction stays below 16%.
+        # A uniform strand should not develop regularly spaced bright teeth. Bilinear reconstruction
+        # fluctuates by 19% at 1080p; smooth reconstruction stays below 16%.
         variation = statistics.pstdev(peaks) / statistics.mean(peaks)
         assert min(peaks) > 0, f"{name}: broken strand {strand}"
         assert variation < 0.16, f"{name}: strand {strand} has {variation:.1%} brightness variation"

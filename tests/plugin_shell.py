@@ -58,7 +58,6 @@ Item {
 
     run("plugin-loader-capabilities", '''
   property var shell: root
-  property string omarchyPath: ""
   property var _pluginShellApis: ({})
   property var _pluginShellApiDescriptors: ({})
   property var _pluginSurfaceStates: ({})

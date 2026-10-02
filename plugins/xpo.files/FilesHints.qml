@@ -1,26 +1,21 @@
 import QtQuick
 import qs.Commons
 
-// Every key the panel answers to, in the order you reach for them: a browser
-// with no visible verbs is one you have to remember. Key and word are told
-// apart by weight rather than by space, so the pairs group themselves instead
-// of reading as eight phrases in a row.
+// Key and word are told apart by weight rather than by space, so the pairs
+// group themselves.
 //
 // The row is the panel's status line as much as its legend -- it is where a
 // held file says what ctrl+v would do with it.
 Item {
   id: root
 
-  // The panel, for the state the legend reads. Passed rather than reached for,
-  // so this file has one dependency and it is visible at the call site.
   property var panel: null
 
   implicitHeight: hints.height
 
   // A delete waiting for its second press owns the whole row and says so in
-  // the urgent colour: the note in the heading was too far from where you are
-  // looking, and being asked a destructive question quietly is worse than not
-  // being asked.
+  // red: being asked a destructive question quietly is worse
+  // than not being asked.
   readonly property bool arming: !!panel && !!panel.doomed
 
   readonly property var pairs:

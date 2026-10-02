@@ -14,7 +14,6 @@ echo "removed post-update hook"
 
 python3 "$REPO/scripts/user-config.py" revert ~/.config/hypr/hyprland.lua "$STATE" ~/.local/bin
 
-# Remove each plugin link and registration.
 for p in "$REPO"/plugins/*/; do
   id=$(basename "$p")
   rm -f ~/.config/omarchy/plugins/"$id"

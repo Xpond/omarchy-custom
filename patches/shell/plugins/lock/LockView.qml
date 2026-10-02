@@ -87,8 +87,6 @@ Item {
     if (inputEnabled) Qt.callLater(forcePasswordFocus)
     showDesign()
   }
-  // The first design loads on completion, once every property has its final value.
-  onDesignChanged: if (scene.status !== Loader.Null) showDesign()
   onLoadBackgroundChanged: if (loadBackground) tell("play")
   onDrivingChanged: if (driving) tell("leave")
   onBlankedChanged: if (loadBackground && !driving) tell(blanked ? "hide" : "play")

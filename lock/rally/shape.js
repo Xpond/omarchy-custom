@@ -188,7 +188,7 @@ function builder() {
 
   // Painted surfaces by tone (see Car.qml's paint). A tone fills even-odd, so an outline inside another is a hole:
   // windows and grille; the wheel wells have dark backing. Rubber and the dash fill by winding
-  // instead, so a tread and its tyre wall merge (the rim's hole runs backwards). Surfaces on a wheel
+  // instead (the rim's hole runs backwards). Surfaces on a wheel
   // carry its axle and turn with it, but for those that are still, like the treads.
   function surface(tone, pts, axle, still) { surfaces.push({ tone: tone, pts: pts.map(function(p) { return warp(axle === undefined ? p : grow(p, axle)) }), axle: axle, still: still }) }
   function solid(tone, pts, axle, still) { surface(tone, pts, axle, still); surfaces[surfaces.length - 1].hull = true }

@@ -22,7 +22,6 @@ Item {
   }
   onWidthChanged: Qt.callLater(seed)
   onHeightChanged: Qt.callLater(seed)
-  Component.onCompleted: Qt.callLater(seed)
   // Build in small slices so loading and input stay responsive; release the builder when done.
   Timer {
     interval: 1
@@ -38,7 +37,6 @@ Item {
   property int drawn: 0
   onColonyChanged: { drawn = 0; web.requestPaint(); times.requestPaint(); shine.requestPaint(); deeper.requestPaint() }
 
-  // Runs while the colony spreads or leaves, never while blanked; growth waits for the canvases.
   property real time: 0
   FrameAnimation {
     running: !root.host.blanked && (root.spreading || leaving.running)
@@ -102,7 +100,6 @@ Item {
     anchors.fill: parent
     visible: false
     antialiasing: false
-    smooth: true
     renderStrategy: Canvas.Threaded
     onPainted: if (root.colony) root.drawn++
     onPaint: {

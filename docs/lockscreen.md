@@ -75,6 +75,7 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock/rally/car-focus.frag` / `.qsb` | Final camera focus pass, source and compiled |
 | `lock/rally/neon-city.png` | Illustrated background and paint reflection source |
 | `tests/lock.js` | Finite tracing and drive-off frames, paint sweep, glass clipping and flat-pose bounds |
+| `tests/lock-idle.js` | The shared five-second idle blank, the monitor wake allowance and one replay per wake |
 | `tests/mycelium.js` | Colony coverage, arrival steps and light distribution |
 | `tests/mycelium-render.py` | Strand smoothness at 1080p and 4K, and growth across the packed step boundary |
 | `tests/meadow-render.py` | Wind keeps roots fixed, bends stems coherently and moves them smoothly, in the lettering and on the near bank, at 1080p and 4K |
@@ -94,12 +95,6 @@ command. This releases the renderer's native and graphics caches. The worker sta
 while locked, including while blanked, and survives a desktop-shell restart. Only lock,
 preview and hide-preview commands cross the private runtime socket; passwords stay in the worker.
 Its normal startup also runs the existing stranded-lock recovery check before retiring.
-
-Five files exceed the ~200-line limit, each reading best whole: `LockView.qml` (about 300
-lines, mostly the stock password field), `Car.qml` (about 420: the car's state and the logic
-that drives it), `Paintwork.qml` (about 360: a mask and paint that must stay in step),
-`shore.frag` (about 225: one pass whose water, foam, light and sand all follow its surges), and
-`Service.qml` (about 630: kept together so installer rebases retain upstream authentication fixes).
 
 ## Meadow
 
@@ -220,7 +215,7 @@ according to the length it feeds, including its branches. The result contains pa
 width, segments grouped by arrival step, and a coarse map of density and average arrival time.
 The scene calls `begin()` and resumes its builder with a 3ms budget on each timer tick, so colony
 creation leaves time for input and the first frame. It pauses while blanked and releases the
-builder when complete. `grow()` runs the same builder synchronously for geometry tests.
+builder when complete.
 
 `Scene.qml` draws four canvases once, each on the canvas thread rather than holding up the lock:
 the arrival map takes a quarter of a second. Growth starts once all four have drawn.
@@ -304,7 +299,6 @@ The scene uses a painted neon-city plate behind the live car, a contact shadow,
 and a subdued wet-floor reflection. The grille
 and wheel wells have solid dark backing so the bright pavement cannot show through.
 The accepted artwork is **1672×941**, generated with the built-in imagegen tool.
-A native 4K replacement is deferred. The original prompt is saved beside the image.
 
 The car is framed at 89% scale about screen centre, then lowered by 4% of screen
 height. The shadow and floor reflection share these transforms through the drive-off.
@@ -500,8 +494,8 @@ finishes before a queued wake starts. Input after a quiet second runs the wake s
 steady typing or a moving mouse just restarts the timeout. The wake allowance is a margin,
 not a signal that the physical monitor has finished waking.
 
-Authentication stays in the stock trusted lock plugin. On success, `unlocking`
-disables input and calls `driveOffThenUnlock()`; its independent timer calls `finishUnlock()`
+Authentication stays in the stock trusted lock plugin. On success, `driveOffThenUnlock()`
+sets `unlocking`, which disables input; its independent timer calls `finishUnlock()`
 after 550ms for mycelium or 1100ms for the other designs. Each lock view sets the interval from
 its selected design; 1100ms remains the fallback if no view loads. The field fades out within
 300ms, still reading "Checking…", so it is gone before any design finishes its exit.
@@ -557,22 +551,6 @@ so crash-handler pipes cannot hold the test open.
 
 ## S1 E2 history
 
-The car began as an Ur-quattro and was converted to the Sport quattro S1 E2 against
-`car-refs/`, 57 local photos (git-ignored) of the HB Audi Team S1 E2 #2 (Mikkola/Hertz).
-Its side profile was overlaid on `car-refs/05.jpg`, aligned at the front axle and
-ground and scaled by the real 2224 mm wheelbase. The new proportions are permanent:
-
-| Design units (≈ cm) | Ur-quattro model | S1 E2 photo | Model now |
-|---|---|---|---|
-| Front overhang | 79 | ~98 | ~99 (nose warp 30 → 10) |
-| Wheelbase | 252 | 222 | 222 (rear axle 352 → 322) |
-| Door rear edge → rear axle | 90 | ~56 | 60 |
-| Rear axle → tail | 92 | ~83 | 83 (tail 444 → 405) |
-
-Roof (134) and belt (93) already matched. The glass, cabin, rocker step, stripes, fuel
-flap, taillamp, streak points and the shader's pitch pivot followed the rear axle, and
-`carLower` gained its 3% x shift to re-centre the shorter car.
-
 Rejected along the way; don't retry these without a new direction from the user:
 
 - **Bonnet vents:** triangular S1 openings, aligned louvres, black-backed pockets with
@@ -589,7 +567,7 @@ Rejected along the way; don't retry these without a new direction from the user:
 
 ## Remaining work
 
-- Custom Martini/Omarchy livery on the S1 E2 body; aero parts remain subject to visual review.
+- The S1 E2's aero parts remain subject to visual review.
 - Thin gaps along the roof and belt show during pitch.
 - Multi-monitor and fingerprint unlock still need device testing. Typing immediately
   after a wake command completes can precede the physical display becoming visible.

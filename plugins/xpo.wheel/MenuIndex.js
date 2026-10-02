@@ -59,7 +59,7 @@ function lines(raw) {
   return out
 }
 
-// Shell-quote theme and font names.
+// Shell-quote names.
 function quote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'"
 }
@@ -153,7 +153,7 @@ function barWidgets(raw) {
   var ids = {}
   for (var section in layout) {
     var row = layout[section]
-    if (!row || !row.length) continue
+    if (!row) continue
     for (var i = 0; i < row.length; i++) if (row[i] && row[i].id) ids[row[i].id] = true
   }
   return ids
@@ -209,7 +209,7 @@ function populated(items, cond) {
   return out
 }
 
-function shows(items, id, e, cond) {
+function shows(id, e, cond) {
   if (!passes(e, id, cond)) return false
   return e.action || e.provider || !cond.ready || cond.full[id] === true
 }
@@ -230,7 +230,7 @@ function childrenOf(items, parent, cond) {
   for (var id in items) {
     if (id.indexOf(prefix) !== 0 || id.split(".").length !== depth) continue
     var e = items[id]
-    if (!shows(items, id, e, cond)) continue
+    if (!shows(id, e, cond)) continue
     out.push(entryOf(id, e))
   }
   return out
@@ -245,7 +245,7 @@ function ringOf(items, ids, cond) {
     var id = String(ids[j])
     if (byPlugin[id]) { out.push(byPlugin[id]); continue }
     var e = items[id]
-    if (e && shows(items, id, e, cond)) out.push(entryOf(id, e))
+    if (e && shows(id, e, cond)) out.push(entryOf(id, e))
   }
   return out
 }
@@ -270,7 +270,7 @@ function menuRows(items, cond) {
   var out = []
   for (var id in items) {
     var e = items[id]
-    if (!e || e.search === false || !shows(items, id, e, cond)) continue
+    if (!e || e.search === false || !shows(id, e, cond)) continue
     var trail = trailOf(items, id)
     var row = entryOf(id, e)
     row.trail = trail.join(" › ")
@@ -325,7 +325,7 @@ function liveRows(sources) {
   return out
 }
 
-// Every term must start a word. Sort by label rank, kind, use, recency, then length.
+// Every term must start a word.
 // Windows always rank as direct hits; squashed text keeps "wifi" matching "Wi-Fi".
 function words(text) {
   var low = String(text || "").toLowerCase()
@@ -346,7 +346,6 @@ function squash(text) {
 }
 
 function search(index, query, limit, uses) {
-  var counts = uses || {}
   var q = String(query || "").trim().toLowerCase()
   if (!q) return []
   var terms = q.split(/[^a-z0-9]+/)
@@ -369,7 +368,7 @@ function search(index, query, limit, uses) {
              : squash(e.label).indexOf(squashed) === 0 ? 0
              : startsWord(words(e.label), spaced) ? 1 : 2
     hits.push({ rank: rank, exact: squash(e.label) === squashed ? 0 : 1,
-                uses: -(counts[keyOf(e)] || 0), len: e.label.length, entry: e })
+                uses: -(uses[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
   // An exact label beats a more-used one it prefixes: "lock" locks before it lists designs.
   hits.sort(function (a, b) {

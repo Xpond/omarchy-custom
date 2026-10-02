@@ -270,7 +270,7 @@ Item {
     return root.shell ? root.shell.closePeers() : { acted: false, clear: true }
   }
 
-  function open(payloadJson) {
+  function open() {
     // Treat a press during fade-out as a fresh open.
     var wasOpen = root.opened && !unmap.running
     unmap.stop()
@@ -310,7 +310,7 @@ Item {
 
   function dismiss(immediate) {
     root.close(immediate)
-    if (root.shell && typeof root.shell.hide === "function") root.shell.hide(root.pluginId)
+    if (root.shell) root.shell.hide(root.pluginId)
   }
 
   function closeForPopoutSwitch() { root.dismiss(true) }
@@ -588,7 +588,7 @@ Item {
 
   // Set command before running; independent bindings can race.
   onMenuItemsChanged: {
-    if (!root.menuItems || !Object.keys(root.menuItems).length) return
+    if (!Object.keys(root.menuItems).length) return
     conditionScan.command = ["bash", "-c", MenuIndex.conditionScript(root.menuItems)]
     conditionScan.running = true
   }
@@ -648,11 +648,7 @@ Item {
       fragmentShader: Qt.resolvedUrl("logo.frag.qsb")
       layer.enabled: visible
       layer.effect: MultiEffect {
-        autoPaddingEnabled: true
         shadowEnabled: true
-        shadowColor: "#000000"
-        shadowBlur: 1.0
-        blurMax: 32
         shadowOpacity: 0.65
         shadowHorizontalOffset: 2
         shadowVerticalOffset: 5
@@ -699,7 +695,6 @@ Item {
       id: keys
       anchors.fill: parent
       focus: true
-      Keys.priority: Keys.BeforeItem
       Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
     }
 
@@ -717,11 +712,7 @@ Item {
         height: width
         layer.enabled: true
         layer.effect: MultiEffect {
-          autoPaddingEnabled: true
           shadowEnabled: true
-          shadowColor: "#000000"
-          shadowBlur: 1.0
-          blurMax: 32
           shadowOpacity: 0.5
           shadowVerticalOffset: Style.space(5)
         }
@@ -758,7 +749,6 @@ Item {
           Row {
             id: field
             anchors.centerIn: parent
-            spacing: 0
             opacity: root.searching ? 1 : 0.45
             readonly property real budget: root.searchWidth - Style.spacing.rowPaddingX * 2
 

@@ -52,10 +52,6 @@ Item {
   }
 
   function focusEditor() { editor.forceActiveFocus() }
-  function copy() { editor.copy() }
-  function cut() { editor.cut() }
-  function paste() { editor.paste() }
-  function selectAll() { editor.selectAll() }
 
   function revealCursor() {
     if (!panel.editing) return
@@ -118,7 +114,6 @@ Item {
 
       Text {
         visible: root.lineNumbers.length > 0
-                 && (!panel.showsMarkdown || panel.editing)
         text: root.lineNumbers
         horizontalAlignment: Text.AlignRight
         color: Color.menu.text
@@ -138,9 +133,7 @@ Item {
         opacity: 0.92
         selectionColor: Util.alpha(Color.accent, 0.35)
         selectedTextColor: Color.menu.text
-        selectByMouse: true
         persistentSelection: true
-        wrapMode: Text.NoWrap
         textFormat: TextEdit.PlainText
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.subtitle

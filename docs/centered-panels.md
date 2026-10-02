@@ -1,6 +1,4 @@
-# Centered shell panels — state of the work
-
-Omarchy 4.0.0.alpha · Quickshell 0.3.1 · Hyprland 0.56.2 · DP-3 1920x1080 **@144Hz**
+# Centered shell panels
 
 Makes Omarchy's bar panels (Display, Audio, Network, Power…) open centered on
 screen over a blurred desktop, instead of tucked against the bar edge beside
@@ -9,39 +7,23 @@ their widget.
 **Working:** centering, blur, Ctrl+Left/Right panel switching, the
 panel-to-panel handoff, and the open/close animation.
 
-The animation problem that dominated sessions 1–2 was **not in the QML at
-all** — Qt was rendering the whole shell at 62Hz on a 144Hz display. One env
-var fixed it; see [The render loop](#the-render-loop-read-this-first).
-
 ---
 
 ## 1. How to work on this
 
-```bash
-~/xpo/omarchy-custom/install.sh   # patch the packaged shell, restart it
-~/xpo/omarchy-custom/revert.sh    # restore Omarchy's QML and remove managed desktop setup
-```
-
-`install.sh` needs a sudo password, so it must be run from a terminal
-(`! ~/xpo/omarchy-custom/install.sh` inside Claude Code). It is idempotent —
-re-running when nothing has changed prints `already up to date` and exits.
-
 ```
 orig/     upstream merge bases, updated by successful rebases
 shell/    patched copies, mirroring /usr/share/omarchy/shell/
-docs/     this file
 ```
 
 ### The constraint that shapes everything
 
 The files being changed are **shared shell chrome**, not plugins.
 `omarchy plugin clone` cannot reach them, and `/usr/share/omarchy/` is
-package-owned, so **`omarchy update` overwrites all five** and the shell
-silently reverts to stock. This happened on the 4.0.0.alpha → 4.0.2 update.
-The user ruled out cloning panels and ruled out changing panel styling, which
-is what put the work in shared chrome.
+package-owned, so **`omarchy update` overwrites them** and the shell
+silently reverts to stock.
 
-**This is now self-repairing.** `omarchy update` runs `omarchy-hook
+**This is self-repairing.** `omarchy update` runs `omarchy-hook
 post-update` right after migrations, and `install.sh` installs a hook there
 with this checkout's path baked in. Rerun `install.sh` after moving the
 checkout. `revert.sh` removes the hook, so a later update cannot reinstall
@@ -84,38 +66,14 @@ Eight package-owned QML files plus Hyprland config.
 
 | File | Change |
 |---|---|
-| `Ui/KeyboardPanel.qml` | `centerOnScreen` placement in `cardOrigin`; `slideX`/`slideY`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
-| `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` (19 lines) |
+| `Ui/KeyboardPanel.qml` | centred placement in `cardOrigin`; `slideX`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
+| `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
-| `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one (18 lines) |
+| `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one |
 | `plugins/lock/LockView.qml` | hosts the chosen lock-screen design from `lock/` behind a frosted password field; not panel-related, but patched through the same machinery. See [`lockscreen.md`](lockscreen.md) |
 | `plugins/lock/Service.qml` | runs in its own worker process, started by `lock-session/Bridge.qml`; on successful authentication the design plays its exit before a timer releases the lock; tracks `blanked` for the wake flow |
 | `services/PluginShellApi.qml` | narrow peer-panel, popout, and shared-scrim callbacks without exposing host objects |
 | `shell.qml` | grants menu plugins control of enabled non-authentication UI plugins and implements the callbacks above |
-
-The managed block in `~/.config/hypr/hyprland.lua` supplies these settings
-(the original prototype kept them manually in `looknfeel.lua`):
-
-```lua
-hl.config({ decoration = { blur = { enabled = true, size = 4, passes = 2 } } })
-
--- The one blurred surface. Everything else stands on it.
-hl.layer_rule({
-  match = { namespace = "omarchy-panel-scrim" },
-  blur = true,
-  ignore_alpha = 0.05,
-  no_anim = true,
-  animation = "none",
-})
-
--- Overlay blur would blur the shared backdrop again on every animation frame.
-hl.layer_rule({
-  match = { namespace = "^(omarchy-wheel|omarchy-files)$" },
-  blur = false,
-  no_anim = true,
-  animation = "none",
-})
-```
 
 `config/hyprland.lua` is the installed source of truth. It explicitly disables
 blur on the wheel/files overlays, then installation reloads Hyprland and checks
@@ -197,9 +155,6 @@ This fixes the missing shared blur without granting the plugin ShellRoot.
 `tests/plugin_shell.py`, included in the runtime suite, exercises the actual
 loader and API factory together. It checks restricted host access, menu
 capabilities, backdrop counting, duplicate reports, and panel handoffs.
-An isolated Wayland comparison against `0ca54c8` confirmed that the registry
-manifest restores `omarchy-panel-scrim`; the installed fix was also confirmed
-on the desktop.
 
 ---
 
@@ -219,7 +174,7 @@ judder, on every panel, in both directions. Measured with a bare `qml6` app:
 | `threaded` | **6.9ms** | **145Hz** |
 | `basic` | 16.0ms | 62Hz |
 
-The installer now includes this line in its managed Hyprland block:
+The installer includes this line in its managed Hyprland block:
 
 ```lua
 hl.env("QSG_RENDER_LOOP", "threaded")
@@ -228,25 +183,18 @@ hl.env("QSG_RENDER_LOOP", "threaded")
 **It must be `hl.env()` in Lua.** Writing `env = QSG_RENDER_LOOP,threaded` in
 `hyprland.conf` is silently ignored — the same legacy-syntax trap as
 `layerrule` below. `hyprctl configerrors` stays clean, the line looks right,
-and the var is simply never exported. That cost a full reboot to discover.
+and the var is simply never exported.
 (`hyprland.conf` *is* loaded — its binds work — so this is specifically the
 `env` keyword, not the file.) Omarchy launches the shell from a `hyprland.start`
 callback, after configuration is parsed. Installation also reloads configuration
-before restarting the shell. Older manual `looknfeel.lua` settings remain untouched.
+before restarting the shell.
 
 In-shell, that took the entry animation from ~12 rendered frames to ~44.
 
 One side effect worth knowing: `threaded` exposes a latent binding loop in
 stock `plugins/panels/power/Panel.qml` (`opened`) that `basic` never
 surfaced — it appears in the journal the moment the render loop changes. It
-was harmless here (this box has no battery, and power binds
-`open: root.opened && root.batteryPresent`, so that panel could never open —
-verified as 0 layer surfaces while "open", against clock's 1), and it is now
-moot: the widget was dead weight on a desktop and has been turned off with
-`omarchy plugin disable omarchy.power`, which stops the panel being
-instantiated at all. If you re-enable it on a machine with a battery, expect
-the warning back; it is stock, package-owned, and not worth another patched
-file.
+is stock, package-owned, and not worth another patched file.
 
 The `height` loops in `network/Panel.qml` are unrelated, intermittent, and
 predate all of this work — they appear on shell starts going back well before
@@ -257,8 +205,7 @@ the prototype.
 
 ### Verify it, don't assume it
 
-This was claimed fixed three times while still broken, because "the env var is
-in a config file" proves nothing. Two checks that prove it, both reboot-free:
+Two checks that prove it, both reboot-free:
 
 ```bash
 # 1. Does a process spawned by Hyprland actually get the var?
@@ -276,13 +223,6 @@ rather than its configuration. Note `hyprctl dispatch` needs the Lua
 dispatcher form (`hl.dsp.exec_cmd`); the legacy `hyprctl dispatch exec cmd`
 errors out on this parser.
 
-One dead line nearby, pre-existing and left alone: `hyprland.conf:9` sources
-`~/.local/share/omarchy/default/hypr/envs.conf`, which does not exist —
-Hyprland ignores a missing `source` in silence. Harmless: the NVIDIA vars it
-would have set are set anyway by Omarchy's `default/hypr/nvidia.lua`, which
-also picks `direct` vs `egl` rather than hardcoding one. (`~/.config/hypr/envs.conf`
-duplicated those and was never sourced either; deleted.)
-
 Check `systemctl --user show-environment` before concluding a var is unset —
 this session's env arrives through uwsm, not only through Hyprland.
 
@@ -291,9 +231,7 @@ this session's env arrives through uwsm, not only through Hyprland.
 **Omarchy 4 uses Hyprland's Lua parser.** Legacy `layerrule = blur on, …`
 lines in a `.conf` file are **silently ignored** — no error, no warning,
 `hyprctl configerrors` stays clean. Layer rules must go through
-`hl.layer_rule({...})`. (The pre-existing `layerrule = blur on, match:namespace
-logout_dialog` at `~/.config/hypr/hyprland.conf:31` is legacy syntax and has
-never done anything. Left alone — it predates this work.)
+`hl.layer_rule({...})`.
 
 **`hyprctl keyword` cannot set layerrules** on this parser: *"keyword can't
 work with non-legacy parsers."* Edit the Lua and `hyprctl reload`.
@@ -305,10 +243,8 @@ like a broken scrim rather than a blur problem.
 
 **Only the scrim surface is blurred.** Every other shell surface — the panels,
 `omarchy-wheel`, `omarchy-files`, `omarchy-clipboard` — draws a card over it
-and nothing behind. That is what makes a handover seamless: they unmap and
-remap as you tab between them and as the wheel opens what you picked, and blur
-bound to any of them blinks out mid-switch. Blurring one of them *as well as*
-the scrim is not free either — it blurs an already blurred desktop a second
+and nothing behind. Blurring one of them *as well as*
+the scrim is not free — it blurs an already blurred desktop a second
 time inside the card, and recomputes a fullscreen blur on every frame the
 wheel's ring spins.
 
@@ -322,16 +258,6 @@ from 278ms to 132ms.
 fullscreen blur recompute per frame. It snaps on, and is *held* through the
 close by a timer instead.
 
-**`backingWindowVisible` is Qt-side, and fires in the same millisecond as
-`open`.** An earlier draft of this doc claimed panel surfaces cost ~100ms to
-map and that the entry animation had to wait for that edge. Per-frame traces
-disprove it: `open=true`, `mapped=true` and `entry-start` all land at t=0. Two
-fixes built on that premise (latching the fade to the map edge, animating the
-card's height) were measured to be no-ops and were reverted.
-
-What *is* real is the delay before the first **rendered** frame, and it is
-per-panel work rather than surface mapping — see §5.
-
 **Qt Quick already applies transforms on the GPU.** `layer.enabled` to "avoid
 re-rasterization" was based on a false premise and made things measurably
 worse — it only added an FBO allocation and an extra render-to-texture pass.
@@ -343,11 +269,6 @@ then jumps. Both directions want fast-start (`Out*`) curves.
 ---
 
 ## 4. Measuring, instead of guessing
-
-Every wrong turn in this project came from tuning motion by eye or by theory.
-Three separate hypotheses (per-panel `onOpenedChanged` work, fade/motion
-desync, mid-animation resize) all survived code review and all died on contact
-with a frame trace. Measure first.
 
 ### The instrument that works: an in-QML frame probe
 
@@ -365,7 +286,7 @@ FrameAnimation {
   onTriggered: root.probeRows.push([
     Math.round(Date.now() - root.t0),
     Math.round(frameTime * 10000) / 10,   // ms since previous rendered frame
-    card.slideY, card.originScale, card.opacity, card.height
+    card.slideX, card.originScale, card.opacity, card.height
   ].join(","))
   onRunningChanged: if (!running) {
     for (var i = 0; i < root.probeRows.length; i++) console.log("[fr]", root.probeRows[i])
@@ -413,25 +334,9 @@ done
 
 Note `/usr/bin/qml` is **Qt 5.15** on this box; you want `qml6`.
 
-### Video capture — a last resort
-
-Session 1 built a `gpu-screen-recorder` + `ffmpeg` per-frame-diff pipeline
-(`grim` is far too slow; NVENC is broken here, so CPU encoding and a small
-region). It found the 278ms close tail and the 104ms open gap, but CPU encoding
-at 144fps drops frames of its own, so absolute counts are untrustworthy and
-only relative comparisons hold. The QML probe above is strictly better: exact,
-cheap, and it reports values as well as timing. Reach for video only when you
-need to see something the QML side cannot report.
-
 ---
 
 ## 5. Resolved: the open/close animation
-
-Sessions 1–2 treated this as an animation-code problem. It was not. The shared
-QML was correct throughout; **Qt was rendering the shell at 62Hz on a 144Hz
-display** (§3). Setting `QSG_RENDER_LOOP=threaded` fixed it, and the panels are
-smooth. `KeyboardPanel.qml` needed **no change at all** — the net QML diff for
-session 2 is zero.
 
 Hypotheses that were disproven, so they are not re-litigated:
 
@@ -464,14 +369,12 @@ and look at it.
 
 | Knob | Value | Effect |
 |---|---|---|
-| `centerOnScreen` | `true` | false restores stock bar-anchored placement |
 | `openMotionDuration` | `260` | entry length |
 | `closeMotionDuration` | `150` | exit length |
 | `fadeDuration` | `180` | open fade |
 | `closeFadeDuration` | `130` | close fade |
 | `emergeScale` | `0.96` | start scale — above ~0.9 glyph stretching becomes visible |
-| `travelFraction` | `0.12` | share of the distance to the button that is travelled |
-| `maxTravel` | `Style.space(56)` | cap on that travel; also the handoff slide distance |
+| `maxTravel` | `Style.space(56)` | the handoff slide distance |
 
 `patches/shell/plugins/bar/Bar.qml`:
 
@@ -486,4 +389,4 @@ Put personal overrides after the managed block in your main Hyprland config.
 
 > Two cross-file couplings, both easy to break: `panelScrimHoldMs` >=
 > `closeFadeDuration`, and `bar.lastSwitchDirection` / `bar.panelSurfaceVisible()`
-> are a contract `KeyboardPanel` depends on. Both are commented on each side.
+> are a contract `KeyboardPanel` depends on.
