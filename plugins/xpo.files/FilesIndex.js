@@ -112,17 +112,20 @@ function humanSize(bytes) {
 var IMAGE = { png: 1, jpg: 1, jpeg: 1, gif: 1, webp: 1, bmp: 1,
               svg: 1, ico: 1, icns: 1, tif: 1, tiff: 1, tga: 1 }
 
-// <pre> preserves indentation; rich text does not inherit the item's font.
-function codeHtml(html, family, px) {
-  // Remove the default margin so highlighting does not shift the preview.
-  return '<pre style="margin:0; font-family:\'' + family + '\'; font-size:' + px + 'px">'
-       + String(html || "") + '</pre>'
-}
-
-// Keep unhighlighted text in the same rich-text layout.
-function escapeHtml(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+// StyledText lays code out an order of magnitude faster than the rich-text <pre>
+// it replaced. Keep <pre>'s rules: drop a newline after its opening tag and one
+// before its closing tag, drop \r, and keep other whitespace as written, through
+// entities StyledText cannot collapse. highlight.py applies the same rules.
+function styledCode(text) {
+  var t = String(text || "")
+  if (t.charAt(0) === "\n") t = t.slice(1)
+  if (t.charAt(t.length - 1) === "\n") t = t.slice(0, -1)
+  return t.replace(/\r/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/[\n\u2028\u2029]/g, "<br>").replace(/ /g, "&#32;").replace(/\t/g, "&#9;")
+    // Qt reads &#133; as an ellipsis; another glyphless control keeps NEL's box.
+    .replace(/\x85/g, "\x80")
+    .replace(/[\v\f\xa0\u1680\u2000-\u200a\u202f\u205f\u3000]/g,
+             function (c) { return "&#" + c.charCodeAt(0) + ";" })
 }
 
 // Links are inert here; flatten them to keep theme colors legible.
