@@ -20,12 +20,12 @@ Item {
   property real drive: 0
   // Polylines per path: finished and tracing outlines by level (inside and far, fine,
   // panels, outline, beneath paint), the finished ones on the body and on the wheels apart, and
-  // the tail, body, head and the head's glow of the comets and of the drive-off's speed streaks.
+  // the tail, middle and head of the comets and of the drive-off's speed streaks.
   property var lines: [[], [], [], [], []]
   property var wheelLines: [[], [], [], [], []]
   property var tracing: [[], [], [], [], []]
-  property var comets: [[], [], [], []]
-  property var streaks: [[], [], [], []]
+  property var comets: [[], [], []]
+  property var streaks: [[], [], []]
   // Rally livery by tone (see model.js); Paintwork.qml sets the order they're drawn in. Tones with an
   // ink width are stroked that wide rather than filled.
   readonly property var paint: [
@@ -340,7 +340,7 @@ Item {
 
   function frame() {
     if (!parts[0].whole) return
-    var done = 0, drawn = [[], [], [], [], []], heat = [[], [], [], []]
+    var done = 0, drawn = [[], [], [], [], []], heat = [[], [], []]
     for (var i = 0; i < parts.length; i++) {
       var part = parts[i]
       if (clock >= part.end) { done++; continue }
@@ -355,7 +355,6 @@ Item {
       heat[1].push.apply(heat[1], pieces(part, d - tail * 2 / 3, d - tail / 3, dx, dy))
       heat[2].push.apply(heat[2], pieces(part, d - tail / 3, d, dx, dy))
     }
-    heat[3] = heat[2]
     if (done !== finished) {
       lines = landed(false)
       wheelLines = landed(true)
@@ -389,7 +388,7 @@ Item {
     function body(p) { var q = view(p); return [m[0] * q[0] + m[1] * q[1] + m[2], m[3] * q[0] + m[4] * q[1] + m[5]] }
     focusHeights = Qt.point(focusHeights.x, body([300, 131, 64])[1])
     if (u === 0) {
-      if (streaks[0].length) streaks = [[], [], [], []]
+      if (streaks[0].length) streaks = [[], [], []]
       return
     }
     // Each streak reaches back as far as the car went in the last 120ms, in its scaled frame.
@@ -403,7 +402,7 @@ Item {
       heat[1].push([at(1 / 3), at(2 / 3)])
       heat[0].push([at(2 / 3), at(1)])
     })
-    streaks = [heat[0], heat[1], heat[2], heat[2]]
+    streaks = heat
   }
   onWidthChanged: project()
   onHeightChanged: project()

@@ -26,7 +26,7 @@ const paint = qml.match(/readonly property var paint: (\[[^\]]*\])/)[1]
 const traced = Math.ceil(Math.max(...parts.map(part => part.end)))
 const paintTime = Number(qml.match(/readonly property int paintTime: (\d+)/)[1])
 const car = new Function("model", "parts", "Qt", `
-  var paint = ${paint}, width = 1920, height = 1080, clock = 0, lines, wheelLines, tracing, comets = [[], [], [], []], streaks = [[], [], [], []]
+  var paint = ${paint}, width = 1920, height = 1080, clock = 0, lines, wheelLines, tracing, comets = [[], [], []], streaks = [[], [], []]
   var bodywork, wheels, finished, view, stance, projected = {}, focusHeights, bodyPose
   var drive = 0, driveTime = 1100, launch = 0, lamps = 0, rolled = 0, glowing = [], pose, streakFrom = ${streakFrom}
   var traced = ${traced}, paintTime = ${paintTime}, painted = 1, span = null, front = 0, wavefront = []

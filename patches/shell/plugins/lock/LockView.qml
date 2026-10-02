@@ -99,8 +99,6 @@ Item {
     // Read at once, so the first design shown is the chosen one.
     blockLoading: true
     printErrors: false
-    watchChanges: true
-    onFileChanged: reload()
   }
 
   // Measures the masked password at full size; passwordDotScale compares this

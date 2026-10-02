@@ -14,7 +14,7 @@ layout(binding = 2) uniform sampler2D paintMask;
 layout(binding = 3) uniform sampler2D environment;
 
 // The mask identifies the panel and its plane height. Reconstruct a camera ray
-// using the same perspective as LockView.project(), in car design units.
+// using the same perspective as Car.qml's project(), in car design units.
 const vec3 rightward = vec3(0.8660254, 0.0, -0.5);
 const vec3 upward = vec3(0.0993347, 0.9800666, 0.1720527);
 const vec3 depth = vec3(0.4900333, -0.1986693, 0.8487626);
@@ -112,7 +112,7 @@ void main() {
         n = normalize(vec3(-1.0, panel == 7 ? 0.35 : 0.0, 0.0));
         anchor = vec3(7.0, 36.0, 0.0);
     } else if (wing) {
-        // LockView's wing: a 24-unit chord, rising 1.5, with a 2-unit section.
+        // outlines.js's wing: a 24-unit chord, rising 1.5, with a 2-unit section.
         n = normalize(vec3(-1.5 / 24.0, 1.0, 0.0));
         anchor = vec3(396.0, 121.63, 0.0);
     } else if (panel == 3) {
@@ -189,7 +189,7 @@ void main() {
         n.z = p.z * 0.0025;
         n.x += (p.x - anchor.x) * 0.00065;
     } else if (panel >= 12 && panel <= 14 && !side) {
-        // Lamps bulge from the nose. Find the nearest spotlight (LockView's spots, once warp moves
+        // Lamps bulge from the nose. Find the nearest spotlight (outlines.js's spots, once warp moves
         // the face back 10: two above at x=7, four below at x=5.7) in its own plane, as an
         // offset in radii; failing that, the headlamps at x=14 curve across their height.
         vec3 hi = origin + ray * ((7.0 - origin.x) / ray.x);

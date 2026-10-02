@@ -348,14 +348,14 @@ Item {
     // paint is laid down behind it the same way.
     Stroke { strokeColor: Qt.alpha(car.glowColor, 0.22); strokeWidth: car.base * 7; paths: car.wavefront }
     Stroke { strokeColor: Qt.alpha(car.glowColor, 0.85); strokeWidth: car.base * 1.6; paths: car.wavefront }
-    Glow { paths: car.comets[3] }
+    Glow { paths: car.comets[2] }
     Tail { paths: car.comets[0] }
     Middle { paths: car.comets[1] }
     Head { paths: car.comets[2] }
   }
   // The speed streaks, as the comets, trailing on screen from where the posed body is.
   Ink {
-    Glow { paths: car.streaks[3] }
+    Glow { paths: car.streaks[2] }
     Tail { paths: car.streaks[0] }
     Middle { paths: car.streaks[1] }
     Head { paths: car.streaks[2] }
