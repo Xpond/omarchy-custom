@@ -1,9 +1,10 @@
 .pragma library
 
 // Snapshot because FolderListModel cannot filter directories and rank matches.
-function snapshot(model) {
+function snapshot(model, limit) {
   var out = []
-  for (var i = 0; i < model.count; i++) {
+  var count = limit === undefined ? model.count : Math.min(model.count, limit)
+  for (var i = 0; i < count; i++) {
     out.push({
       name: String(model.get(i, "fileName")),
       path: String(model.get(i, "filePath")),
@@ -15,27 +16,40 @@ function snapshot(model) {
   return out
 }
 
-// Keep directories first; prefix rank applies only to name ordering.
-function filtered(entries, query, order) {
-  var q = String(query || "").trim().toLowerCase()
+// Sort once per directory/order; typing reuses this order in matching().
+function ordered(entries, order) {
   var hits = []
   for (var i = 0; i < entries.length; i++) {
     var e = entries[i]
-    var at = q ? e.name.toLowerCase().indexOf(q) : 0
-    if (at === -1) continue
-    hits.push({ entry: e, rank: at === 0 ? 0 : 1 })
+    hits.push({ entry: e, time: order === "date" ? when(e.modified) : 0 })
   }
   hits.sort(function (a, b) {
     if (a.entry.isDir !== b.entry.isDir) return a.entry.isDir ? -1 : 1
-    var byName = a.entry.name.localeCompare(b.entry.name)
-    if (order === "date") return when(b.entry.modified) - when(a.entry.modified) || byName
+    var rank = 0
+    if (order === "date") rank = b.time - a.time
     // Folder metadata size does not represent its contents.
-    if (order === "size" && !a.entry.isDir) return b.entry.size - a.entry.size || byName
-    return a.rank - b.rank || byName
+    else if (order === "size" && !a.entry.isDir) rank = b.entry.size - a.entry.size
+    return rank || a.entry.name.localeCompare(b.entry.name)
   })
   var out = []
   for (var j = 0; j < hits.length; j++) out.push(hits[j].entry)
   return out
+}
+
+// Entries already have their metadata/name order; typing only partitions name matches.
+function matching(entries, query, order) {
+  var q = String(query || "").trim().toLowerCase()
+  if (!q) return entries
+  var groups = [[], [], [], []]
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i], at = e.name.toLowerCase().indexOf(q)
+    if (at === -1) continue
+    var group = order === "date" ? 0
+      : e.isDir ? (at === 0 ? 0 : 1)
+      : order === "size" || at === 0 ? 2 : 3
+    groups[group].push(e)
+  }
+  return groups[0].concat(groups[1], groups[2], groups[3])
 }
 
 var ORDERS = ["name", "date", "size"]
@@ -196,10 +210,13 @@ function isUtf8(data) {
 
 // Bound Text rendering cost for large files.
 function head(text, lines) {
-  var parts = String(text || "").split("\n")
-  var count = parts.length - (parts[parts.length - 1] === "" ? 1 : 0)
-  if (count <= lines) return String(text || "")
-  return parts.slice(0, lines).join("\n") + "\n…"
+  var t = String(text || "")
+  var end = -1
+  for (var i = 0; i < lines; i++) {
+    end = t.indexOf("\n", end + 1)
+    if (end === -1) return t
+  }
+  return end === t.length - 1 ? t : t.slice(0, Math.max(0, end)) + "\n…"
 }
 
 var DIR_GLYPH = "\udb80\ude4b"

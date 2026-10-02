@@ -56,11 +56,12 @@ function garden(aspect) {
 // One texel per plant and field for plants.vert, as 24-bit fixed point: value = n / 2048 - 4096.
 var fields = ["x", "y", "root", "bend", "waves", "radius", "kind", "phase", "tilt", "leaves", "start", "letter"]
 function encode(c, plants) {
-  plants.forEach(function(p, i) {
-    fields.forEach(function(name, row) {
-      var n = Math.round((+p[name] + 4096) * 2048)
-      c.fillStyle = "rgb(" + (n >> 16) + "," + (n >> 8 & 255) + "," + (n & 255) + ")"
-      c.fillRect(i, row, 1, 1)
-    })
-  })
+  if (!plants.length) return
+  var width = plants.length, image = c.createImageData(width, fields.length), data = image.data
+  for (var row = 0; row < fields.length; row++) for (var i = 0; i < width; i++) {
+    var n = Math.round((+plants[i][fields[row]] + 4096) * 2048), at = (row * width + i) * 4
+    data[at] = n >> 16; data[at + 1] = n >> 8 & 255; data[at + 2] = n & 255; data[at + 3] = 255
+  }
+  // Qt's Canvas needs explicit dirty bounds here or the texture stays transparent.
+  c.putImageData(image, 0, 0, 0, 0, width, fields.length)
 }

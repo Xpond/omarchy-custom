@@ -63,7 +63,8 @@ Item {
   // FolderListModel cannot combine directory filtering with our ranking.
   property var entries: []
   readonly property string query: root.pathMode ? root.typedLeaf : root.filter
-  readonly property var rows: FilesIndex.filtered(root.entries, root.query, root.order)
+  readonly property var orderedEntries: FilesIndex.ordered(root.entries, root.order)
+  readonly property var rows: FilesIndex.matching(root.orderedEntries, root.query, root.order)
   readonly property var sel: root.index >= 0 && root.index < root.rows.length
     ? root.rows[root.index] : null
 
@@ -186,7 +187,7 @@ Item {
       ? FilesIndex.codeHtml(root.previewHtml || FilesIndex.escapeHtml(root.previewText),
                             Style.font.menuFamily, Style.font.subtitle)
       : ""
-  onSelChanged: { settle.restart(); ops.doomed = "" }
+  onSelChanged: { if (root.opened) settle.restart(); ops.doomed = "" }
   // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
     preview.resetScroll()
@@ -454,7 +455,8 @@ Item {
 
   function childEntries() {
     if (!root.settledSel || !root.settledSel.isDir) return []
-    return FilesIndex.snapshot(childFolder)
+    // The preview displays 400 entries; one extra preserves its overflow ellipsis.
+    return FilesIndex.snapshot(childFolder, 401)
   }
 
   FileView {

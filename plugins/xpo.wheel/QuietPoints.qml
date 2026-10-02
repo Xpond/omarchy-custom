@@ -11,6 +11,8 @@ Item {
   required property real daylight
   required property real haze
 
+  readonly property color glint: Qt.lighter(tint, 1.6)
+  readonly property color shade: Qt.darker(tint, 1.6)
   readonly property int columns: Math.max(1, Math.floor(width / 100))
   readonly property int rows: Math.max(1, Math.floor(height / 90))
   visible: progress > 0
@@ -81,9 +83,9 @@ Item {
         // Static upper-left glints give each point depth.
         gradient: Gradient {
           orientation: Gradient.Horizontal
-          GradientStop { position: 0; color: Qt.lighter(field.tint, 1.6) }
+          GradientStop { position: 0; color: field.glint }
           GradientStop { position: 0.45; color: field.tint }
-          GradientStop { position: 1; color: Qt.darker(field.tint, 1.6) }
+          GradientStop { position: 1; color: field.shade }
         }
         rotation: 45
       }

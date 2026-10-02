@@ -28,6 +28,10 @@ void main() {
     // highlights or secondary edges to shimmer as the circle moves.
     float aa = max(fwidth(d), 0.5);
     float coverage = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, abs(d) - bandWidth * 0.5);
+    if (coverage == 0.0) {
+        fragColor = vec4(0.0);
+        return;
+    }
     coverage *= 1.0 - texture(discMask, qt_TexCoord0).a;
 
     float along = mod(atan(p.y, p.x) - arcFrom, 6.28318530718);
