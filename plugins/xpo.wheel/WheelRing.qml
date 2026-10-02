@@ -24,7 +24,6 @@ Item {
     id: maskTexture
     sourceItem: discCutouts
     hideSource: true
-    live: true
   }
 
   RingTrack {
@@ -68,7 +67,6 @@ Item {
         height: width
         radius: width / 2
         color: "black"
-        antialiasing: true
       }
 
       BorderSurface {

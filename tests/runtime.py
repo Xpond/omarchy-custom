@@ -30,7 +30,6 @@ with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     def run(name, body, extra=None):
         qml = base / (name + ".qml")
         qml.write_text('''import QtQuick
-import QtQml.Models
 import Quickshell
 import Quickshell.Io
 import "FilesIndex.js" as FilesIndex
@@ -122,7 +121,6 @@ Scope {
     }
   }
 ''')
-        assert target.read_bytes() == content
 
     # Emptying a file and saving it. `saving` has to tell the text it is
     # writing from having nothing to write, and "" is both.

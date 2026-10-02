@@ -552,10 +552,10 @@ ShellRoot {
     var key = String(cacheKey || "")
     var nextShown = shown === true
     var current = _pluginSurfaceStates[key] === true
-    if (!key || current === nextShown) return
+    if (current === nextShown) return
     var next = ({})
     for (var id in _pluginSurfaceStates)
-      if (id !== key && _pluginSurfaceStates[id] === true) next[id] = true
+      if (id !== key) next[id] = true
     if (nextShown) next[key] = true
     _pluginSurfaceStates = next
     if (shell.bar && typeof shell.bar.panelSurfaceVisible === "function")
@@ -1228,7 +1228,7 @@ ShellRoot {
     return out
   }
 
-  // Plugin popout ownership comes from the patched built-in Bar.qml. A custom
+  // Plugin popout ownership comes from the built-in Bar.qml. A custom
   // full bar may lack it; plugins then open without claiming its popout slot.
   function barHasPluginPopouts() {
     return !!shell.bar && typeof shell.bar.requestPluginPopout === "function"

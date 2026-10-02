@@ -2,17 +2,8 @@
 
 // Keep the key map pure enough to exercise without a running shell.
 function onKey(panel, ops, preview, event) {
-  // Unaccepted keys continue to the focused editor.
   if (panel.editing) {
-    if (event.modifiers & Qt.ControlModifier) {
-      switch (event.key) {
-      case Qt.Key_S: panel.save(); event.accepted = true; return
-      case Qt.Key_C: preview.copy(); event.accepted = true; return
-      case Qt.Key_X: preview.cut(); event.accepted = true; return
-      case Qt.Key_V: preview.paste(); event.accepted = true; return
-      case Qt.Key_A: preview.selectAll(); event.accepted = true; return
-      }
-    }
+    if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_S) { panel.save(); event.accepted = true; return }
     if (event.key === Qt.Key_Escape) { panel.leaveEdit(); event.accepted = true }
     return
   }

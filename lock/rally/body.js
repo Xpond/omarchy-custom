@@ -55,7 +55,7 @@ function build(m) {
   // The rounded bumper shares the flank's pigment; the shader supplies its lighting.
   surface(28, across(-9, 15, 0).concat([chin18[chin18.length - 1], face23[face23.length - 1]], flip(across(-5, 49, 0)), [face23[0], chin18[0]]))
   surface(2, across(-5, 49, 0).concat(flip(across(4, 53, 0))))
-  // Light catches the flares' tops, the rear one's fading out as it nears the door.
+  // Light catches the flares' tops.
   surface(3, lift(along(69, 4, 142).concat(flip(along(72, 4, 142))), -1))
   surface(3, lift(along(69, 286, 403).concat(flip(along(72, 286, 403))), -1))
   // The lips' inner walls; tyre walls round the rims, and the treads where they show.

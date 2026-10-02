@@ -8,7 +8,7 @@ const wheel = read("Wheel.qml")
 const sweepRoot = { arcSpread: 17, arcHead: -90, arcDrag: 0 }
 const sweepAt = new Function("root", "deg", wheel.match(/function sweepAt\(deg\) \{([^]*?)\n  }/)[1])
 const sweep = (deg, drag) => { sweepRoot.arcDrag = drag; return sweepAt(sweepRoot, deg) }
-// -90 is the head itself: the slice a parked comet used to hold at full.
+// -90 is the head itself.
 for (const deg of [-90, -50, 0, 90, 180])
   assert.equal(sweep(deg, 0), 0, "a ring at rest lights " + deg)
 assert.ok(sweep(-90, 40) > 0.9, "a moving head still lights what it is on")

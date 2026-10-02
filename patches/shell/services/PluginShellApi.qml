@@ -70,7 +70,7 @@ QtObject {
     return _closePeers ? _closePeers() : { acted: false, clear: true }
   }
 
-  // Menu plugins only: the panels the live bar can open, for search.
+  // Menu plugins only: the panels they can open, for search.
   function panels() {
     return _panels ? _panels() : []
   }

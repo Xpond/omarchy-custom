@@ -6,7 +6,6 @@
 // past the screen's edge. Returns its lines as strands, runs of one width by width in quarter
 // units, and as fronts, each stretch as a pair of points by the step that reaches it, then by
 // width; and the light it casts on the ground, as a small image (see light).
-function grow(aspect) { return begin(aspect)(Infinity) }
 
 // Resume between whole growth steps and hyphae, keeping randomness and point order unchanged.
 function begin(aspect) {

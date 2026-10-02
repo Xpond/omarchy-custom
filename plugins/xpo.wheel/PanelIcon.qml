@@ -6,7 +6,6 @@ Loader {
   property string file
   property real size
   property color tint
-  active: !!file
   source: file ? omarchyPath + "/shell/plugins/panels/" + file : ""
   onLoaded: {
     item.iconSize = Qt.binding(function () { return size })

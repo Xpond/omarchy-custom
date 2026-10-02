@@ -18,7 +18,7 @@ alert() {
   command -v notify-send >/dev/null && notify-send -u critical "omarchy-custom" "$1"
 }
 
-# Link the lock-screen designs before any QML can load them; edits apply on the next shell start.
+# Link the lock-screen designs before any QML can load them.
 data=~/.local/share/omarchy-custom
 mkdir -p "$data" && ln -sfn "$REPO/lock" "$data/lock" || { alert "Could not link the lock-screen designs"; exit 1; }
 mkdir -p "$data/lock-session" &&

@@ -77,7 +77,6 @@ Item {
   }
 
   Item {
-    id: tunnel
     anchors.fill: parent
     rotation: root.bank
 

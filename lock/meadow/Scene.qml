@@ -20,7 +20,6 @@ Item {
     garden = Garden.garden(width / height)
     table.requestPaint(); nearGarden.requestPaint()
   }
-  Component.onCompleted: Qt.callLater(seed)
   onWidthChanged: Qt.callLater(seed)
   onHeightChanged: Qt.callLater(seed)
   function play() { leaving.stop(); opacity = 1; grown = 0; playing = true }
@@ -117,7 +116,6 @@ Item {
     width: growth.artworkWidth
     height: Math.ceil(growth.artworkHeight * .3) * 2
     visible: false
-    antialiasing: true
     renderStrategy: Canvas.Threaded
     onPainted: if (root.garden) { root.drawn++; nearTable.requestPaint() }
     onPaint: {

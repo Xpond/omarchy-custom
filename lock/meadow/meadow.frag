@@ -22,7 +22,7 @@ float noise(vec2 p) {
                mix(hash(i + vec2(0,1)),hash(i + vec2(1,1)),f.x),f.y);
 }
 
-// Canvas textures can use nearest filtering in ShaderEffect. Blend texels explicitly
+// Layer textures use nearest filtering in ShaderEffect. Blend texels explicitly
 // along the moving axis so a slow breeze never snaps a stem by a whole pixel.
 vec4 swaySample(sampler2D image, vec2 uv) {
     float x = uv.x * artworkWidth - .5, left = (floor(x) + .5) / artworkWidth;

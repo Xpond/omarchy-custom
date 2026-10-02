@@ -4,7 +4,7 @@ const path = require("node:path")
 
 // The mycelium design's colony, grown outside Qt from fixed seeds (mulberry32), at 1080 units high.
 const source = fs.readFileSync(path.join(__dirname, "../lock/mycelium/grow.js"), "utf8").replace(/^\.pragma .*$/m, "")
-const { grow, begin } = new Function(`${source}\nreturn { grow, begin }`)()
+const { begin } = new Function(`${source}\nreturn { begin }`)()
 let seed = 1
 Math.random = () => {
   seed = (seed + 0x6D2B79F5) >>> 0
@@ -15,7 +15,7 @@ Math.random = () => {
 const length = p => { let l = 0; for (let i = 2; i < p.length; i += 2) l += Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]); return l }
 
 for (const aspect of [4 / 3, 16 / 9, 21 / 9, 9 / 16]) for (let n = 0; n < 6; n++) {
-  const { strands, fronts, light } = grow(aspect)
+  const { strands, fronts, light } = begin(aspect)(Infinity)
   // It takes the screen: some of it crosses nearly every 60-unit square.
   const width = 1080 * aspect, cols = Math.ceil(width / 60), seen = new Set()
   let reached = 0
@@ -48,7 +48,7 @@ console.log("ok: the colony and its light take the whole screen at 4:3, 16:9, 21
 const realNow = Date.now
 for (const aspect of [4 / 3, 16 / 9, 21 / 9, 9 / 16]) {
   seed = 123
-  const expected = grow(aspect)
+  const expected = begin(aspect)(Infinity)
   seed = 123
   const advance = begin(aspect)
   let now = 0, actual, slices = 0

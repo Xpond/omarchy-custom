@@ -58,14 +58,14 @@ void grow() {
     sway = group > .5 ? 3.0 * breeze(top.x / 900.0) * (root - top.y) * s : 0.0;
 }
 
-// The stem at fraction u of its current length: garden.js's final curve grown to s, its young
+// The stem at fraction u of its current length: its final curve grown to s, its young
 // tip bent aside.
 vec2 stem(float u) {
     float t = u * s;
     return vec2(top.x + bend * (1.0 - t) + sin(t * waves + phase) * 2.5 * (1.0 - t),
                 root + (top.y - root) * t) + tip * u * u * u + vec2(sway * u * u, 0.0);
 }
-// Height fraction of leaf node n, as garden.js spaced them below the lettering.
+// Height fraction of leaf node n, spaced below the lettering.
 float node(float n) {
     float band = root - max(top.y + 18.0, 540.0 + random(9.0) * 90.0);
     return band * (.1 + (n + random(10.0 + n)) / leaves * .85) / (root - top.y);
@@ -165,7 +165,7 @@ void flower(float k, float side) {
     float lift = smoothstep(.25, .95, progress);
     float depth = .4 * cos(age * (2.5 + random(2.0)) + phase * 5.0) * (1.0 - progress);
     float size = radius * (.3 + .7 * smoothstep(0.0, 1.0, s));
-    // garden.js's pose: turned by sin(phase) * .5 and foreshortened to tilt.
+    // Turned by sin(phase) * .5 and foreshortened to tilt.
     float spin = sin(phase) * .5, lean = acos(clamp(tilt, 0.0, 1.0));
     vec3 face = vec3(sin(lean) * sin(spin), -sin(lean) * cos(spin), cos(lean));
     vec3 axis = normalize(mix(normalize(vec3(up, depth)), face, lift));

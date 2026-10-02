@@ -83,7 +83,6 @@ Item {
   component Fill: ShapePath {
     property alias paths: polygons.paths
     strokeColor: "transparent"
-    fillRule: ShapePath.OddEvenFill
     PathMultiline { id: polygons }
   }
   component Cabin: Fill { fillColor: Qt.rgba(15/16, 0, 0, 1) }
@@ -194,7 +193,7 @@ Item {
       property real amount: car.painted > 0 ? 1 : 0
       fragmentShader: Qt.resolvedUrl("car-paint.frag.qsb")
     }
-    // Construction edges at the rear opening and rounded bumper sit under paint.
+    // Construction edges sit under paint.
     // Only their exposed silhouettes keep ink once the surfaces are filled.
     BodyInk {
       Panel { paths: car.lines[4] }

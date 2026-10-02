@@ -9,8 +9,6 @@ Item {
   property var panel: null
 
   height: Style.font.title + Style.spacing.controlPaddingY * 2
-  // A path deep enough to reach the preview's heading is cut off at the column
-  // boundary rather than allowed to run through it.
   clip: true
 
   // One caret, blinking in one place: at the end of the path you are typing, or
@@ -56,7 +54,6 @@ Item {
 
     Row {
       anchors.verticalCenter: parent.verticalCenter
-      spacing: 0
 
       Repeater {
         model: panel.crumbs
@@ -64,7 +61,6 @@ Item {
         delegate: Row {
           required property int index
           required property string modelData
-          spacing: 0
 
           Separator {
             visible: index > 0
@@ -87,7 +83,6 @@ Item {
       // this is only the word they do not know yet.
       Row {
         visible: panel.pathMode
-        spacing: 0
 
         Separator {}
 
@@ -126,7 +121,6 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: Style.spacing.md
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 0
 
         Text {
           anchors.verticalCenter: parent.verticalCenter

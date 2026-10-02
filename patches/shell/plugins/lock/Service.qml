@@ -7,8 +7,6 @@ import qs.Commons
 
 // Keep the renderer and its driver caches out of the long-lived desktop shell.
 Loader {
-  property var shell: null
-  property string omarchyPath: ""
   source: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? "" :
     "file://" + Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock-session/Bridge.qml"
   sourceComponent: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? session : undefined
@@ -439,7 +437,6 @@ Item {
     id: unlockTimer
     // Each lock view sets this from its chosen design; keep a fallback if no view loads.
     interval: 1100
-    repeat: false
     onTriggered: root.finishUnlock()
   }
 

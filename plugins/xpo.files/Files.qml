@@ -14,7 +14,6 @@ Item {
   id: root
 
   property var shell: null
-  property var manifest: null
   readonly property string home: Quickshell.env("HOME")
 
   property bool opened: false
@@ -114,7 +113,6 @@ Item {
   Process {
     id: measurer
     stdout: StdioCollector {
-      waitForEnd: true
       onStreamFinished: root.imageDims = text.split("\n")[0].trim()
     }
   }
@@ -162,7 +160,6 @@ Item {
   Process {
     id: highlighter
     stdout: StdioCollector {
-      waitForEnd: true
       onStreamFinished: root.previewHtml = text
     }
   }
@@ -231,7 +228,7 @@ Item {
     if (root.editing) root.leaveEdit()
     root.naming = ""
     var payload = {}
-    try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) { payload = {} }
+    try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) {}
     root.enter(payload.dir ? String(payload.dir) : root.home)
     root.pending = payload.select ? String(payload.select) : ""
     root.openScreen = root.focusedScreen()
@@ -277,7 +274,6 @@ Item {
       root.naming = ""
     }
   }
-  function toggle() { root.opened ? root.close() : root.open("{}") }
 
   function enter(next) {
     var path = String(next).replace(/\/+$/, "")
@@ -446,9 +442,7 @@ Item {
     id: folder
     folder: "file://" + root.listedDir
     showDirsFirst: true
-    showDotAndDotDot: false
     showHidden: root.showHidden
-    sortField: FolderListModel.Name
     // Ready gates both initial loads and later count changes.
     onStatusChanged: if (status === FolderListModel.Ready) root.entries = FilesIndex.snapshot(folder)
     onCountChanged: if (status === FolderListModel.Ready) root.entries = FilesIndex.snapshot(folder)
@@ -458,9 +452,7 @@ Item {
     id: childFolder
     folder: (root.settledSel && root.settledSel.isDir) ? "file://" + root.settledSel.path : ""
     showDirsFirst: true
-    showDotAndDotDot: false
     showHidden: root.showHidden
-    sortField: FolderListModel.Name
     onStatusChanged: if (status === FolderListModel.Ready) root.dirEntries = root.childEntries()
     onCountChanged: if (status === FolderListModel.Ready) root.dirEntries = root.childEntries()
   }
@@ -526,7 +518,6 @@ Item {
         anchors.margins: Style.spacing.panelPadding
         anchors.bottomMargin: Style.spacing.xl
         focus: true
-        Keys.priority: Keys.BeforeItem
         Keys.onPressed: function (event) { FilesKeys.onKey(root, ops, preview, event) }
 
         FilesHeader {
@@ -543,7 +534,6 @@ Item {
         }
 
         Item {
-          id: body
           anchors {
             top: rule.bottom; topMargin: Style.spacing.panelGap
             left: parent.left; right: parent.right

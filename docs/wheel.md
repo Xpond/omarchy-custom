@@ -12,7 +12,7 @@ Install, Remove, Update and the rest — is one search away instead of one more
 disc, because a ring you have to read is slower than a word you can type.
 
     plugins/xpo.wheel/
-      manifest.json    kind: "overlay", keepLoaded
+      manifest.json    kinds: "overlay", "menu"; keepLoaded
       Wheel.qml        surface, geometry, state, and the comet
       WheelRing.qml    discs, labels, illumination and the disc mask
       RingTrack.qml    ring shader bindings and the visible trail's clock
@@ -40,7 +40,7 @@ key means and the dial performs it, which is what lets a test press a key.
 | | |
 |---|---|
 | `SUPER+A` | open (tap — do not hold, see below) |
-| `↑` `↓` `←` `→` | jump to the slice at that compass point, then `←`/`→` step around the ring |
+| `↑` `↓` `←` `→` | `↑`/`↓` jump to the slice at that compass point; `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
 | `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
 | `Home` `End` | the first and last of the forty results, from wherever you are |
@@ -199,8 +199,7 @@ uniform interfaces and the sky's arc, day/night, haze and light directions.
 `tests/trails.js` checks disc-light continuity, trail length, visible speed,
 and the transition between spinning and selection.
 Render visual checks on a graphics backend: Qt's offscreen software renderer
-does not reproduce the shaders and star blur. Restart the shell after editing;
-rescanning manifests can leave the old QML cached.
+does not reproduce the shaders and star blur.
 
 To rebuild `mark.png`, run `python3 scripts/generate-mark.py 4` with NumPy and
 ImageMagick available. The generator writes coverage to alpha, path distance
@@ -212,10 +211,9 @@ width allows comparison before replacing the shipped asset.
 One tempo, `fadeDuration`, drives the whole wheel: the open, the close, and
 the ring-to-results swap.
 
-The exit fade is the half that used to be missing. `visible` follows `opened`,
-so dropping it unmapped the layer surface the same frame it asked for the
-fade -- the wheel eased in and vanished out. `close()` now drops `shown` to run
-the fade and a timer releases the surface once it has finished. Firing a slice
+`visible` follows `opened`, so dropping it unmaps the layer surface the same
+frame it asks for the fade. `close()` drops `shown` to run the fade and a timer
+releases the surface once it has finished. Firing a slice
 keeps the instant unmap: the target panel grabs the keyboard on the next tick
 and a layer surface still holding an exclusive grab hands it a window without
 focus, so `close(true)` skips the fade. Only cancelling gets it. Reopening
@@ -258,9 +256,9 @@ that facade support; the installer rebases them when Omarchy updates.
 
 `import qs.Commons` and `import qs.Ui` resolve from a third-party plugin, so
 the theme singletons (`Color`, `Style`, `Border`) and shared widgets
-(`CursorSurface`, `BorderSurface`) are all available. The wheel has no colours
-of its own — it reads the `[menu]` theme tokens, so it follows theme switches
-for free.
+(`CursorSurface`, `BorderSurface`) are all available. The ring and results have
+no colours of their own — they read the `[menu]` theme tokens, so they follow
+theme switches for free.
 
 ## Traps
 
@@ -268,7 +266,7 @@ for free.
 "Focus on <dir> window" and consumes them before any surface sees them. The
 hold-a-modifier-and-flick-with-arrows gesture is therefore impossible on a
 stock Omarchy keymap; the wheel is tap-then-arrow instead. Bare arrows reach
-it fine, confirmed by logging `Keys.onPressed`.
+it fine.
 
 **The pointer-enter is a synthetic move.** When the layer surface maps, Wayland
 delivers a pointer enter carrying the cursor's current position, and Qt raises
@@ -288,12 +286,9 @@ Use `omarchy restart shell`.
 **The wheel does not own its backdrop.** The wash and the blur behind the ring
 are one scrim surface owned by the bar, which the centered panels, the browser
 and the clipboard hold a count on too. The wheel takes that count when it opens
-and drops it when it unmaps (`holdScrim`). This is the whole reason opening a
-panel from the wheel no longer flashes: the wheel's own surface goes, the
-panel's arrives, and the thing carrying the blur was never either of them.
-Drawing a scrim on the wheel instead — which is what it used to do — unmaps the
-blur along with the wheel, and the desktop snaps sharp for the frames in
-between. See `docs/centered-panels.md` for the scrim itself.
+and drops it when it unmaps (`panelSurfaceVisible`). Drawing a scrim on the
+wheel instead unmaps the blur along with the wheel, and the desktop snaps sharp
+for the frames in between. See `docs/centered-panels.md` for the scrim itself.
 
 **`SUPER+W` must be conditional.** The wheel is a layer surface, not a window,
 so a plain `killactive` with the wheel up closes whatever window sits behind
@@ -302,13 +297,13 @@ through to close-window only when nothing of ours was on screen. It fails
 *open*: any unreachable shell still closes the window, on a 0.5s timeout,
 because this runs on every window close.
 
-Two things about that script are load-bearing, and both were bugs first:
+Two things about that script are load-bearing:
 
 **Legacy Hyprland dispatchers do nothing.** Omarchy 4's Hyprland takes Lua
 dispatchers — `hyprctl` wraps the argument as `hl.dispatch(<arg>)`, so the
 legacy string form is rejected at runtime and the action never happens. Same
 trap as `env =` in `hyprland.conf` and `layerrule`: accepted by the tooling,
-inert in practice. Two of these bit this project.
+inert in practice.
 
 `killactive` fails loudly, with a nonzero exit; use `hl.dsp.window.close()`.
 Focusing a window fails *silently*: Quickshell's `HyprlandToplevel.activate()`
@@ -358,18 +353,16 @@ against this machine's real menu files:
 
 Run it after touching `MenuIndex.js`, and against a new Omarchy release — the
 menu file is upstream's, and a new entry shape is exactly what would slip
-through. As of Omarchy 4.0.2: 320 entries in, 241 rows out, 0 unreachable. The
-79 absent are rows whose `when` failed on this machine.
+through.
 
 `when:` is evaluated. Every condition in both menu files goes out as **one**
 bash script — each line echoes its own id when its condition holds — rather
 than a subprocess per entry. It runs once at startup, in the background, and
-takes about 1.2s for the 144 conditions in the stock menu; pressing `SUPER+A`
+takes over a second; pressing `SUPER+A`
 is not the moment to spend that, and installing a package is rare enough that
 one stale reading until the next shell restart is the right trade. A `when`
 that fails hides the row, and a submenu whose children all failed is hidden
-too, so a slice never drills into an empty ring. On this machine that is 239
-rows out of 320 — the other 81 are for hardware and packages that aren't here.
+too, so a slice never drills into an empty ring.
 
 `checked:` is **not** evaluated. It only appends a ✓, and it would have to
 re-run on every open to be true.
@@ -381,7 +374,7 @@ so an app does not inherit the compositor's service scope.
 
 Open windows come from `Hyprland.toplevels`. A row carries the window's address
 rather than its toplevel object, so it can never go stale on a window that has
-since closed, and focusing one is a `Hyprland.dispatch` — see the trap below.
+since closed, and focusing one is a `Hyprland.dispatch` — see the trap above.
 
 Themes and fonts are `omarchy theme list` and `omarchy font list`, run once at
 startup and fired back as `omarchy theme set '<name>'`. Both are otherwise
@@ -400,8 +393,8 @@ load or when the conditions come back. When they do come back — after the whee
 is already on screen — the ring re-reads them on its own, and `onStaticRowsChanged`
 tells the index to rebuild, since that half is built by hand.
 
-Every query term must appear somewhere in the row, so terms narrow. Rows then
-sort on six keys: **rank** (label-prefix, then label-substring, then a hit
+Every query term must start a word somewhere in the row, so terms narrow. Rows then
+sort on six keys: **rank** (label-prefix, then a label word, then a hit
 anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
 theme/font, menu), an **exact label** (so "lock" puts Lock before Lockscreen
 Designs, however often that is used), **uses**, **recency**, and finally
@@ -441,7 +434,7 @@ it has not yet seen focused (everything, for a moment after a shell restart).
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
 menu entry's dotted id, `app:` plus a desktop id, or a theme/font command --
 and the count is a sort key in `search()` ranked under `kind`. So habit breaks
-ties *inside* a kind (which of forty themes, which of the eleven "Toggle"
+ties *inside* a kind (which of forty themes, which of the "Toggle"
 rows) and never reorders the kinds themselves: that an app beats a menu row
 offering to install it is a fact about the query, while a use count is only a
 guess.
@@ -507,8 +500,7 @@ have.
 has to be a whole number of steps, which only happens when the count is even.
 An even ring is rotated so two slices land at 3 and 9 o'clock, flanking the
 field; an odd one is still evenly spaced but anchors north instead, and nothing
-sits beside the field. Eight got this for free at 45° apart and never had to
-say so.
+sits beside the field.
 
 The catalogue is sized so the default lands even on a stock machine: the bar
 Omarchy ships carries seven of these plus the clipboard overlay. Changing
@@ -520,18 +512,9 @@ room at fourteen slices as at eight. Growth stops before the labels would run
 off the short edge of the screen, and only then do the discs shrink to fit the
 chord between their neighbours.
 
-Slices are evenly spaced; the only choice is where the first one goes, which is
-`sliceOrigin` — `90 % step` on an even count so a slice lands on east and one
-on west, `0` on an odd one so the ring at least stays symmetric about the
-vertical.
-
 ## Known limits
 
-- Opens on the primary monitor only, same as the emoji overlay.
 - A window is found by its title or its app id, never by what is running
   inside it: a terminal holding a Claude Code session is titled after the
   session's topic, so `claude` will not find it. Searching the app id
   (`kitty`) lists every window of that app, most recent first.
-- `when` answers are read once per shell start, so a package installed since
-  then shows the stale row until the next restart.
-- An odd-sized ring has nothing at 3 and 9 o'clock. Add or drop a slice.

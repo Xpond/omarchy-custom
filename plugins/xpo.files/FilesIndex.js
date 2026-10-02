@@ -82,7 +82,7 @@ function countLabel(shown, total, query, hidden, order) {
     ? shown + " of " + total
     : shown + (shown === 1 ? " item" : " items")
   if (hidden) s += "  ·  hidden"
-  var word = ORDER_WORDS[order || "name"]
+  var word = ORDER_WORDS[order]
   return word ? s + "  ·  " + word : s
 }
 
@@ -213,9 +213,9 @@ var DATE_COL = 9
 
 function columns(entries, rows, paneChars, limit) {
   var n = Math.min(entries.length, limit)
-  var wanted = Math.ceil(n / Math.max(1, rows))
+  var wanted = Math.ceil(n / rows)
   var fits = Math.floor((paneChars + GUTTER) / (MIN_COL + GUTTER))
-  var cols = Math.max(1, Math.min(wanted, Math.max(1, fits)))
+  var cols = Math.max(1, Math.min(wanted, fits))
   // Balance columns rather than leaving a short final column.
   var per = Math.ceil(n / cols)
   var width = Math.floor((paneChars - GUTTER * (cols - 1)) / cols)
@@ -225,7 +225,7 @@ function columns(entries, rows, paneChars, limit) {
     for (var j = i; j < Math.min(i + per, n); j++) col.push(row(entries[j], width))
     out.push(col.join("\n"))
   }
-  if (entries.length > n && out.length) out[out.length - 1] += "\n\u2026"
+  if (entries.length > n) out[out.length - 1] += "\n\u2026"
   return out
 }
 

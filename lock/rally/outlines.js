@@ -106,7 +106,7 @@ function build(m) {
   for (i = 0; i <= 12; i++) windscreen.push(crown(150.5, 92.8, 2, 72 * (i / 6 - 1)))
   for (i = 0; i <= 12; i++) windscreen.push(crown(206, 127.5, 3, 58 * (1 - i / 6)))
   panes.push(windscreen.concat([windscreen[0]]))
-  // A rounded, flattened housing with a broad rear rim; no pointed cone apex.
+  // A rounded, flattened housing with a broad rear rim.
   function mirrorRing(x, side) {
     var radius = Math.pow(Math.max(0, 1 - Math.pow(Math.abs((x - 168) / 10), 3)), 1 / 3), points = []
     function roundedAxis(v) { return Math.sign(v) * Math.pow(Math.abs(v), 2 / 3) }

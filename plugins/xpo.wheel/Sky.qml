@@ -100,7 +100,6 @@ Item {
         GradientStop { position: body.edge; color: body.halo }
         GradientStop { position: 1; color: Qt.rgba(body.halo.r, body.halo.g, body.halo.b, 0) }
       }
-      startX: 0; startY: 0
       PathLine { x: sky.width; y: 0 }
       PathLine { x: sky.width; y: sky.height }
       PathLine { x: 0; y: sky.height }
