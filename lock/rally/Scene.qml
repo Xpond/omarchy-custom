@@ -28,10 +28,9 @@ Item {
     anchors.fill: car
     opacity: car.painted
     transform: [carGrow, carSlide, carFraming, carLower]
+    // The car projects again at every size, moving its contact line.
     property var ground: car.ground
     onGroundChanged: requestPaint()
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
     onPaint: {
       if (!car.view) return
       var g = getContext("2d"), a = ground[0], b = ground[1], c = car.view([211, -2, 0])

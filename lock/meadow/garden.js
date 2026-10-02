@@ -50,8 +50,7 @@ function garden(aspect) {
     var y = 680 + random() * 180
     plant(random() * w, y, 4 + Math.pow((y - 650) / 230, 2) * (4 + random() * 10), false)
   }
-  plants.sort(function(a, b) { return a.root - b.root })
-  return { plants: plants }
+  return plants.sort(function(a, b) { return a.root - b.root })
 }
 
 // One texel per plant and field for plants.vert, as 24-bit fixed point: value = n / 2048 - 4096.

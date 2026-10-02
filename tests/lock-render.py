@@ -28,14 +28,12 @@ shutil.copytree(repo / "lock", output / "lock")
 for design in (output / "lock").glob("*/*.qml"):
     design.write_text(standalone(design.read_text()))
 (output / "LockView.qml").write_text(standalone((repo / "patches/shell/plugins/lock/LockView.qml").read_text()))
-def patch(name, *edits):
+def patch(name, old, new):
     source = (output / name).read_text()
-    for old, new in edits:
-        assert source.count(old) == 1, old
-        source = source.replace(old, new)
-    (output / name).write_text(source)
-patch("LockView.qml", ("  id: root", "  id: root\n  property alias testScene: scene.item"))
-patch("lock/rally/Scene.qml", ("  property Item host", "  property Item host\n  property alias testCar: car"))
+    assert source.count(old) == 1, old
+    (output / name).write_text(source.replace(old, new))
+patch("LockView.qml", "  id: root", "  id: root\n  property alias testScene: scene.item")
+patch("lock/rally/Scene.qml", "  property Item host", "  property Item host\n  property alias testCar: car")
 
 stages = [{"name": "parked"}, {"name": "departed", "drive": 1}]
 # Last, since they unload the car: other designs at runtime, then one that is missing.

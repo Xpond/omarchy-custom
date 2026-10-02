@@ -13,8 +13,7 @@ one only switches to it, and the next lock shows it. From a terminal,
 `omarchy-lock-design list` and `omarchy-lock-design set <name>` do the same. The choice is one
 word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The lock and its preview
 build their view each time they show, reading that file then, so a switch needs no install or
-restart. A long-lived view couldn't rely on its watch: a file created after the watch started
-is never seen.
+restart.
 
 A design is a folder in `lock/` holding a `Scene.qml`, plus whatever QML, JavaScript,
 shaders and images it loads relative to itself. The scene fills the screen behind the field,
@@ -293,10 +292,6 @@ After GLSL changes, rebuild the shader:
 /usr/lib/qt6/bin/qsb --glsl '100 es,120,150' --hlsl 50 --msl 12 \
   -o lock/shore/shore.frag.qsb lock/shore/shore.frag
 ```
-
-After editing a design's QML or shaders, run `omarchy restart shell` before
-`omarchy-shell lock preview` to ensure the running shell loads the new code. Calling `preview`
-on an already-open preview only leaves it visible; it does not reload the design.
 
 ## Rally
 

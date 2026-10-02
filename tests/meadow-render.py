@@ -20,8 +20,8 @@ shutil.copytree(repo / "lock/meadow", design, dirs_exist_ok=True)
 # layout; the later declaration replaces garden.js's own.
 with open(design / "garden.js", "a") as garden:
     garden.write('''function garden(aspect) {
-  return { plants: [{ x: 800, y: 270, root: 840, bend: 0, waves: 0, radius: 6, kind: 0, phase: 0, tilt: 1,
-                      leaves: 0, start: 0, letter: true }] }
+  return [{ x: 800, y: 270, root: 840, bend: 0, waves: 0, radius: 6, kind: 0, phase: 0, tilt: 1,
+            leaves: 0, start: 0, letter: true }]
 }
 ''')
 # The near bank paints nothing and grows one such flower, low in its sharp clearing.

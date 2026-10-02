@@ -38,13 +38,13 @@ Item {
   // One texel per plant and field; the growth shaders read the garden from it.
   Canvas {
     id: table
-    width: root.garden ? root.garden.plants.length : 1
+    width: root.garden ? root.garden.length : 1
     height: 12
     visible: false
     smooth: false
     renderStrategy: Canvas.Threaded
     onPainted: if (root.garden) root.drawn++
-    onPaint: if (root.garden) Garden.encode(getContext("2d"), root.garden.plants)
+    onPaint: if (root.garden) Garden.encode(getContext("2d"), root.garden)
   }
   // The same for the near bank's flowers, once it has painted.
   Canvas {
@@ -60,7 +60,7 @@ Item {
   component Plants: ShaderEffect {
     property real group
     property real part
-    property real count: root.garden ? root.garden.plants.length : 0
+    property real count: root.garden ? root.garden.length : 0
     property real rows
     property var plants: table
     property var foreground: nearGarden
