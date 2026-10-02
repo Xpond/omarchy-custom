@@ -183,3 +183,35 @@ Scope {
             {"PATH": str(base) + ":" + os.environ["PATH"], "CHECK_COPY": str(captured),
              "CHECK_COPY_EXIT": str(code)})
         assert captured.read_text() == selected
+
+    # Every star shares one gradient, so a tint change costs three stops, not three per star.
+    shutil.copyfile(repo / "plugins/xpo.wheel/QuietPoints.qml", base / "QuietPoints.qml")
+    run("stars-share-tint", '''
+  Item {
+    width: 1920; height: 1080
+    QuietPoints {
+      id: stars
+      anchors.fill: parent
+      progress: 0; quietRadius: 400; tint: "#7aa2f7"; daylight: 0; haze: 0
+    }
+  }
+  Timer { interval: 50; running: true; onTriggered: {
+    stars.tint = "#e0af68"
+    var points = null, shared = null
+    for (var c = 0; c < stars.children.length; c++)
+      if (stars.children[c].itemAt) points = stars.children[c]
+    for (var i = 0; i < points.count; i++) {
+      var parts = points.itemAt(i).children
+      for (var p = 0; p < parts.length; p++) {
+        if (!parts[p].gradient) continue
+        shared = shared || parts[p].gradient
+        if (parts[p].gradient !== shared) { console.error("FAIL own gradient", i); Qt.exit(1); return }
+      }
+    }
+    var want = [Qt.lighter(stars.tint, 1.6), stars.tint, Qt.darker(stars.tint, 1.6)]
+    for (var s = 0; s < 3; s++)
+      if (!Qt.colorEqual(shared.stops[s].color, want[s])) { console.error("FAIL stop", s); Qt.exit(1); return }
+    if (points.count !== 228) { console.error("FAIL count", points.count); Qt.exit(1); return }
+    console.log("PASS"); Qt.quit()
+  } }
+''')

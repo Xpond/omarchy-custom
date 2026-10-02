@@ -28,6 +28,16 @@ Item {
     blurMax: 16
   }
 
+  // Shared by every point: a tint change updates three stops instead of three per point.
+  // Static upper-left glints give each point depth.
+  Gradient {
+    id: pointShade
+    orientation: Gradient.Horizontal
+    GradientStop { position: 0; color: field.glint }
+    GradientStop { position: 0.45; color: field.tint }
+    GradientStop { position: 1; color: field.shade }
+  }
+
   Repeater {
     model: field.columns * field.rows
 
@@ -80,13 +90,7 @@ Item {
       Rectangle {
         anchors.fill: parent
         radius: width / 2
-        // Static upper-left glints give each point depth.
-        gradient: Gradient {
-          orientation: Gradient.Horizontal
-          GradientStop { position: 0; color: field.glint }
-          GradientStop { position: 0.45; color: field.tint }
-          GradientStop { position: 1; color: field.shade }
-        }
+        gradient: pointShade
         rotation: 45
       }
 
