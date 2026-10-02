@@ -6,6 +6,8 @@ import QtQuick.Shapes
 Item {
   // The lock screen's view (LockView.qml), for designs that read its state.
   property Item host
+  // Edges the password field.
+  readonly property color accent: "#8fd0ff"
 
   function play() { car.play() }
   function hide() { car.hide() }

@@ -26,13 +26,13 @@ Item {
   property string design: chosen.text().trim() || "rally"
 
   readonly property string placeholderText: "Enter Password"
-  readonly property int fieldWidth: 480
-  readonly property int fieldHeight: 72
-  // Room each side of the text for the lock icon and the submit button.
-  readonly property int fieldInset: 64
-  readonly property int fieldFontSize: Math.round(Style.font.heading * 1.125)
-  readonly property int passwordDotFontSize: Math.round(Style.font.heading * 1.33)
-  readonly property int passwordDotLetterSpacing: Math.round(Style.font.heading * 0.19)
+  readonly property int fieldWidth: 380
+  readonly property int fieldHeight: 56
+  // Room each side of the text, clear of the rounded ends.
+  readonly property int fieldInset: 28
+  readonly property int fieldFontSize: Style.font.heading
+  readonly property int passwordDotFontSize: Math.round(Style.font.heading * 1.125)
+  readonly property int passwordDotLetterSpacing: Math.round(Style.font.heading * 0.25)
   // Space to keep clear on each side of the field for the fingerprint icon
   // (icon width plus a gap) so the centered dots never run under it.
   readonly property real fingerprintReserve: fingerprintConfigured ? Math.round(fingerprintIcon.implicitWidth + 12) : 0
@@ -43,7 +43,11 @@ Item {
     : 1
   readonly property bool showPasswordCursor: inputEnabled && !authenticatingPassword && failureMessage.length === 0
   readonly property bool errorState: failureMessage.length > 0
-  readonly property color neonColor: errorState ? Color.lock.borderError : "#8fd0ff"
+  // The design's own light edges the field, white for designs without one.
+  readonly property color edgeColor: errorState ? Color.lock.borderError : scene.item && scene.item.accent || "white"
+  // Once the password is accepted the field clears quickly, ahead of the design's exit.
+  property real fieldOpacity: driving ? 0 : 1
+  Behavior on fieldOpacity { NumberAnimation { duration: 300; easing.type: Easing.OutQuad } }
 
   signal submitPassword(string password)
   signal passwordTextEdited(string password)
@@ -127,14 +131,14 @@ Item {
       onPositionChanged: root.wakeRequested()
     }
 
-    // The field is dark glass edged in neon, which glows around it.
+    // The field is frosted glass over the design, edged in its light, which glows faintly around it.
     Rectangle {
       id: halo
       anchors.fill: inputField
       radius: inputField.radius
       color: "transparent"
-      border.width: 6
-      border.color: root.neonColor
+      border.width: 3
+      border.color: root.edgeColor
       visible: false
     }
 
@@ -143,7 +147,38 @@ Item {
       source: halo
       blurEnabled: true
       blur: 1
+      blurMax: 24
+      opacity: 0.55 * root.fieldOpacity
+    }
+
+    // The design behind the field, with a margin so the blur reaches past its edge.
+    ShaderEffectSource {
+      id: backdrop
+      anchors.fill: inputField
+      anchors.margins: -40
+      sourceItem: scene
+      sourceRect: Qt.rect(x, y, width, height)
+      visible: false
+    }
+
+    Item {
+      id: glassShape
+      anchors.fill: backdrop
+      visible: false
+      layer.enabled: true
+      Rectangle { anchors.fill: parent; anchors.margins: 40; radius: inputField.radius }
+    }
+
+    MultiEffect {
+      anchors.fill: backdrop
+      source: backdrop
+      autoPaddingEnabled: false
+      blurEnabled: true
+      blur: 1
       blurMax: 40
+      maskEnabled: true
+      maskSource: glassShape
+      opacity: root.fieldOpacity
     }
 
     Rectangle {
@@ -152,22 +187,14 @@ Item {
       height: root.fieldHeight
       anchors.horizontalCenter: parent.horizontalCenter
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: parent.height * 0.08
-      color: "#eb080c14"
-      border.width: 1.5
-      border.color: root.neonColor
-      radius: 14
+      // Whole pixels keep the edge a sharp hairline.
+      anchors.bottomMargin: Math.round(parent.height * 0.08)
+      color: Qt.rgba(0.02, 0.03, 0.05, 0.5)
+      border.width: 1
+      border.color: root.edgeColor
+      radius: height / 2
       clip: true
-
-      Text {
-        anchors.left: parent.left
-        anchors.leftMargin: 22
-        anchors.verticalCenter: parent.verticalCenter
-        text: "\u{f0341}"
-        color: Color.lock.placeholder
-        font.family: Style.font.family
-        font.pixelSize: Math.round(root.fieldFontSize * 1.6)
-      }
+      opacity: root.fieldOpacity
 
       TextInput {
         id: passwordInput
@@ -185,7 +212,7 @@ Item {
         echoMode: TextInput.Password
         passwordCharacter: "\u25CF"
         passwordMaskDelay: 0
-        color: Color.lock.text
+        color: "white"
         selectionColor: Color.lock.selection
         selectedTextColor: Color.lock.text
         font.family: Style.font.family
@@ -194,7 +221,7 @@ Item {
         cursorVisible: activeFocus && root.showPasswordCursor && text.length > 0
         cursorDelegate: Rectangle {
           width: 2
-          color: Color.lock.text
+          color: "white"
           visible: passwordInput.cursorVisible
         }
 
@@ -224,12 +251,11 @@ Item {
       Text {
         textFormat: Text.PlainText
         anchors.fill: passwordInput
-        text: root.authenticatingPassword ? "Checking…" : (root.failureMessage.length > 0 ? root.failureMessage : root.placeholderText)
+        text: root.authenticatingPassword || root.driving ? "Checking…" : (root.failureMessage.length > 0 ? root.failureMessage : root.placeholderText)
         visible: passwordInput.text.length === 0
-        color: root.authenticatingPassword ? Color.lock.text : (root.failureMessage.length > 0 ? Color.lock.textError : Color.lock.placeholder)
+        color: root.authenticatingPassword || root.driving ? "white" : (root.failureMessage.length > 0 ? Color.lock.textError : Qt.rgba(1, 1, 1, 0.62))
         font.family: Style.font.family
         font.pixelSize: root.fieldFontSize
-        font.italic: !root.authenticatingPassword && root.failureMessage.length > 0
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
@@ -241,43 +267,16 @@ Item {
       Text {
         id: fingerprintIcon
         objectName: "fingerprintIndicator"
-        anchors.right: submit.left
-        anchors.rightMargin: 12
+        anchors.right: parent.right
+        anchors.rightMargin: 22
         anchors.verticalCenter: parent.verticalCenter
         visible: root.fingerprintConfigured
         text: "󰈷"
-        color: Color.lock.placeholder
+        color: Qt.rgba(1, 1, 1, 0.62)
         font.family: Style.font.family
         font.pixelSize: Math.round(root.fieldFontSize * 1.1)
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-      }
-
-      Rectangle {
-        id: submit
-        anchors.right: parent.right
-        anchors.rightMargin: 16
-        anchors.verticalCenter: parent.verticalCenter
-        width: 38
-        height: 38
-        radius: 19
-        color: "transparent"
-        border.width: 1.5
-        border.color: root.neonColor
-
-        Text {
-          anchors.centerIn: parent
-          text: "\u{f0054}"
-          color: Color.lock.text
-          font.family: Style.font.family
-          font.pixelSize: root.fieldFontSize
-        }
-
-        MouseArea {
-          anchors.fill: parent
-          cursorShape: Qt.PointingHandCursor
-          onClicked: passwordInput.accepted()
-        }
       }
     }
   }

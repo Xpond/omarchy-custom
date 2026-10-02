@@ -17,7 +17,9 @@ restart. A long-lived view couldn't rely on its watch: a file created after the 
 is never seen.
 
 A design is a folder in `lock/` holding a `Scene.qml`, plus whatever QML, JavaScript,
-shaders and images it loads relative to itself. The scene fills the screen behind the field.
+shaders and images it loads relative to itself. The scene fills the screen behind the field,
+which is frosted glass: the scene blurred under a dark tint, edged in the design's accent with a
+faint glow.
 Every design declares `property Item host`: the host sets it before the scene's bindings
 run, and the log warns if it's missing. The rest is optional:
 
@@ -27,6 +29,7 @@ run, and the log warns if it's missing. The rest is optional:
 | `play()` | Called when the lock shows and automatically when wake completes |
 | `hide()` | Called when the display blanks, resetting the design for its next `play()` |
 | `leave()` | Called when the password is accepted; the lock releases after 550ms for mycelium or 1.1s for the other designs, whatever the animation does |
+| `accent` | The field's edge colour, in the design's own light; white when absent |
 
 A design that fails to load, from a syntax error or a missing folder, leaves the plain
 background, and the field still unlocks. Each lock or preview runs in a fresh worker, so edits
@@ -303,7 +306,7 @@ Successful authentication starts the car, spins the wheels and launches it left;
 the session unlocks after the 1.1-second drive-off.
 
 The scene uses a painted neon-city plate behind the live car, a contact shadow,
-a subdued wet-floor reflection and a 480×72 dark glass password field. The grille
+and a subdued wet-floor reflection. The grille
 and wheel wells have solid dark backing so the bright pavement cannot show through.
 The accepted artwork is **1672×941**, generated with the built-in imagegen tool.
 A native 4K replacement is deferred. The original prompt is saved beside the image.
@@ -505,7 +508,8 @@ not a signal that the physical monitor has finished waking.
 Authentication stays in the stock trusted lock plugin. On success, `unlocking`
 disables input and calls `driveOffThenUnlock()`; its independent timer calls `finishUnlock()`
 after 550ms for mycelium or 1100ms for the other designs. Each lock view sets the interval from
-its selected design; 1100ms remains the fallback if no view loads.
+its selected design; 1100ms remains the fallback if no view loads. The field fades out within
+300ms, still reading "Checking…", so it is gone before any design finishes its exit.
 
 ## Verification
 
@@ -528,8 +532,10 @@ must have cleared the frame. Then the host switches to `tunnel`,
 which must draw its lines; `mycelium`, whose colony 1.5s after its textures are ready must have grown about the centre with
 no line beyond it, where only the dark ground shows; `shore`, whose water must fill the top edge and
 sand the bottom corner wherever in the surf it opens; `meadow`, which must have grown flowers;
-then `wallpaper` and a missing design. The field stays on all six, and the missing one leaves
-the plain background.
+then `wallpaper` and a missing design. The field's top edge shows each design's accent, white
+for `shore`, `wallpaper` and the missing design, which leaves the plain background. Half a second
+after the password is accepted, sooner than the shortest release, only that background remains
+where the field was.
 
 `tests/mycelium.js` grows colonies from fixed seeds at four
 screen shapes: each must cross over 95% of the screen's 60-unit squares, every line drawn must have
