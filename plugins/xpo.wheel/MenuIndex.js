@@ -30,14 +30,14 @@ function trailOf(items, id) {
 }
 
 // Search kind precedence.
-var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4 }
+var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4, bind: 5 }
 
 // Prefer stable ids for use counts; windows already sort by live focus.
 function keyOf(e) {
   if (e.plugin) return e.plugin
   if (e.id) return e.id
   if (e.appId) return "app:" + e.appId
-  return e.action || ""
+  return e.action || e.dispatch || ""
 }
 
 // Keep the selected action through a refresh; a reused menu id with a new command is a new action.
@@ -386,6 +386,53 @@ function liveRows(sources) {
       recency: recencyOf(sources.focusOrder, t.address, ipc.focusHistoryID),
       keywords: (title + " " + appId).toLowerCase()
     })
+  }
+  return out
+}
+
+// Omarchy's keybinding records, `KEYS → Description<TAB>kind<TAB>arg`, as rows. Exec and Lua binds
+// run from a row; a sendshortcut needs its web app focused, and a mouse bind needs the mouse.
+function bindRows(raw) {
+  var out = []
+  var ls = lines(raw)
+  for (var i = 0; i < ls.length; i++) {
+    var f = ls[i].split("\t")
+    var at = f[0].indexOf("→")
+    if (at < 0 || /mouse/i.test(f[0].slice(0, at)) || !f[2] || (f[1] !== "exec" && f[1] !== "lua")) continue
+    var label = f[0].slice(at + 1).trim()
+    var row = { icon: "", label: label, trail: "", kind: KIND.bind,
+                keywords: label.toLowerCase() }
+    row[f[1] === "lua" ? "dispatch" : "action"] = f.slice(2).join("\t")
+    out.push(row)
+  }
+  return out
+}
+
+// What a binding runs to do what a row does: toggle its panel, run its command, or open
+// Omarchy's menu at it by id or alias.
+function bindTargets(row, items) {
+  if (row.plugin) return ["omarchy-shell shell toggle " + row.plugin]
+  var out = row.action ? [row.action] : []
+  var routes = row.id ? [row.id].concat(items[row.id].aliases || []) : []
+  for (var i = 0; i < routes.length; i++) out.push("omarchy-menu toggle " + routes[i])
+  return out
+}
+
+// One action is one row: a binding that runs what a row runs lends that row its description as
+// search words, and the rest join as rows of their own. Rows outlive an open, so a lent row is a copy.
+function withBindings(rows, binds, items) {
+  var out = rows.slice()
+  var at = {}
+  for (var i = 0; i < out.length; i++) {
+    var targets = bindTargets(out[i], items)
+    for (var t = 0; t < targets.length; t++) if (at[targets[t]] === undefined) at[targets[t]] = i
+  }
+  for (var b = 0; b < binds.length; b++) {
+    var bind = binds[b]
+    var command = bind.action || bind.dispatch
+    var j = at[command]
+    if (j === undefined) { at[command] = out.length; out.push(bind); continue }
+    out[j] = merge(out[j], { keywords: out[j].keywords + " " + bind.keywords, _search: null })
   }
   return out
 }

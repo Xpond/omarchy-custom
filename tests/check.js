@@ -169,14 +169,17 @@ assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
 const wheel = { root: { countUse() {}, dismiss() {}, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
-} }, Qt: { callLater: fn => fn() }, MenuIndex: M }
+} }, Qt: { callLater: fn => fn() }, MenuIndex: M,
+  Hyprland: { dispatch: expression => calls.push(["dispatch", expression]) } }
 const runRow = method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)
 runRow({ path: "/home/test/new.txt" })
 assert.equal(calls.at(-1)[0], "xpo.files")
 assert.equal(calls.at(-1)[1].select, "new.txt")
 runRow({ copy: "42" })
 assert.equal(calls.at(-1), "42")
-console.log("ok: busy operations report refusal; wheel paths summon the browser, answers are copied")
+runRow({ dispatch: "hl.dsp.window.pseudo()" })
+assert.deepEqual(calls.at(-1), ["dispatch", "hl.dsp.window.pseudo()"])
+console.log("ok: busy operations report refusal; wheel paths summon the browser, answers are copied, Lua binds dispatch")
 
 // The browser's whole rule: bare keys drive the list, shift drives the preview.
 const scrolls = []
@@ -278,7 +281,7 @@ console.log("ok: only the panel the wheel opened answers backspace with a return
 
 // Search takes every panel the live bar can open, whether or not it has a disc.
 const indexed = { staticRows: M.panelRows(M.OVERLAYS.concat(M.EXTRAS)),
-  styleRows: [], focusOrder: [], appLibrary: null,
+  styleRows: [], bindRows: [], menuItems: {}, focusOrder: [], appLibrary: null,
   shell: { panels: () => [
     { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
     { id: "alice.audio", name: "Alice Audio", source: "omarchy.audio" },

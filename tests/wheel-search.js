@@ -99,7 +99,8 @@ for (const renamed of [false, true]) {
 const wheel = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/Wheel.qml"), "utf8")
 const desktop = { id: "org.example.editor", name: "Old Editor" }
 const top = { title: "Old Document", address: "123", wayland: { appId: desktop.id } }
-const root = { staticRows: [], styleRows: [], focusOrder: [],
+const root = { staticRows: [], styleRows: [], focusOrder: [], menuItems: {},
+  bindRows: M.bindRows("SUPER + N → New thing\texec\tnew action\n"),
   appLibrary: { sortedEntries: () => [{ entry: desktop }] } }
 const rebuild = new Function("root", "MenuIndex", "Hyprland",
   wheel.match(/^  function rebuildIndex\([^]*?^  }/m)[0] + "\nreturn rebuildIndex")(
@@ -107,10 +108,14 @@ const rebuild = new Function("root", "MenuIndex", "Hyprland",
 rebuild()
 const previous = M.search(root.index, "old", 40, {})
 assert.equal(previous.length, 2)
+assert.equal(M.search(root.index, "thing", 40, {})[0].label, "New thing", "the binding is not a row")
 desktop.name = "New Editor"; top.title = "New Document"
-root.staticRows = M.menuRows({ new: { label: "New Menu", action: "new action" } }, M.NO_CONDITIONS)
+root.menuItems = { new: { label: "New Menu", action: "new action" } }
+root.staticRows = M.menuRows(root.menuItems, M.NO_CONDITIONS)
 rebuild()
 assert.equal(M.search(root.index, "old", 40, {}).length, 0)
 assert.equal(M.search(root.index, "new", 40, {}).length, 3)
+assert.equal(M.search(root.index, "thing", 40, {})[0].label, "New Menu",
+  "the binding did not join the menu row that runs its command")
 assert.deepEqual(previous.map(e => e.label), ["Old Document", "Old Editor"])
 console.log(`ok: ${checked} wheel searches preserve ordering, matching, ties, and live scores; production refresh replaces cached rows`)

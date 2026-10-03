@@ -368,6 +368,8 @@ against this machine's real menu files:
 - the one batched script answers every `when` and `checked` the way each
   answers when asked alone
 - the shipped bar and this machine's bar both give an even ring
+- every keybinding, read with the wheel's own command, is found by its
+  description on a row that runs it
 
 Run it after touching `MenuIndex.js`, and against a new Omarchy release — the
 menu file is upstream's, and a new entry shape is exactly what would slip
@@ -417,6 +419,34 @@ and the designs, marked `search: false`, show only inside it. Picking one runs
 `omarchy-lock-design set`, and each carries a `checked:` against
 `omarchy-lock-design current`, so the chosen one's ✓ comes back with the rest.
 
+Keybindings come from Omarchy's own keybindings menu (`SUPER+K`). Hyprland
+reports every Lua bind as dispatcher `__lua` with an index, so `hyprctl binds`
+cannot say what one does; `omarchy-menu-keybindings` recovers each command by
+re-running `hyprland.lua` against a stub `hl`, and caches the result in
+`~/.cache/omarchy/keybindings-<sha>.records`, keyed on `hyprctl binds`. The
+wheel asks it to print, which refreshes that cache whenever the binds changed,
+and reads the records on every open, in 16 ms and 20 ms of CPU. A record is
+`KEYS → Description<TAB>kind<TAB>arg`. An `exec` bind runs its command as a
+menu row does, and a `lua` bind goes to `Hyprland.dispatch`, as window focus
+does. The rest cannot run from a row: a `sendshortcut` needs its web app
+focused, and a mouse bind needs the mouse.
+
+A binding that runs what a row already runs — the row's command, its panel's
+toggle, or Omarchy's menu opened at it by id or alias — is not a second row. It
+lends that row its description as search words, so `idle` finds Stay Awake
+(Toggle locking on idle) and `ocr` finds Capture › Text. Bindings sharing a
+command are one row. Here 213 bindings make 171 rows of their own and join 32
+more. The keys themselves are never shown: the wheel is there so that none need
+remembering.
+
+A window action — Toggle floating, Full screen, Move window to workspace 3 —
+acts on Hyprland's active window, and while the wheel holds the keyboard
+`Hyprland.activeToplevel` reads null. Hyprland's own active window stays put,
+though (`hyprctl activewindow` still names the window behind the wheel), so the
+action lands whatever the timing. Fired 25 times through the wheel's `run()` at
+a throwaway window, five of them with the wheel's surface still holding the
+keyboard, it toggled that window every time and nothing else.
+
 The live half of the index — apps, windows and live panels — is rebuilt when
 the wheel opens. That is the only moment any of it has to be correct, and it means
 they are all as fresh as the keystroke that asked for them. The menu half is a
@@ -437,15 +467,16 @@ without calculator keywords. Other rows still require each query term to start a
 word, keeping menu searches narrow. Rows then
 sort on six keys: **rank** (label-prefix, then a label word, then a hit
 anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
-theme/font, menu), an **exact label** (so "lock" puts Lock before Lockscreen
-Designs, however often that is used), **uses**, **recency**, and finally
-**label length**, which floats
+theme/font, menu, keybinding), an **exact label** (so "lock" puts Lock before
+Lockscreen Designs, however often that is used), **uses**, **recency**, and
+finally **label length**, which floats
 "Screenshot" over "Stop Screenrecording".
 
 `node tests/wheel-search.js` covers matching and ranking, including issue #1's
-calculator results. `node tests/wheel-conditions.js` checks the batched script,
-custom Bash included; `python3 tests/runtime.py` checks live refresh, selection
-and menu-file changes.
+calculator results. `node tests/wheel-binds.js` covers reading the records and
+which bindings join which rows. `node tests/wheel-conditions.js` checks the
+batched script, custom Bash included; `python3 tests/runtime.py` checks live
+refresh, selection and menu-file changes.
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
@@ -490,7 +521,8 @@ checks 2000 random ones against JavaScript's own arithmetic.
 ## What it remembers
 
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
-menu entry's dotted id, `app:` plus a desktop id, or a theme/font command --
+menu entry's dotted id, `app:` plus a desktop id, or a theme/font or
+keybinding command, so a binding keeps its count when its keys change --
 and the count is a sort key in `search()` ranked under `kind`. So habit breaks
 ties *inside* a kind (which of forty themes, which of the "Toggle"
 rows) and never reorders the kinds themselves: that an app beats a menu row
