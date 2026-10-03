@@ -97,6 +97,14 @@ Item {
   // Clockwise from north; node slices drill into submenu rings.
   readonly property var slices: MenuIndex.ringSlices(root.menuItems, root.path,
                                                      root.conditions, root.ring)
+  property var previousSlices: []
+  onSlicesChanged: {
+    if (root.selected >= 0) {
+      root.select(MenuIndex.indexOfEntry(root.slices, root.previousSlices[root.selected]))
+      if (root.selected < 0) root.armed = false
+    }
+    root.previousSlices = root.slices
+  }
 
   // Preserve each slice's arc by growing the ring with its item count.
   readonly property int sliceCount: root.slices.length
@@ -437,7 +445,8 @@ Item {
   function moveResult(step) {
     var n = root.results.length
     if (n <= 0) return
-    root.resultIndex = (root.resultIndex + step + n) % n
+    var from = root.resultIndex < 0 ? (step > 0 ? -1 : 0) : root.resultIndex
+    root.resultIndex = (from + step + n) % n
     root.showResult()
   }
 
@@ -481,8 +490,14 @@ Item {
     onRunningChanged: root.caretLit = true
   }
   onQueryAtChanged: root.caretLit = true
+  property var previousResults: []
+  property string previousQuery: ""
   onResultsChanged: {
-    if (root.resultIndex >= root.results.length) root.resultIndex = 0
+    if (root.query !== root.previousQuery) root.resultIndex = 0
+    else if (root.previousResults[root.resultIndex])
+      root.resultIndex = MenuIndex.indexOfEntry(root.results, root.previousResults[root.resultIndex])
+    root.previousResults = root.results
+    root.previousQuery = root.query
     root.showResult()
   }
 

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from plugin_shell import check as check_plugin_shell
+from wheel_refresh import check as check_wheel_refresh
 
 repo = Path(__file__).resolve().parents[1]
 wheel = (repo / "plugins/xpo.wheel/Wheel.qml").read_text()
@@ -51,6 +52,7 @@ Scope {
         print("ok:", name)
 
     check_plugin_shell(repo, base, run, block)
+    check_wheel_refresh(wheel, run, block)
 
     # The real walk, with `fd` swapped for a scan that says which epoch asked
     # for it. Everything below it -- the epoch, the guards -- is production code.

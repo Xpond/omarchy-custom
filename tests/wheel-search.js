@@ -6,6 +6,25 @@ const source = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/MenuIn
 const names = [...source.matchAll(/^(?:function (\w+)|var (\w+) =)/gm)].map(m => m[1] || m[2])
 const M = new Function(source.replace(/^\.pragma library/m, "") + "\nreturn {" + names.join(",") + "}")()
 
+// Issue #1: a launcher without calculator keywords must still match "calc" inside its name.
+const calculatorApps = [
+  { entry: { id: "libreoffice-calc", name: "LibreOffice Calc" } },
+  { entry: { id: "omacalc", name: "Omacalc", keywords: ["calculator"] } },
+  { entry: { id: "omacalc-dev", name: "Omacalc (Development)" } }
+]
+const calculatorRows = M.liveRows({ apps: calculatorApps, windows: [
+  { title: "Omacalc", address: "123", wayland: { appId: "omacalc-dev" } }
+], focusOrder: [] })
+for (const query of ["calc", "omacalc"]) {
+  const hits = M.search(calculatorRows, query, 40, {})
+  assert.ok(hits.some(r => r.appId === "omacalc-dev"), `${query} missed the development launcher`)
+  assert.equal(hits.filter(r => r.address).length, 1)
+  assert.equal(hits.find(r => r.address).trail, "Window · omacalc-dev")
+  assert.equal(hits.find(r => r.appId === "omacalc-dev").trail, "App")
+}
+assert.equal(M.search(calculatorRows, "calc development", 40, {})[0].appId, "omacalc-dev")
+assert.equal(M.search(calculatorRows.filter(r => !r.address), "omacalc", 40, {}).length, 2)
+
 // An independent scorer keeps stable ties in input order and returns original rows.
 function reference(rows, query, limit, uses) {
   const q = query.trim().toLowerCase()
@@ -20,7 +39,8 @@ function reference(rows, query, limit, uses) {
   return rows.map((entry, i) => {
     const label = entry.label.toLowerCase().replace(/[^a-z0-9]+/g, "")
     const words = tokens(entry.keywords), ident = tokens(entry.ident)
-    if (!terms.every(t => words.some(w => w.startsWith(t)) || ident.includes(t))) return null
+    const partial = entry.kind === M.KIND.app || entry.kind === M.KIND.window
+    if (!terms.every(t => words.some(w => partial ? w.includes(t) : w.startsWith(t)) || ident.includes(t))) return null
     const labelWords = " " + entry.label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
       + " " + label + " "
     const rank = entry.kind === M.KIND.window || label.startsWith(squashed) ? 0
@@ -50,7 +70,7 @@ function fixture(renamed = false) {
 }
 const queries = ["", "  ", "a", "app", "ap", "0", "wifi", "wi fi", "wi-fi", "lock", "lockscreen",
   "files", "open f", "system", "sys m", "audio output", "screen", "utility", "renamed", "é", "हिन्दी",
-  "---", "...", "  LOCK  ", "@#", "zzzz", "visual code", "audio - o"]
+  "---", "...", "  LOCK  ", "@#", "zzzz", "visual code", "audio - o", "acrit", "itor"]
 let checked = 0
 for (const renamed of [false, true]) {
   const rows = fixture(renamed)

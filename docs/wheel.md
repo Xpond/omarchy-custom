@@ -379,9 +379,10 @@ turns into a Remove row once the package is in. Every check goes out as **one**
 bash script, each line echoing `<id>:w` or `<id>:c` when its check holds.
 Asked one at a time the package checks alone took over a second, so the script
 asks `pacman -T` once for every package they name and answers
-`omarchy-pkg-present` from that, and a `$(reader)` the checks share — the
-default browser, asked by seven rows — runs once. The whole script takes about
-a quarter of a second, in the background: the wheel opens on the last answers
+`omarchy-pkg-present` from that. Known readers in simple comparisons — such as
+`[[ $(omarchy-default-browser) == brave ]]` — share one read. Other Bash expressions
+run unchanged, preserving exit status, quoting and short-circuit guards. The script
+takes about a quarter of a second, in the background: the wheel opens on the last answers
 and the new ones land a moment later, rebuilding only if they changed (see the
 trap above). With the theme, font and lock-design reads it costs about a third
 of a second of CPU per open, twice what the wheel's own opening costs, all of
@@ -398,8 +399,10 @@ wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
 resolves an icon name to a file, and launches through `uwsm-app -- gtk-launch`
 so an app does not inherit the compositor's service scope.
 
-Open windows come from `Hyprland.toplevels`. A row carries the window's address
-rather than its toplevel object, so it can never go stale on a window that has
+Open windows come from `Hyprland.toplevels`. Their rows say `Window · <app id>`;
+launcher rows say `App`, so focusing an existing window and launching an app are
+distinct choices. A window row carries its address rather than its toplevel
+object, so it can never go stale on a window that has
 since closed, and focusing one is a `Hyprland.dispatch` — see the trap above.
 
 Themes and fonts are `omarchy theme list` and `omarchy font list`, re-read on
@@ -424,13 +427,23 @@ tells the index to rebuild, since that half is built by hand. The theme and font
 rows are a binding of their own, `styleRows`, rebuilt the same way when a
 re-read changes them.
 
-Every query term must start a word somewhere in the row, so terms narrow. Rows then
+When rows refresh, selection follows the same action to its new position. If that
+action disappears or its command changes, selection clears. A refresh cannot turn
+a selected Logout into Reboot. A new search query still selects its first result.
+
+App and window text accepts substrings: `calc` finds `Omacalc (Development)` even
+without calculator keywords. Other rows still require each query term to start a
+word, keeping menu searches narrow. Rows then
 sort on six keys: **rank** (label-prefix, then a label word, then a hit
 anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
 theme/font, menu), an **exact label** (so "lock" puts Lock before Lockscreen
 Designs, however often that is used), **uses**, **recency**, and finally
 **label length**, which floats
 "Screenshot" over "Stop Screenrecording".
+
+`node tests/wheel-search.js` covers matching and ranking, including issue #1's
+calculator results. `node tests/wheel-conditions.js` checks custom Bash semantics;
+`python3 tests/runtime.py` checks live refresh, selection and menu-file changes.
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
