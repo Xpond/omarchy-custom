@@ -46,7 +46,7 @@ for (const id in items)
   for (const [tag, test] of [["w", items[id].when], ["c", items[id].checked]])
     if (test && spawnSync("bash", ["-c", `{ ${test}; } >/dev/null 2>&1`]).status === 0) alone.push(`${id}:${tag}`)
 const batched = M.lines(scan)
-check(JSON.stringify(batched.slice().sort()) === JSON.stringify(alone.slice().sort()),
+check(JSON.stringify(batched.sort()) === JSON.stringify(alone.sort()),
       `the batched checks agree with asking each alone (${alone.length} hold)`,
       `only batched: ${batched.filter(l => !alone.includes(l))}; only alone: ${alone.filter(l => !batched.includes(l))}`)
 

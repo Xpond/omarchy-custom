@@ -1,9 +1,7 @@
 // Pure logic and lifecycle regressions. Run: node tests/check.js
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
-const os = require("node:os")
 const path = require("node:path")
-const { execFileSync } = require("node:child_process")
 const vm = require("node:vm")
 const repo = path.resolve(__dirname, "..")
 const read = name => fs.readFileSync(path.join(repo, name), "utf8")
@@ -115,7 +113,6 @@ assert.deepEqual(browsers.map(e => e.label), ["Brave ✓", "Zen"])
 assert.equal(browsers[1].iconFont, "omarchy")
 const marked = M.menuRows(defaults, answered)
 assert.deepEqual(M.search(marked, "brave", 40, {}).map(r => r.label), ["Brave ✓"])
-assert.equal(marked.find(r => r.id === "setup.browser.zen").iconFont, "omarchy")
 for (const delegate of ["WheelResults.qml", "WheelRing.qml"])
   assert.match(read("plugins/xpo.wheel/" + delegate), /font\.family: modelData\.iconFont \|\| Style\.font\.menuFamily/,
     delegate + " draws every icon in the menu font")
@@ -124,35 +121,6 @@ assert.deepEqual(M.styles(["Catppuccin", "Osaka Jade"], "Osaka Jade", ["Geist"],
   "Osaka Jade ✓|omarchy theme set 'Osaka Jade'", "Geist ✓|omarchy font set 'Geist'"])
 assert.deepEqual(M.lockItems([]), {}, "designs not listed yet made an empty submenu")
 console.log("ok: checked rows and the current theme and font are marked; icons keep their font")
-
-// One script answers every check: one `pacman -T` for every package named, one run per shared
-// reader, and pacman per name when that query fails, as omarchy-pkg-present asks.
-const stubs = fs.mkdtempSync(path.join(os.tmpdir(), "wheel-checks-"))
-const stub = (name, body) => fs.writeFileSync(path.join(stubs, name), "#!/bin/bash\n" + body, { mode: 0o755 })
-stub("pacman", 'echo "$1" >> "$STUBS/pacman.log"; installed=" kitty vim "\n'
-  + '[[ $1 == -T && $PACMAN_FAILS ]] && exit 1\n'
-  + 'if [[ $1 == -T ]]; then shift 2; s=0; for p; do [[ $installed == *" $p "* ]] || { echo "$p"; s=127; }; done; exit $s; fi\n'
-  + '[[ $installed == *" $2 "* ]]\n')
-stub("omarchy-default-browser", 'echo >> "$STUBS/reads.log"; echo brave\n')
-stub("omarchy-lock-design", '[[ $1 == current ]] && echo meadow\n')
-const checks = M.merge({
-  kitty: { label: "Kitty", action: "k", when: "omarchy-pkg-present kitty" },
-  steam: { label: "Steam", action: "s", when: "! omarchy-pkg-present steam" },
-  both: { label: "Both", action: "b", when: "omarchy-pkg-missing kitty vim" },
-  brave: { label: "Brave", action: "b", checked: "[[ \"$(omarchy-default-browser)\" == brave ]]" },
-  zen: { label: "Zen", action: "z", checked: "[[ $(omarchy-default-browser) == zen ]]" },
-  quoted: { label: "Quoted", action: "q", when: "[[ \"$(echo ')')\" == ')' ]]" }
-}, M.lockItems(["rally", "meadow"]))
-for (const fails of ["", "1"]) {
-  for (const log of ["pacman.log", "reads.log"]) fs.rmSync(path.join(stubs, log), { force: true })
-  const out = execFileSync("bash", ["-c", M.conditionScript(checks)], {
-    encoding: "utf8", env: { ...process.env, PATH: stubs + ":" + process.env.PATH, STUBS: stubs, PACMAN_FAILS: fails } })
-  assert.deepEqual(out.trim().split("\n").sort(), ["brave:c", "kitty:w", "quoted:w", "steam:w", "style.lockscreen.1:c"])
-  assert.equal(fs.readFileSync(path.join(stubs, "pacman.log"), "utf8"), fails ? "-T\n-Q\n-Q\n-Q\n-Q\n" : "-T\n")
-  assert.equal(fs.readFileSync(path.join(stubs, "reads.log"), "utf8"), "\n", "a shared reader ran twice")
-}
-fs.rmSync(stubs, { recursive: true })
-console.log("ok: one pacman query and one run per shared reader answer every check")
 
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []

@@ -23,11 +23,12 @@ for (const query of ["calc", "omacalc"]) {
   assert.equal(hits.find(r => r.appId === "omacalc-dev").trail, "App")
 }
 assert.equal(M.search(calculatorRows, "calc development", 40, {})[0].appId, "omacalc-dev")
+assert.equal(M.search(calculatorRows.filter(r => !r.address), "omacalc", 40, {}).length, 2)
+
 // A window that only contains a term mid-word does not outrank a label that starts with it.
 assert.deepEqual(M.search(M.menuRows({ arch: { label: "Arch", action: "a" } }, M.NO_CONDITIONS).concat(
   M.liveRows({ apps: [], windows: [{ title: "~/x/omarchy-custom", address: "1", wayland: { appId: "kitty" } }],
   focusOrder: [] })), "ar", 40, {}).map(r => r.label), ["Arch", "~/x/omarchy-custom"])
-assert.equal(M.search(calculatorRows.filter(r => !r.address), "omacalc", 40, {}).length, 2)
 
 // An independent scorer keeps stable ties in input order and returns original rows.
 function reference(rows, query, limit, uses) {

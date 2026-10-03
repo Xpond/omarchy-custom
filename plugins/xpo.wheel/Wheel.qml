@@ -99,10 +99,7 @@ Item {
                                                      root.conditions, root.ring)
   property var previousSlices: []
   onSlicesChanged: {
-    if (root.selected >= 0) {
-      root.select(MenuIndex.indexOfEntry(root.slices, root.previousSlices[root.selected]))
-      if (root.selected < 0) root.armed = false
-    }
+    if (root.selected >= 0) root.select(MenuIndex.indexOfEntry(root.slices, root.previousSlices[root.selected]))
     root.previousSlices = root.slices
   }
 
@@ -445,7 +442,7 @@ Item {
   function moveResult(step) {
     var n = root.results.length
     if (n <= 0) return
-    var from = root.resultIndex < 0 ? (step > 0 ? -1 : 0) : root.resultIndex
+    var from = root.resultIndex < 0 && step < 0 ? 0 : root.resultIndex
     root.resultIndex = (from + step + n) % n
     root.showResult()
   }

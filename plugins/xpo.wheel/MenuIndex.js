@@ -46,7 +46,7 @@ function indexOfEntry(rows, previous) {
   var key = keyOf(previous)
   for (var i = 0; i < rows.length; i++) {
     var e = rows[i]
-    if (keyOf(e) === key && e.action === previous.action && e.node === previous.node
+    if (keyOf(e) === key && e.action === previous.action
         && e.address === previous.address && e.path === previous.path) return i
   }
   return -1
@@ -195,8 +195,7 @@ function panels(barIds) {
 
 var CONDITION_READERS = [
   "omarchy-default-agent", "omarchy-default-browser", "omarchy-default-terminal", "omarchy-default-editor",
-  "omarchy-dns", "omarchy-network-status", "omarchy-channel-current", "omarchy-lock-design current",
-  "dell-xps-touchpad-haptics get", "findmnt -no FSTYPE /"
+  "omarchy-dns", "omarchy-channel-current", "omarchy-lock-design current", "dell-xps-touchpad-haptics get"
 ]
 
 // Every `when` and `checked` in one bash script, echoing `<id>:w` or `<id>:c` for each that holds.
@@ -213,7 +212,7 @@ function conditionScript(items) {
       while ((m = asked.exec(expr))) m[1].trim().split(/\s+/).forEach(function (n) { names[n] = true })
       // Only a whole comparison of a known reader and literal/pattern can share its output.
       // Assignments, guards, quoted shell text and arbitrary commands keep their Bash semantics.
-      var comparison = /^\[\[ ("?)\$\(([\w .\/=-]+)\)\1 == ("[\w .\/-]*"|'[\w .\/-]*'|[\w.*\/-]+) \]\]$/.exec(expr)
+      var comparison = /^\[\[ ("?)\$\(([\w .-]+)\)\1 == ("[\w .\/-]*"|'[\w .\/-]*'|[\w.*\/-]+) \]\]$/.exec(expr)
       if (comparison && CONDITION_READERS.indexOf(comparison[2]) >= 0) {
         var read = comparison[2]
         if (reads.indexOf(read) < 0) reads.push(read)

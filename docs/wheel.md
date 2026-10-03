@@ -442,8 +442,9 @@ Designs, however often that is used), **uses**, **recency**, and finally
 "Screenshot" over "Stop Screenrecording".
 
 `node tests/wheel-search.js` covers matching and ranking, including issue #1's
-calculator results. `node tests/wheel-conditions.js` checks custom Bash semantics;
-`python3 tests/runtime.py` checks live refresh, selection and menu-file changes.
+calculator results. `node tests/wheel-conditions.js` checks the batched script,
+custom Bash included; `python3 tests/runtime.py` checks live refresh, selection
+and menu-file changes.
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
