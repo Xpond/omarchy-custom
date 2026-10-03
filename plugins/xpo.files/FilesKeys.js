@@ -30,6 +30,8 @@ function onKey(panel, ops, preview, event) {
     case Qt.Key_H: panel.showHidden = !panel.showHidden; event.accepted = true; return
     case Qt.Key_U: panel.filter = ""; event.accepted = true; return
     case Qt.Key_Y: ops.copyPath(); event.accepted = true; return
+    case Qt.Key_Return:
+    case Qt.Key_Enter: ops.terminal(); event.accepted = true; return
     case Qt.Key_O: panel.cycleOrder(); event.accepted = true; return
     case Qt.Key_N:
       if (event.modifiers & Qt.ShiftModifier) panel.beginNew()

@@ -55,6 +55,7 @@ red, and a save is confirmed by reading the file back.
 | `Ctrl+Shift+N` | make a file or a folder here — the name says which, see [Moving files](#moving-files) |
 | `Del` | trash the selection, asked twice |
 | `Ctrl+Y` | copy the selection's path to the clipboard |
+| `Ctrl+Enter` | open a terminal in the directory you are in |
 | `Ctrl+O` | order by name, then newest, then largest — see [Ordering](#ordering) |
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
@@ -504,6 +505,9 @@ release, which covers the ~55 ms a replacement surface takes to map.
   two agree.
 - No undo for a move, a copy, a rename or a new file — only a delete can be
   taken back, out of the trash. Use `yazi` for the rest.
+- The key legend is one line, 1030 px wide at the stock size. On a screen
+  narrower than about 1160 logical pixels the card is narrower than that, and
+  the legend runs past its edges.
 - An image's pixel size comes from `identify`. Colour and dimensions are both
   niceties rather than dependencies: without ImageMagick there are no numbers,
   and the size and the date still stand.

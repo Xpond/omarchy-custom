@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "FilesIndex.js" as FilesIndex
 
@@ -67,6 +68,11 @@ Item {
     root.run(["sh", "-c", 'printf %s "$1" | wl-copy', "files", panel.sel.path],
              { done: "copied " + FilesIndex.display(panel.sel.path, panel.home),
                fail: "copy path failed" })
+  }
+  // A terminal in the folder being browsed; the panel unmaps before it asks for the keyboard.
+  function terminal() {
+    panel.close()
+    Quickshell.execDetached(["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + panel.dir])
   }
   // Deletion uses trash, requires two presses, and stays visibly red across themes.
   readonly property color danger: "#ff2222"
