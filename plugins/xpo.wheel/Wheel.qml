@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import QtQuick.Effects
 import qs.Commons
 import qs.Ui
+import "Calc.js" as Calc
 import "MenuIndex.js" as MenuIndex
 import "MenuKeys.js" as MenuKeys
 
@@ -75,6 +76,7 @@ Item {
   readonly property int resultCap: 8
   readonly property var results: root.mode === "file"
     ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home)
+    : root.mode === "calc" ? Calc.rows(root.term)
     : MenuIndex.search(root.index, root.term, root.resultLimit, root.uses)
   property int resultIndex: 0
   property int resultTop: 0
@@ -89,7 +91,8 @@ Item {
     root.hoverAt = pt
     return true
   }
-  readonly property string emptyText: root.mode !== "file" ? "No match"
+  readonly property string emptyText: root.mode === "calc" ? (root.term ? "No answer" : "Type to calculate")
+    : root.mode !== "file" ? "No match"
     : !root.files ? "Scanning\u2026"
     : !root.term ? "Type to find files"
     : "No match"
@@ -405,6 +408,7 @@ Item {
         root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
         root.launched = "xpo.files"
       }
+      else if (e.copy) root.copy(e.copy)
       else if (e.action) Util.execDetached(e.action)
     })
   }
@@ -434,9 +438,13 @@ Item {
   function takePath() {
     var hit = root.searching ? root.results[root.resultIndex] : null
     if (!hit || !hit.path) return false
-    Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", hit.path])
+    root.copy(hit.path)
     root.dismiss()
     return true
+  }
+
+  function copy(text) {
+    Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", text])
   }
 
   function moveResult(step) {
