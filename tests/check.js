@@ -205,7 +205,16 @@ key("Key_Home", shift);     key("Key_End", shift)
 key("Key_Right", shift);    key("Key_Left", shift)
 assert.deepEqual(scrolls, [7, -7, "to0", "to1", "x3", "x-3"])
 assert.equal(browser.index, 99, "no shifted key reaches the list")
-console.log("ok: browser bare keys drive the list, shift drives the preview")
+// Ctrl+Enter is a terminal in the folder being browsed; Enter alone still opens the selection.
+const browsed = []
+const terminalOps = { doomed: "", activate: () => browsed.push("open"),
+  terminal: method(read("plugins/xpo.files/FilesOps.qml"), "terminal", {
+    panel: { dir: "/home/test/My Dir", close: () => browsed.push("closed") },
+    Quickshell: { execDetached: argv => browsed.push([...argv]) } }) }
+const browserKey = keymap("plugins/xpo.files/FilesKeys.js", browser, terminalOps, preview)
+browserKey("Key_Return", 1 << 26); browserKey("Key_Return")
+assert.deepEqual(browsed, ["closed", ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"], "open"])
+console.log("ok: browser bare keys drive the list, shift drives the preview, ctrl+enter opens a terminal")
 
 // The wheel's query edits at the caret, not at the end.
 const copied = []
@@ -252,7 +261,21 @@ dialKey("Key_Y", ctrl); assert.deepEqual(copied, [], "an app row has no path to 
 dial.resultIndex = 1
 dialKey("Key_Y", ctrl)
 assert.deepEqual(copied, ["/home/test/notes.md", "dismissed"])
-console.log("ok: wheel query edits at the caret, and a path can be taken away")
+
+// Ctrl+Enter opens a terminal in a path's folder, and on any other row is Enter.
+const terminals = [], entered = []
+dial.run = e => entered.push(e)
+dial.terminal = method(wheelSource, "terminal", { root: dial, Qt: { callLater: fn => fn() }, MenuIndex: M,
+  Quickshell: { execDetached: argv => terminals.push([...argv]) } })
+dial.results.push({ path: "/home/test/My Dir/" })
+dial.resultIndex = 0; dialKey("Key_Return", ctrl)
+assert.deepEqual([terminals, entered.map(e => e.appId)], [[], ["firefox"]], "ctrl+enter on an app is not enter")
+dial.resultIndex = 1; dialKey("Key_Return", ctrl)
+dial.resultIndex = 2; dialKey("Key_Enter", ctrl)
+assert.deepEqual(terminals, [["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test"],
+                             ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"]])
+assert.equal(entered.length, 1, "a path row also ran as enter")
+console.log("ok: wheel query edits at the caret, and a path can be taken away or opened in a terminal")
 
 // A panel cannot tell how it was opened, so the wheel answers for it: only the
 // panel the wheel put on screen, and only while it is still there.

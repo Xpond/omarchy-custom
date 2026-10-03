@@ -542,11 +542,16 @@ function fileRow(path, home) {
   }
 }
 
+// A directory's own path, or the directory holding a file.
+function dirOf(path) {
+  var p = String(path)
+  return p.charAt(p.length - 1) === "/" ? p.slice(0, -1) : p.slice(0, p.lastIndexOf("/")) || "/"
+}
+
 function pathPayload(path) {
   var p = String(path)
-  if (p.charAt(p.length - 1) === "/") return JSON.stringify({ dir: p.slice(0, -1) })
-  var cut = p.lastIndexOf("/")
-  return JSON.stringify({ dir: p.slice(0, cut) || "/", select: p.slice(cut + 1) })
+  var name = p.slice(p.lastIndexOf("/") + 1)
+  return JSON.stringify(name ? { dir: dirOf(p), select: name } : { dir: dirOf(p) })
 }
 
 // Rank paths by name position and length; materialize rows only for winners.

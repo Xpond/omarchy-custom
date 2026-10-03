@@ -6,7 +6,8 @@ A radial control center, a file browser and centered shell panels for
 - **Wheel** (`SUPER+A`): your bar's panels on a ring. Start typing to search
   every panel, the Omarchy menu, every keybinding, apps, open windows, themes
   and fonts; begin
-  with `/` to search files and folders under your home instead, or with `=`
+  with `/` to search files and folders under your home instead (`Ctrl+Enter`
+  opens a terminal in one), or with `=`
   to calculate (`Enter` copies the answer). `SUPER+W`
   closes the wheel and any open shell panel, otherwise the active window. See
   [`docs/wheel.md`](docs/wheel.md).

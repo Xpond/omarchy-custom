@@ -446,6 +446,17 @@ Item {
     return true
   }
 
+  // A terminal in the highlighted path's folder; the wheel unmaps first, as in run().
+  function terminal() {
+    var hit = root.searching ? root.results[root.resultIndex] : null
+    if (!hit || !hit.path) return false
+    root.dismiss(true)
+    Qt.callLater(function () {
+      Quickshell.execDetached(["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + MenuIndex.dirOf(hit.path)])
+    })
+    return true
+  }
+
   function copy(text) {
     Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "wheel", text])
   }

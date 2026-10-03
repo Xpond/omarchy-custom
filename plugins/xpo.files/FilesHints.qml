@@ -31,8 +31,8 @@ Item {
          ["ctrl+e", "edit"], ["esc", "close"]]
     : [["↑↓", "select"], ["→", "open"], ["←", "up"],
        ["shift+↑↓", "scroll"], ["ctrl+x/c/v", "move/copy"],
-       ["ctrl+e", "edit"], ["ctrl+y", "copy path"], ["ctrl+o", "sort"],
-       ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"],
+       ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
+       ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"],
        ["esc", "close"]]
 
   Row {

@@ -53,6 +53,7 @@ key means and the dial performs it, which is what lets a test press a key.
 | `Ctrl+U` `Ctrl+K` | cut to the start, or to the end |
 | `Ctrl+V` | paste at the caret, runs of whitespace collapsed to one space |
 | `Ctrl+Y` | copy the highlighted path and close |
+| `Ctrl+Enter` | open a terminal in the highlighted path's folder; on any other row, as `Enter` |
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 

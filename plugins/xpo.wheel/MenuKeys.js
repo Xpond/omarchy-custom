@@ -20,6 +20,11 @@ function onKey(wheel, event) {
     case Qt.Key_Y:
       if (!wheel.takePath()) return
       event.accepted = true; return
+    // A path opens a terminal in its folder; anything else runs as Enter does.
+    case Qt.Key_Return:
+    case Qt.Key_Enter:
+      if (!wheel.terminal()) break
+      event.accepted = true; return
     case Qt.Key_N:
       if (wheel.searching) { wheel.moveResult(1); event.accepted = true }
       return
