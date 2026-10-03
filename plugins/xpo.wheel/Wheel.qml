@@ -31,7 +31,6 @@ Item {
   property int launchedAt: -1
 
   property string query: ""
-  property int queryAt: 0
   property var defaultMenu: ({})
   property var userMenu: ({})
   // Answers re-read on every open stay raw text: a string reassigned unchanged notifies nothing.
@@ -310,7 +309,7 @@ Item {
     root.reread()
     spin.stepsLeft = root.sliceCount
     spin.restart()
-    Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
+    Qt.callLater(function () { root.shown = true; searchInput.forceActiveFocus() })
   }
 
   // Fade cancellation; unmap immediately before handing keyboard focus to a panel.
@@ -426,18 +425,6 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
-  // Compute the caret before assigning query; its change handler clamps it.
-  function insert(text) {
-    if (!text) return
-    var at = root.queryAt + text.length
-    root.query = root.query.slice(0, root.queryAt) + text + root.query.slice(root.queryAt)
-    root.queryAt = at
-  }
-
-  function paste() {
-    root.insert(String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim())
-  }
-
   function takePath() {
     var hit = root.searching ? root.results[root.resultIndex] : null
     if (!hit || !hit.path) return false
@@ -496,19 +483,12 @@ Item {
   }
 
   onQueryChanged: {
+    // Escape and other wheel actions can change query outside TextInput; mirror
+    // those changes without feeding the TextInput's own edits back recursively.
+    if (searchInput.text !== root.query) searchInput.text = root.query
     root.resultIndex = 0; root.resultTop = 0
-    root.queryAt = Math.min(root.queryAt, root.query.length)
   }
 
-  property bool caretLit: true
-  Timer {
-    running: root.opened && root.searching
-    interval: 530
-    repeat: true
-    onTriggered: root.caretLit = !root.caretLit
-    onRunningChanged: root.caretLit = true
-  }
-  onQueryAtChanged: root.caretLit = true
   property var previousResults: []
   property string previousQuery: ""
   onResultsChanged: {
@@ -783,13 +763,6 @@ Item {
     }
 
     Item {
-      id: keys
-      anchors.fill: parent
-      focus: true
-      Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
-    }
-
-    Item {
       anchors.fill: parent
       opacity: root.shown ? 1 : 0
       scale: root.shown ? 1 : 0.92
@@ -836,43 +809,41 @@ Item {
 
           ClickShield {}
 
-          // Split around the caret so blinking does not shift text.
-          Row {
-            id: field
+          Text {
             anchors.centerIn: parent
-            opacity: root.searching ? 1 : 0.45
-            readonly property real budget: root.searchWidth - Style.spacing.rowPaddingX * 2
+            visible: !root.searching
+            text: "Search"
+            color: Color.menu.text
+            opacity: 0.45
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.subtitle
+          }
 
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              width: Math.min(implicitWidth, field.budget - caret.width - tail.width)
-              elide: Text.ElideLeft
-              text: root.searching ? root.query.slice(0, root.queryAt) : "Search"
-              color: Color.menu.text
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.subtitle
-            }
-
-            Rectangle {
-              id: caret
-              anchors.verticalCenter: parent.verticalCenter
-              visible: root.searching
+          TextInput {
+            id: searchInput
+            anchors.fill: parent
+            anchors.leftMargin: Style.spacing.rowPaddingX
+            anchors.rightMargin: Style.spacing.rowPaddingX
+            verticalAlignment: TextInput.AlignVCenter
+            horizontalAlignment: TextInput.AlignHCenter
+            clip: true
+            focus: true
+            activeFocusOnPress: true
+            text: root.query
+            color: Color.menu.text
+            selectionColor: Util.alpha(Color.accent, 0.35)
+            selectedTextColor: Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.subtitle
+            cursorVisible: activeFocus && text.length > 0
+            cursorDelegate: Rectangle {
               width: Style.space(2)
-              height: Style.font.subtitle
               color: Color.accent
-              opacity: root.caretLit ? 0.85 : 0.0
+              // TextInput does not hide a custom cursor delegate automatically.
+              visible: searchInput.cursorVisible
             }
-
-            Text {
-              id: tail
-              anchors.verticalCenter: parent.verticalCenter
-              width: Math.min(implicitWidth, field.budget - caret.width)
-              elide: Text.ElideRight
-              text: root.searching ? root.query.slice(root.queryAt) : ""
-              color: Color.menu.text
-              font.family: Style.font.menuFamily
-              font.pixelSize: Style.font.subtitle
-            }
+            onTextChanged: if (root.query !== text) root.query = text
+            Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
           }
         }
       }
