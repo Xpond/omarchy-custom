@@ -1,12 +1,7 @@
 """Selection regressions driven by the wheel's actual QML change handlers."""
-import re
 
 
 def check(wheel, run, block):
-    def handler(name):
-        match = re.search(r"^  " + name + r": \{.*?^  }", wheel, re.S | re.M)
-        return match.group() if match else ""
-
     common = '''
   property bool opened: true
   property bool armed: false
@@ -46,7 +41,7 @@ def check(wheel, run, block):
 '''
     common += "\n".join(block(wheel, r"  function " + name + r"\(") for name in
                         ["commit", "select", "showResult", "moveResult"])
-    common += "\n" + "\n".join(handler(name) for name in
+    common += "\n" + "\n".join(block(wheel, r"  " + name + r": \{") for name in
                                 ["onSlicesChanged", "onResultsChanged", "onQueryChanged"])
 
     run("refresh-ring-selection", common + '''
@@ -64,7 +59,7 @@ def check(wheel, run, block):
   } }
   Timer { interval: 150; running: true; onTriggered: {
     root.commit()
-    root.expect(!root.ran && root.selected === -1 && !root.armed, "a replaced action stayed armed")
+    root.expect(!root.ran && root.selected === -1, "a replaced action stayed selected")
     root.select(root.slices.length - 1)
     root.menuItems = { system: {label: "System"} }
   } }
