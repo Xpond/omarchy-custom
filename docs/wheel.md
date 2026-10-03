@@ -312,6 +312,13 @@ returns without error and focus simply does not move, because it sends
 Note the `0x` — Quickshell reports the address without it, and Hyprland only
 matches it with one.
 
+**A `var` reassigned an equal value still notifies.** QML compares a `string`
+before notifying, but not a `var`: assigning an array or an object, even the
+very same object, re-runs every binding on it. So whatever the wheel re-reads on
+open is kept as raw text in a `string` (`conditionText`, `themeText`,
+`lockText`…) and parsed by bindings on that, and an open whose answers have not
+changed rebuilds nothing.
+
 **Do not use `omarchy-shell -q` when you need the answer.** Quiet mode
 suppresses stdout (`if (( !QUIET )) && [[ -n $output ]]`), so the result never
 comes back and every press takes the fallback. Plain `omarchy-shell` still
@@ -325,6 +332,9 @@ behaviour.
 `~/.config/omarchy/extensions/omarchy-menu.jsonc` — strips JSONC comments and
 trailing commas, and merges the user's over the defaults by id. Ids are dotted
 (`trigger.capture.qr`), so an entry's breadcrumb is just its ancestors' labels.
+Both files are watched, as Omarchy's own menu watches them: an edit shows when
+it is saved, and an entry taken out of the user's file is gone rather than
+merged over.
 
 **Every entry in the menu is a row.** Entries with an `action` run it. Entries
 without one are submenus, and they are rows too — searching `install` has to
@@ -339,6 +349,11 @@ hands the whole route to `omarchy-menu summon <id>` rather than being dropped.
 That also covers any provider a later Omarchy adds that `MenuIndex.js` has
 never heard of.
 
+An entry's `iconFont` is honoured. Omarchy draws its own marks — the Omarchy
+logo, Codex, Cursor, Grok — from a font of its own, at codepoints a Nerd Font
+fills with other glyphs, so drawn in the menu font they come out as a COBOL
+logo and the like.
+
 That invariant is checked rather than asserted. `check.js` runs the real index
 against this machine's real menu files:
 
@@ -349,23 +364,34 @@ against this machine's real menu files:
 - every row has an action or a node
 - no node opens onto an empty ring
 - every call site in the plugin names something `MenuIndex.js` defines
+- the one batched script answers every `when` and `checked` the way each
+  answers when asked alone
 - the shipped bar and this machine's bar both give an even ring
 
 Run it after touching `MenuIndex.js`, and against a new Omarchy release — the
 menu file is upstream's, and a new entry shape is exactly what would slip
 through.
 
-`when:` is evaluated. Every condition in both menu files goes out as **one**
-bash script — each line echoes its own id when its condition holds — rather
-than a subprocess per entry. It runs once at startup, in the background, and
-takes over a second; pressing `SUPER+A`
-is not the moment to spend that, and installing a package is rare enough that
-one stale reading until the next shell restart is the right trade. A `when`
-that fails hides the row, and a submenu whose children all failed is hidden
-too, so a slice never drills into an empty ring.
+`when:` and `checked:` are evaluated on every open, as Omarchy's own menu
+re-checks its rows on every open, so a row follows state that changed under it:
+Stop Screenrecording exists only while something records, and an Install row
+turns into a Remove row once the package is in. Every check goes out as **one**
+bash script, each line echoing `<id>:w` or `<id>:c` when its check holds.
+Asked one at a time the package checks alone took over a second, so the script
+asks `pacman -T` once for every package they name and answers
+`omarchy-pkg-present` from that, and a `$(reader)` the checks share — the
+default browser, asked by seven rows — runs once. The whole script takes about
+a quarter of a second, in the background: the wheel opens on the last answers
+and the new ones land a moment later, rebuilding only if they changed (see the
+trap above). With the theme, font and lock-design reads it costs about a third
+of a second of CPU per open, twice what the wheel's own opening costs, all of
+it in those processes: starting them holds the UI thread 1.4 ms, before the
+wheel's first frame, and a probe animating at 144 Hz beside them lost no frames.
 
-`checked:` is **not** evaluated. It only appends a ✓, and it would have to
-re-run on every open to be true.
+A `when` that fails hides the row, and a submenu whose children all failed is
+hidden too, so a slice never drills into an empty ring. A `checked` that holds
+appends ✓ to its row, on the ring and in search: the default browser,
+terminal, editor and agent, the DNS, the update channel.
 
 Applications come from `shell.appLibrary` (`services/AppLibrary.qml`), which
 wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
@@ -376,22 +402,27 @@ Open windows come from `Hyprland.toplevels`. A row carries the window's address
 rather than its toplevel object, so it can never go stale on a window that has
 since closed, and focusing one is a `Hyprland.dispatch` — see the trap above.
 
-Themes and fonts are `omarchy theme list` and `omarchy font list`, run once at
-startup and fired back as `omarchy theme set '<name>'`. Both are otherwise
-buried: `style.theme` in the menu shells out to `omarchy-theme-switcher`, a
-second overlay on top of the first. Lock-screen designs come from
-`omarchy-lock-design list`, also once, but join the menu as one Style ›
-Lockscreen Designs submenu: search finds that entry, and the designs, marked
-`search: false`, show only inside it. Picking one runs `omarchy-lock-design set`.
+Themes and fonts are `omarchy theme list` and `omarchy font list`, re-read on
+every open along with the current theme and font, which are marked ✓, and fired
+back as `omarchy theme set '<name>'`. Each read takes a few milliseconds. Both
+are otherwise buried: `style.theme` in the menu shells out to
+`omarchy-theme-switcher`, a second overlay on top of the first. Lock-screen
+designs come from `omarchy-lock-design list`, re-read the same way, but join
+the menu as one Style › Lockscreen Designs submenu: search finds that entry,
+and the designs, marked `search: false`, show only inside it. Picking one runs
+`omarchy-lock-design set`, and each carries a `checked:` against
+`omarchy-lock-design current`, so the chosen one's ✓ comes back with the rest.
 
-The live half of the index — apps, windows, themes, fonts — is rebuilt when the
-wheel opens. That is the only moment any of it has to be correct, and it means
+The live half of the index — apps, windows and live panels — is rebuilt when
+the wheel opens. That is the only moment any of it has to be correct, and it means
 they are all as fresh as the keystroke that asked for them. The menu half is a
 binding rather than a per-open rebuild: flattening the menu costs several times
 what everything else costs together, and it only changes when the menu files
 load or when the conditions come back. When they do come back — after the wheel
 is already on screen — the ring re-reads them on its own, and `onStaticRowsChanged`
-tells the index to rebuild, since that half is built by hand.
+tells the index to rebuild, since that half is built by hand. The theme and font
+rows are a binding of their own, `styleRows`, rebuilt the same way when a
+re-read changes them.
 
 Every query term must start a word somewhere in the row, so terms narrow. Rows then
 sort on six keys: **rank** (label-prefix, then a label word, then a hit
@@ -452,7 +483,8 @@ stable for months, and a half-life is a second knob to be wrong about.
 
 ## The ring
 
-By default the ring is the panels your bar carries, in a fixed order, plus the
+By default the ring is the panels your bar carries — written as a bare id or as
+an object with an `id`, as Omarchy reads either — in a fixed order, plus the
 clipboard overlay — which is not a bar widget, so nothing in the bar vouches
 for it. Adding a widget to the bar adds it to the wheel; the wheel is not a
 second list to keep in sync with the first. A machine that has never edited its

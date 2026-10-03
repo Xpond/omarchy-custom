@@ -88,7 +88,7 @@ Item {
           visible: !modelData.iconFile
           text: modelData.icon
           color: slice.glyphColor
-          font.family: Style.font.menuFamily
+          font.family: modelData.iconFont || Style.font.menuFamily
           font.pixelSize: slice.glyphSize
         }
         PanelIcon {

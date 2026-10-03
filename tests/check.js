@@ -1,7 +1,9 @@
 // Pure logic and lifecycle regressions. Run: node tests/check.js
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
+const os = require("node:os")
 const path = require("node:path")
+const { execFileSync } = require("node:child_process")
 const vm = require("node:vm")
 const repo = path.resolve(__dirname, "..")
 const read = name => fs.readFileSync(path.join(repo, name), "utf8")
@@ -78,7 +80,7 @@ for (const query of ["", "a", "e", "home", "wheel", " WHEEL ", "a beta", "space 
     assert.deepEqual(M.fileRows(files, query, limit, "/home/test"), reference(files, query, limit))
 assert.deepEqual(M.fileRows(null, "a", 40, "/home/test"), [])
 const app = M.liveRows({ apps: [{ entry: { id: "broken", icon: "/missing.png" } }],
-  windows: [], themes: [], fonts: [] })[0]
+  windows: [] })[0]
 assert.ok(app.icon)
 console.log("ok: file search ordering, limits, ties, and app fallback glyph")
 
@@ -91,6 +93,66 @@ assert.deepEqual(M.search(lockRows, "rally", 40, {}), [])
 assert.deepEqual(M.childrenOf(lockMenu, "style.lockscreen", M.NO_CONDITIONS).map(e => [e.label, e.action]),
   [["Rally", "omarchy-lock-design set 'rally'"], ["Wallpaper", "omarchy-lock-design set 'wallpaper'"]])
 console.log("ok: \"lock\" finds Lock, then one Lockscreen Designs row whose submenu sets a design")
+
+// Omarchy takes `aliases` as one string or a list, and a bar widget as its bare id.
+const aliased = M.menuRows({ notes: { label: "Notes", action: "notes", aliases: "memo" },
+  todo: { label: "Todo", action: "todo", aliases: ["tasks"] } }, M.NO_CONDITIONS)
+assert.deepEqual(M.search(aliased, "memo", 40, {}).map(r => r.label), ["Notes"])
+assert.deepEqual(M.search(aliased, "tasks", 40, {}).map(r => r.label), ["Todo"])
+assert.deepEqual(M.panels(M.barWidgets(JSON.stringify({ bar: { layout: {
+  left: ["omarchy.audio"], right: [{ id: "omarchy.network" }, "omarchy.power"] } } }))).map(p => p.plugin),
+  ["omarchy.audio", "omarchy.network", "omarchy.power", "omarchy.clipboard"])
+console.log("ok: a string alias and a bare-id bar widget read as Omarchy reads them")
+
+// A holding `checked` marks its row wherever it shows, as do the current theme and font, and an
+// icon keeps the font it is drawn in.
+const defaults = { setup: { label: "Setup" }, "setup.browser": { label: "Browser" },
+  "setup.browser.brave": { label: "Brave", action: "b", when: "w", checked: "c" },
+  "setup.browser.zen": { label: "Zen", action: "z", checked: "c", icon: "", iconFont: "omarchy" } }
+const answered = M.parseConditions("setup.browser.brave:w\nsetup.browser.brave:c\n", defaults)
+const browsers = M.childrenOf(defaults, "setup.browser", answered)
+assert.deepEqual(browsers.map(e => e.label), ["Brave ✓", "Zen"])
+assert.equal(browsers[1].iconFont, "omarchy")
+const marked = M.menuRows(defaults, answered)
+assert.deepEqual(M.search(marked, "brave", 40, {}).map(r => r.label), ["Brave ✓"])
+assert.equal(marked.find(r => r.id === "setup.browser.zen").iconFont, "omarchy")
+for (const delegate of ["WheelResults.qml", "WheelRing.qml"])
+  assert.match(read("plugins/xpo.wheel/" + delegate), /font\.family: modelData\.iconFont \|\| Style\.font\.menuFamily/,
+    delegate + " draws every icon in the menu font")
+assert.deepEqual(M.styles(["Catppuccin", "Osaka Jade"], "Osaka Jade", ["Geist"], "Geist")
+  .map(r => r.label + "|" + r.action), ["Catppuccin|omarchy theme set 'Catppuccin'",
+  "Osaka Jade ✓|omarchy theme set 'Osaka Jade'", "Geist ✓|omarchy font set 'Geist'"])
+assert.deepEqual(M.lockItems([]), {}, "designs not listed yet made an empty submenu")
+console.log("ok: checked rows and the current theme and font are marked; icons keep their font")
+
+// One script answers every check: one `pacman -T` for every package named, one run per shared
+// reader, and pacman per name when that query fails, as omarchy-pkg-present asks.
+const stubs = fs.mkdtempSync(path.join(os.tmpdir(), "wheel-checks-"))
+const stub = (name, body) => fs.writeFileSync(path.join(stubs, name), "#!/bin/bash\n" + body, { mode: 0o755 })
+stub("pacman", 'echo "$1" >> "$STUBS/pacman.log"; installed=" kitty vim "\n'
+  + '[[ $1 == -T && $PACMAN_FAILS ]] && exit 1\n'
+  + 'if [[ $1 == -T ]]; then shift 2; s=0; for p; do [[ $installed == *" $p "* ]] || { echo "$p"; s=127; }; done; exit $s; fi\n'
+  + '[[ $installed == *" $2 "* ]]\n')
+stub("omarchy-default-browser", 'echo >> "$STUBS/reads.log"; echo brave\n')
+stub("omarchy-lock-design", '[[ $1 == current ]] && echo meadow\n')
+const checks = M.merge({
+  kitty: { label: "Kitty", action: "k", when: "omarchy-pkg-present kitty" },
+  steam: { label: "Steam", action: "s", when: "! omarchy-pkg-present steam" },
+  both: { label: "Both", action: "b", when: "omarchy-pkg-missing kitty vim" },
+  brave: { label: "Brave", action: "b", checked: "[[ \"$(omarchy-default-browser)\" == brave ]]" },
+  zen: { label: "Zen", action: "z", checked: "[[ $(omarchy-default-browser) == zen ]]" },
+  quoted: { label: "Quoted", action: "q", when: "[[ \"$(echo ')')\" == ')' ]]" }
+}, M.lockItems(["rally", "meadow"]))
+for (const fails of ["", "1"]) {
+  for (const log of ["pacman.log", "reads.log"]) fs.rmSync(path.join(stubs, log), { force: true })
+  const out = execFileSync("bash", ["-c", M.conditionScript(checks)], {
+    encoding: "utf8", env: { ...process.env, PATH: stubs + ":" + process.env.PATH, STUBS: stubs, PACMAN_FAILS: fails } })
+  assert.deepEqual(out.trim().split("\n").sort(), ["brave:c", "kitty:w", "quoted:w", "steam:w", "style.lockscreen.1:c"])
+  assert.equal(fs.readFileSync(path.join(stubs, "pacman.log"), "utf8"), fails ? "-T\n-Q\n-Q\n-Q\n-Q\n" : "-T\n")
+  assert.equal(fs.readFileSync(path.join(stubs, "reads.log"), "utf8"), "\n", "a shared reader ran twice")
+}
+fs.rmSync(stubs, { recursive: true })
+console.log("ok: one pacman query and one run per shared reader answer every check")
 
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []
@@ -245,7 +307,7 @@ console.log("ok: only the panel the wheel opened answers backspace with a return
 
 // Search takes every panel the live bar can open, whether or not it has a disc.
 const indexed = { staticRows: M.panelRows(M.OVERLAYS.concat(M.EXTRAS)),
-  themes: [], fonts: [], focusOrder: [], appLibrary: null,
+  styleRows: [], focusOrder: [], appLibrary: null,
   shell: { panels: () => [
     { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
     { id: "alice.audio", name: "Alice Audio", source: "omarchy.audio" },
@@ -325,7 +387,7 @@ const opening = {
     claimPopout: owner => { claimedPopout = owner },
     releasePopout: owner => { if (claimedPopout === owner) claimedPopout = null }
   },
-  opened: false, sliceCount: 8, focusedScreen: () => null, rebuildIndex() {}
+  opened: false, sliceCount: 8, focusedScreen: () => null, rebuildIndex() {}, reread() {}
 }
 opening.closePeers = method(wheelSource, "closePeers", { root: opening })
 const openingScope = { root: opening, unmap: { running: false, stop() {} },

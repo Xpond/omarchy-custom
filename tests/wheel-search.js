@@ -46,7 +46,7 @@ function fixture(renamed = false) {
   const windows = labels.map((title, i) => ({ title, address: String(i), wayland: { appId: "App-" + i },
     lastIpcObject: { focusHistoryID: i % 3 } }))
   return M.panelRows(M.PANELS.concat(M.EXTRAS)).concat(M.menuRows(menu, M.NO_CONDITIONS),
-    M.liveRows({ apps, windows, focusOrder: [], themes: labels, fonts: labels }))
+    M.liveRows({ apps, windows, focusOrder: [] }), M.styles(labels, "", labels, ""))
 }
 const queries = ["", "  ", "a", "app", "ap", "0", "wifi", "wi fi", "wi-fi", "lock", "lockscreen",
   "files", "open f", "system", "sys m", "audio output", "screen", "utility", "renamed", "é", "हिन्दी",
@@ -73,7 +73,7 @@ for (const renamed of [false, true]) {
 const wheel = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/Wheel.qml"), "utf8")
 const desktop = { id: "org.example.editor", name: "Old Editor" }
 const top = { title: "Old Document", address: "123", wayland: { appId: desktop.id } }
-const root = { staticRows: [], themes: [], fonts: [], focusOrder: [],
+const root = { staticRows: [], styleRows: [], focusOrder: [],
   appLibrary: { sortedEntries: () => [{ entry: desktop }] } }
 const rebuild = new Function("root", "MenuIndex", "Hyprland",
   wheel.match(/^  function rebuildIndex\([^]*?^  }/m)[0] + "\nreturn rebuildIndex")(

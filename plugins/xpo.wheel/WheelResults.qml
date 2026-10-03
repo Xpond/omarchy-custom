@@ -90,7 +90,7 @@ Item {
             width: Style.font.iconLarge
             text: modelData.icon
             color: active ? Color.accent : Color.menu.text
-            font.family: Style.font.menuFamily
+            font.family: modelData.iconFont || Style.font.menuFamily
             font.pixelSize: Style.font.iconLarge
           }
           PanelIcon {
