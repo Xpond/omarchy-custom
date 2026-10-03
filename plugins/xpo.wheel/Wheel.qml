@@ -39,6 +39,7 @@ Item {
   property string conditionText: ""
   property string themeText: ""
   property string fontText: ""
+  property string bindText: ""
   property string currentTheme: ""
   property string currentFont: ""
   // The user's entries override the defaults by id; lock designs join as a Style submenu.
@@ -61,6 +62,7 @@ Item {
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   readonly property var styleRows: MenuIndex.styles(MenuIndex.lines(root.themeText), root.currentTheme,
                                                     MenuIndex.lines(root.fontText), root.currentFont)
+  readonly property var bindRows: MenuIndex.bindRows(root.bindText)
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
   readonly property var activeWindow: Hyprland.activeToplevel
@@ -276,11 +278,11 @@ Item {
   function rebuildIndex() {
     var live = MenuIndex.panelRows(MenuIndex.livePanels(
       root.shell && root.shell.panels ? root.shell.panels() : []))
-    root.index = root.staticRows.concat(live, MenuIndex.liveRows({
+    root.index = MenuIndex.withBindings(root.staticRows.concat(live, MenuIndex.liveRows({
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
       focusOrder: root.focusOrder
-    }), root.styleRows)
+    }), root.styleRows), root.bindRows, root.menuItems)
   }
 
   function closePeers() {
@@ -403,6 +405,7 @@ Item {
       if (e.plugin && root.shell) { root.shell.toggle(e.plugin, "{}"); root.launched = e.plugin }
       // Omarchy 4 requires the Lua dispatcher form for window focus.
       else if (e.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + e.address + "\" })")
+      else if (e.dispatch) Hyprland.dispatch(e.dispatch)
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
       else if (e.path && root.shell) {
         root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
@@ -555,6 +558,7 @@ Item {
     fontList.running = true
     fontNow.running = true
     lockList.running = true
+    bindList.running = true
   }
 
   Process {
@@ -590,6 +594,14 @@ Item {
     running: true
     command: ["omarchy-lock-design", "list"]
     stdout: StdioCollector { onStreamFinished: root.lockText = text }
+  }
+
+  // Omarchy's keybindings menu caches the command behind each binding; printing refreshes the cache.
+  Process {
+    id: bindList
+    running: true
+    command: ["bash", "-c", "omarchy-menu-keybindings --print >/dev/null; cat \"${XDG_CACHE_HOME:-$HOME/.cache}\"/omarchy/keybindings-*.records 2>/dev/null"]
+    stdout: StdioCollector { onStreamFinished: root.bindText = text }
   }
 
   // Both menu files are watched, as Omarchy's menu watches them, so an edit shows on save.
@@ -661,6 +673,7 @@ Item {
   onMenuItemsChanged: root.checkConditions()
   onStaticRowsChanged: if (root.opened) root.rebuildIndex()
   onStyleRowsChanged: if (root.opened) root.rebuildIndex()
+  onBindRowsChanged: if (root.opened) root.rebuildIndex()
 
   PanelWindow {
     id: surface

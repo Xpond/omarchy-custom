@@ -68,8 +68,21 @@ check(dead.length === 0, "every row has something to do", dead.map(r => r.label)
 const empty = rows.filter(r => r.node && M.ringSlices(items, r.node.split("."), cond, []).length === 0)
 check(empty.length === 0, "no row drills into an empty ring", empty.map(r => r.id).join(", "))
 
+// Every keybinding, read with the wheel's own command, is one search away: its description finds
+// a row that runs its command, whether a row of its own or one it joined.
+const bindCommand = JSON.parse(fs.readFileSync(path.join(here, "Wheel.qml"), "utf8")
+  .match(/id: bindList[^]*?command: (\[.*\])/)[1])
+const binds = M.bindRows(spawnSync(bindCommand[0], bindCommand.slice(1), { encoding: "utf8" }).stdout)
+check(binds.length > 0, `keybindings load (${binds.length} runnable)`, "no records from omarchy-menu-keybindings")
+const fixed = [...M.panelRows([...M.panels(null), ...M.EXTRAS]), ...rows]
 // Windows are uncounted because every launch has a new address.
-const counted = [...M.panelRows([...M.panels(null), ...M.EXTRAS]), ...rows]
+const counted = M.withBindings(fixed, binds, items)
+const unfound = binds.filter(b => !M.search(counted, b.label, Infinity, {})
+  .some(r => [r.dispatch, ...M.bindTargets(r, items)].includes(b.action || b.dispatch)))
+const joined = fixed.filter((r, i) => counted[i] !== r).length
+check(unfound.length === 0, `every keybinding is found by its description `
+      + `(${counted.length - fixed.length} own rows, ${joined} joined)`, unfound.map(b => b.label).join(", "))
+
 const keyless = counted.filter(r => !M.keyOf(r))
 check(keyless.length === 0, "every counted row has a use key", keyless.map(r => r.label).join(", "))
 
