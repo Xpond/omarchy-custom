@@ -40,6 +40,18 @@ function keyOf(e) {
   return e.action || ""
 }
 
+// Keep the selected action through a refresh; a reused menu id with a new command is a new action.
+function indexOfEntry(rows, previous) {
+  if (!previous) return -1
+  var key = keyOf(previous)
+  for (var i = 0; i < rows.length; i++) {
+    var e = rows[i]
+    if (keyOf(e) === key && e.action === previous.action && e.node === previous.node
+        && e.address === previous.address && e.path === previous.path) return i
+  }
+  return -1
+}
+
 function crumb(items, path) {
   var out = []
   for (var i = 0; i < path.length; i++) {
@@ -181,9 +193,15 @@ function panels(barIds) {
   return out.concat(OVERLAYS)
 }
 
+var CONDITION_READERS = [
+  "omarchy-default-agent", "omarchy-default-browser", "omarchy-default-terminal", "omarchy-default-editor",
+  "omarchy-dns", "omarchy-network-status", "omarchy-channel-current", "omarchy-lock-design current",
+  "dell-xps-touchpad-haptics get", "findmnt -no FSTYPE /"
+]
+
 // Every `when` and `checked` in one bash script, echoing `<id>:w` or `<id>:c` for each that holds.
 // Asked one at a time the package checks alone take over a second, so one `pacman -T` answers
-// every name they ask about, and each `$(reader)` the checks share runs once.
+// every name they ask about, and known readers in simple comparisons run once.
 function conditionScript(items) {
   var checks = [], names = {}, reads = []
   for (var id in items) {
@@ -193,11 +211,15 @@ function conditionScript(items) {
       var expr = String(tags[tag])
       var asked = /omarchy-pkg-(?:present|missing)((?:[ \t]+[\w@.+-]+)+)/g, m
       while ((m = asked.exec(expr))) m[1].trim().split(/\s+/).forEach(function (n) { names[n] = true })
-      // Only a substitution of plain words moves; anything quoted runs where it stands.
-      expr = expr.replace(/\$\(([\w .\/=-]+)\)/g, function (all, read) {
+      // Only a whole comparison of a known reader and literal/pattern can share its output.
+      // Assignments, guards, quoted shell text and arbitrary commands keep their Bash semantics.
+      var comparison = /^\[\[ ("?)\$\(([\w .\/=-]+)\)\1 == ("[\w .\/-]*"|'[\w .\/-]*'|[\w.*\/-]+) \]\]$/.exec(expr)
+      if (comparison && CONDITION_READERS.indexOf(comparison[2]) >= 0) {
+        var read = comparison[2]
         if (reads.indexOf(read) < 0) reads.push(read)
-        return "${__read" + reads.indexOf(read) + "}"
-      })
+        expr = "[[ " + comparison[1] + "${__read" + reads.indexOf(read) + "}" + comparison[1]
+             + " == " + comparison[3] + " ]]"
+      }
       checks.push("if { " + expr + "; } >/dev/null 2>&1; then echo " + id + ":" + tag + "; fi")
     }
   }
@@ -360,7 +382,7 @@ function liveRows(sources) {
     if (!title) continue
     out.push({
       icon: "󰖯", appIcon: iconByAppId[appId.toLowerCase()] || "", label: title,
-      trail: appId || "Window", address: "0x" + t.address,
+      trail: "Window" + (appId ? " · " + appId : ""), address: "0x" + t.address,
       kind: KIND.window,
       recency: recencyOf(sources.focusOrder, t.address, ipc.focusHistoryID),
       keywords: (title + " " + appId).toLowerCase()
@@ -369,7 +391,7 @@ function liveRows(sources) {
   return out
 }
 
-// Every term must start a word.
+// Menu terms start words; app and window text also accepts substrings.
 // Windows always rank as direct hits; squashed text keeps "wifi" matching "Wi-Fi".
 function words(text) {
   var low = String(text || "").toLowerCase()
@@ -402,10 +424,11 @@ function search(index, query, limit, uses) {
     var text = e._search || (e._search = {
       keywords: words(e.keywords), ident: e.ident ? words(e.ident) : ""
     })
+    var partial = e.kind === KIND.app || e.kind === KIND.window
     var matched = true
     for (var t = 0; t < terms.length; t++) {
       if (!terms[t]) continue
-      if (startsWord(text.keywords, terms[t])) continue
+      if (text.keywords.indexOf(partial ? terms[t] : " " + terms[t]) !== -1) continue
       if (text.ident && wholeWord(text.ident, terms[t])) continue
       matched = false; break
     }
