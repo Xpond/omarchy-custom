@@ -166,14 +166,17 @@ assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not 
 assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
   "Files.qml does not hand its operations object to the list")
 
-const wheel = { root: { countUse() {}, dismiss() {}, slices: [], shell: {
+const wheel = { root: { countUse() {}, dismiss() {}, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
 } }, Qt: { callLater: fn => fn() }, MenuIndex: M }
-method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)({ path: "/home/test/new.txt" })
+const runRow = method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)
+runRow({ path: "/home/test/new.txt" })
 assert.equal(calls.at(-1)[0], "xpo.files")
 assert.equal(calls.at(-1)[1].select, "new.txt")
-console.log("ok: busy operations report refusal; wheel paths summon the browser")
+runRow({ copy: "42" })
+assert.equal(calls.at(-1), "42")
+console.log("ok: busy operations report refusal; wheel paths summon the browser, answers are copied")
 
 // The browser's whole rule: bare keys drive the list, shift drives the preview.
 const scrolls = []
@@ -210,8 +213,8 @@ const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
 dial.insert = method(wheelSource, "insert", { root: dial })
 dial.paste = method(wheelSource, "paste", { root: dial,
   Quickshell: { clipboardText: "pasted  text" } })
-dial.takePath = method(wheelSource, "takePath", { root: dial,
-  Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
+dial.copy = method(wheelSource, "copy", { Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
+dial.takePath = method(wheelSource, "takePath", { root: dial })
 const dialKey = keymap("plugins/xpo.wheel/MenuKeys.js", dial)
 const ctrl = 1 << 26
 // A printable key is only its text here: the handler falls through to event.text.

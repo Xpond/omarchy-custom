@@ -29,6 +29,7 @@ disc, because a ring you have to read is slower than a word you can type.
       ClickShield.qml  a surface that stops a click reaching the scrim
       MenuIndex.js     JSONC parsing, flattening, search
       MenuKeys.js      the key map: which verb a key means
+      Calc.js          the calculator behind a leading `=`
 
 The ring and the results take the dial as `wheel`, the way the browser's own
 components take their panel, so each one's single dependency is visible at the
@@ -474,6 +475,17 @@ focus moves — it keeps reporting the order from whenever the list was last
 pulled. `Hyprland.activeToplevel` does track focus, so the wheel accumulates
 the order from that instead, and falls back to the cached history for windows
 it has not yet seen focused (everything, for a moment after a shell restart).
+
+A leading `=` turns search into a calculator, `Calc.js`: `+ - * / ^` and
+parentheses, with `^` binding tighter than a leading minus, as on paper
+(`=-2^2` is -4). The answer shows fifteen significant digits, which also hides
+float noise (`=0.1+0.2` is 0.3), centered under the query with a copy mark at
+the row's end, and `Enter` copies exactly that and closes. Even the longest
+answer, 23 characters, fits at the stock font size; anything wider is cut on
+the left, as the query is. A half-typed sum, a unit or a letter shows "No
+answer" rather than a guess; units and currency would need `qalc`, which
+Omarchy does not ship. `node tests/wheel-calc.js` pins issue #8's sums and
+checks 2000 random ones against JavaScript's own arithmetic.
 
 ## What it remembers
 

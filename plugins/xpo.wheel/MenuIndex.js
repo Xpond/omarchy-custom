@@ -456,7 +456,7 @@ function search(index, query, limit, uses) {
 }
 
 // Leading sigils select a search source.
-var MODES = { "/": "file" }
+var MODES = { "/": "file", "=": "calc" }
 
 function modeOf(query) {
   return MODES[String(query || "").charAt(0)] || ""

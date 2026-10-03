@@ -117,6 +117,7 @@ Item {
           Text {
             id: labelText
             anchors.verticalCenter: parent.verticalCenter
+            visible: !modelData.copy
             width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
             elide: Text.ElideRight
             text: modelData.label
@@ -149,6 +150,28 @@ Item {
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
           }
+        }
+
+        // An answer centers under its query and, like the query, overflows to the left.
+        Text {
+          anchors.centerIn: parent
+          visible: !!modelData.copy
+          width: Math.min(implicitWidth, resultRow.width - 2 * (Style.font.iconLarge + resultRow.spacing))
+          elide: Text.ElideLeft
+          text: modelData.label
+          color: active ? Color.accent : Color.menu.text
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.body
+        }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.right: resultRow.right
+          visible: !!modelData.copy
+          text: "󰆏"
+          color: active ? Color.accent : Color.menu.text
+          opacity: 0.5
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.iconLarge
         }
       }
     }
