@@ -102,9 +102,7 @@ Item {
       if (exitCode === 0) { panel.close(); return }
       // Exit 3 is a quiet decline; exit 4 means no application claimed the file.
       if (exitCode !== 4) return
-      root.note(root.opening.size === 0
-                ? root.opening.name + " is empty -- ctrl+e writes it"
-                : "nothing here opens " + root.opening.name)
+      root.note("nothing here opens " + root.opening.name)
     }
   }
 }

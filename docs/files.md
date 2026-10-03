@@ -39,7 +39,7 @@ red, and a save is confirmed by reading the file back.
 | type anything | filter the current directory by name |
 | `/` or `~` | switch the field to a path — see [Path entry](#path-entry) |
 | `↑` `↓` `Tab` `Shift+Tab` `Ctrl+N` `Ctrl+P` | move the selection, wrapping at both ends |
-| `→` `Enter` | descend into a folder, or hand a file to the app that owns it |
+| `→` `Enter` | descend into a folder, or hand a file to the app that owns it, text to your editor |
 | `←` | go up one directory |
 | `Backspace` | delete a character, then go up one directory, then back to the wheel |
 | `Home` `End` | the first and last row |
@@ -407,10 +407,11 @@ unmaps — but a file the desktop has no viewer for opens nothing, and closing t
 browser for it would look like the panel had crashed. `omarchy-open-path` is run
 as a `Process` and the exit code decides: `0` closes, `3` and `4` stay.
 
-Only one of the two declines needs saying. `3` is a terminal handler, for a file
-already open in the pane on the right, where a message would be noise. `4` is
-nothing owning it at all, and there the panel says `nothing here opens <name>`:
-with no pane covering for it, silence reads as a key that did nothing.
+Of the two declines, only `4` says anything. `3` is a terminal handler for a
+file that is not text, and every terminal handler here is nvim, so it hardly
+happens. `4` is nothing owning it at all, and there the panel says `nothing
+here opens <name>`: with no pane covering for it, silence reads as a key that
+did nothing.
 
 **`FileView` does not tell you whether a write worked.** Neither `saved` nor
 `saveFailed` fires for `setText`; a permission failure only prints a warning.
@@ -466,11 +467,15 @@ its owner. It routes by handler rather than calling `xdg-open` blindly:
 no terminal attached, so nvim hangs invisibly and `Enter` looks like it did
 nothing.
 
-Nothing here opens an editor. A terminal handler is a
-decline — the script exits `3`, and the browser keeps its place, because the
-file it is being asked about is already open in the preview pane. An image, a
-PDF, a video goes to `xdg-open`, and a zero exit is what tells the browser to
-step aside for it.
+So text that no graphical app owns — a terminal handler like that one, or no
+handler at all, as for `.js`, `.sh` and `.json` here — goes to
+`omarchy-launch-editor`, which opens Omarchy's default editor and gives a
+terminal editor its terminal. An empty file counts as text: a new file is
+written there too. Anything else with a terminal handler is a
+decline: the script exits `3`, and the browser keeps its place. An image, a PDF,
+a video goes to `xdg-open`, and a zero exit is what tells the browser to step
+aside for it. `python3 tests/open-path.py` runs each route with the handlers and
+launchers stubbed.
 
 The wheel registers it in `MenuIndex.js` as an `EXTRAS` entry — searchable
 without consuming a ring slice, so the default ring keeps the even count that
