@@ -43,19 +43,26 @@ key means and the dial performs it, which is what lets a test press a key.
 | `SUPER+A` | open (tap — do not hold, see below) |
 | `↑` `↓` `←` `→` | `↑`/`↓` jump to the slice at that compass point; `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
-| `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
-| `Home` `End` | the first and last of the forty results, from wherever you are |
+| `↑` `↓` | step the result list while searching |
+| `Page Up` `Page Down` | jump to the first and last result |
 | type anything | search menu entries, apps, windows, themes and fonts |
-| `Backspace` | delete the character before the caret, then go up one level |
-| `Ctrl+W` `Ctrl+Backspace` | delete the word before the caret |
-| `←` `→` | move the caret through the query |
-| `Ctrl+A` `Ctrl+E` | the start and the end of the query |
-| `Ctrl+U` `Ctrl+K` | cut to the start, or to the end |
-| `Ctrl+V` | paste at the caret, runs of whitespace collapsed to one space |
+| `←` `→` `Home` `End` | move the text caret; Home/End go to the query's start/end |
+| `Ctrl+←` `Ctrl+→` | move the caret one word |
+| `Shift+←` `Shift+→` `Shift+Home` `Shift+End` | select text to the character or line boundary |
+| `Ctrl+Shift+←` `Ctrl+Shift+→` | select one word at a time |
+| `Ctrl+A` | select all query text |
+| `Ctrl+E` | no action |
 | `Ctrl+Y` | copy the highlighted path and close |
 | `Ctrl+Enter` | open a terminal in the highlighted path's folder; on any other row, as `Enter` |
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
+
+The search pill is a single-line `TextInput`, so ordinary cursor movement,
+selection, deletion and paste are provided by Qt rather than simulated by the
+wheel. While searching, bare Up/Down are reserved for result selection and
+Page Up/Down jump to the result-list ends; Home/End remain text-caret keys.
+Ctrl+Up/Down/Home/End/Page Up/Page Down and Shift+Up/Down/Page Up/Page Down
+have no action in a one-line query and are ignored.
 
 `Backspace` inside a panel the wheel opened closes it and brings the wheel
 back. A panel cannot tell the wheel from its own bar button, so it does not
