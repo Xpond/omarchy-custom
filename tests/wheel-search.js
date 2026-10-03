@@ -23,6 +23,10 @@ for (const query of ["calc", "omacalc"]) {
   assert.equal(hits.find(r => r.appId === "omacalc-dev").trail, "App")
 }
 assert.equal(M.search(calculatorRows, "calc development", 40, {})[0].appId, "omacalc-dev")
+// A window that only contains a term mid-word does not outrank a label that starts with it.
+assert.deepEqual(M.search(M.menuRows({ arch: { label: "Arch", action: "a" } }, M.NO_CONDITIONS).concat(
+  M.liveRows({ apps: [], windows: [{ title: "~/x/omarchy-custom", address: "1", wayland: { appId: "kitty" } }],
+  focusOrder: [] })), "ar", 40, {}).map(r => r.label), ["Arch", "~/x/omarchy-custom"])
 assert.equal(M.search(calculatorRows.filter(r => !r.address), "omacalc", 40, {}).length, 2)
 
 // An independent scorer keeps stable ties in input order and returns original rows.
@@ -43,7 +47,8 @@ function reference(rows, query, limit, uses) {
     if (!terms.every(t => words.some(w => partial ? w.includes(t) : w.startsWith(t)) || ident.includes(t))) return null
     const labelWords = " " + entry.label.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
       + " " + label + " "
-    const rank = entry.kind === M.KIND.window || label.startsWith(squashed) ? 0
+    const inside = terms.some(t => !words.some(w => w.startsWith(t)))
+    const rank = entry.kind === M.KIND.window && !inside || label.startsWith(squashed) ? 0
       : labelWords.includes(" " + spaced) ? 1 : 2
     return { entry, order: [rank, entry.kind, label === squashed ? 0 : 1,
       -(uses[M.keyOf(entry)] || 0), entry.recency || 0, entry.label.length, i] }

@@ -392,7 +392,8 @@ function liveRows(sources) {
 }
 
 // Menu terms start words; app and window text also accepts substrings.
-// Windows always rank as direct hits; squashed text keeps "wifi" matching "Wi-Fi".
+// Windows rank as direct hits unless a term only matched inside a word; squashed text keeps
+// "wifi" matching "Wi-Fi".
 function words(text) {
   var low = String(text || "").toLowerCase()
   return " " + low.replace(/[^a-z0-9]+/g, " ").trim()
@@ -425,16 +426,17 @@ function search(index, query, limit, uses) {
       keywords: words(e.keywords), ident: e.ident ? words(e.ident) : ""
     })
     var partial = e.kind === KIND.app || e.kind === KIND.window
-    var matched = true
+    var matched = true, inside = false
     for (var t = 0; t < terms.length; t++) {
       if (!terms[t]) continue
-      if (text.keywords.indexOf(partial ? terms[t] : " " + terms[t]) !== -1) continue
+      if (startsWord(text.keywords, terms[t])) continue
+      if (partial && text.keywords.indexOf(terms[t]) !== -1) { inside = true; continue }
       if (text.ident && wholeWord(text.ident, terms[t])) continue
       matched = false; break
     }
     if (!matched) continue
     if (text.squashed === undefined) text.squashed = squash(e.label)
-    var rank = e.kind === KIND.window ? 0
+    var rank = e.kind === KIND.window && !inside ? 0
              : text.squashed.indexOf(squashed) === 0 ? 0
              : startsWord(text.label || (text.label = words(e.label)), spaced) ? 1 : 2
     hits.push({ rank: rank, exact: text.squashed === squashed ? 0 : 1,

@@ -459,11 +459,12 @@ runs. A rail beside the stack -- the same one the file browser runs beside its
 list -- is what says the ninth row is there at all, and `Home` and `End` are
 what reach the two ends of it without walking.
 
-An open window is never a weak hit: matching one at all counts as rank 0. A
+An open window whose words match is never a weak hit: it counts as rank 0. A
 window's title is written by the program, so a query lands mid-string
 ("…Omarchy Plugins - Brave") where a menu label has it at the front — without
 this the window you are looking at sorts below seven rows offering to install
-the thing.
+the thing. A term found only inside a word ranks a window like any other row, or
+`ar` would put a terminal titled `~/x/omarchy-custom` above Arch.
 
 Recency orders the windows among themselves, most recently focused first, and
 is inert for every other row. Hyprland publishes a `focusHistoryID`, but only
