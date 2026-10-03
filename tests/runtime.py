@@ -19,6 +19,10 @@ def block(source, pattern):
     return re.search(pattern + r".*?^  }", source, re.S | re.M).group()
 
 
+def line(source, pattern):
+    return re.search(pattern, source, re.M).group() + "\n"
+
+
 with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     base = Path(temporary)
     for name, plugin in [("FilesIndex.js", "xpo.files"), ("MenuIndex.js", "xpo.wheel")]:
@@ -56,7 +60,7 @@ Scope {
         return (p[:p.index("    command:")] + "    command: " + json.dumps(command)[:-1]
                 + ", String(epoch)]\n" + p[p.index("    property int epoch:"):])
     handlers = wheel[wheel.index("  property int scanEpoch:"):wheel.index(
-        '  Process {\n    running: true\n    command: ["omarchy", "theme", "list"]')]
+        "  // Omarchy's menu re-checks its rows on every open")]
     run("scan-close-reopen", '''
   property bool opened: true
   property string mode: ""
@@ -102,6 +106,56 @@ Scope {
     root.query = "a"
     if (root.queryAt !== 1) { console.error("FAIL caret past the end", root.queryAt); Qt.exit(1) }
     console.log("PASS"); Qt.quit()
+  } }
+''')
+
+    # A check asked for while one runs has to run once that one ends, with the newer script, and
+    # an answer that comes back unchanged must rebuild nothing.
+    run("conditions-recheck", '''
+  property var menuItems: ({ slow: { label: "Slow", action: "s", when: "sleep 0.3" } })
+  property string conditionText: ""
+  property int changes: 0
+  property int settled: -1
+  onConditionsChanged: root.changes++
+''' + line(wheel, r"^  readonly property var conditions:.*$") + block(wheel, r"  Process {\n    id: conditionScan")
+        + "\n" + block(wheel, r"  function checkConditions\(") + "\n" + line(wheel, r"^  onMenuItemsChanged:.*$") + '''
+  Component.onCompleted: root.checkConditions()
+  Timer { interval: 100; running: true; onTriggered:
+    root.menuItems = MenuIndex.merge(root.menuItems, { quick: { label: "Quick", action: "q", when: "true" } }) }
+  Timer { interval: 1200; running: true; onTriggered: {
+    if (!root.conditions.when.quick) { console.error("FAIL the check asked mid-run was lost"); Qt.exit(1); return }
+    root.settled = root.changes
+    root.checkConditions()
+  } }
+  Timer { interval: 2200; running: true; onTriggered: {
+    if (root.changes !== root.settled) { console.error("FAIL an unchanged answer rebuilt"); Qt.exit(1) }
+    else { console.log("PASS"); Qt.quit() }
+  } }
+''')
+
+    # Saving the user's menu shows at once, and an entry taken out of it is gone, not merged over.
+    menus = base / "menus"
+    menus.mkdir()
+    (menus / "default.jsonc").write_text('{"system": {"label": "System"}, "system.lock": {"label": "Lock", "action": "l"}}')
+    (menus / "user.jsonc").write_text('{"notes": {"label": "Notes", "action": "n"}}')
+    default_menu = block(wheel, r'  FileView {\n    path: root\.omarchyPath \+ "/default/omarchy/omarchy-menu\.jsonc"')
+    user_menu = block(wheel, r'  FileView {\n    path: Quickshell\.env\("HOME"\) \+ "/\.config/omarchy/extensions/omarchy-menu\.jsonc"')
+    run("menu-reload", '''
+  property var defaultMenu: ({})
+  property var userMenu: ({})
+  property string lockText: ""
+''' + line(wheel, r"^  readonly property var menuItems:[^\n]*\n.*$")
+        + default_menu.replace('root.omarchyPath + "/default/omarchy/omarchy-menu.jsonc"', json.dumps(str(menus / "default.jsonc")))
+        + "\n" + user_menu.replace('Quickshell.env("HOME") + "/.config/omarchy/extensions/omarchy-menu.jsonc"', json.dumps(str(menus / "user.jsonc"))) + '''
+  FileView { id: editor; path: ''' + json.dumps(str(menus / "user.jsonc")) + '''; atomicWrites: true }
+  Timer { interval: 400; running: true; onTriggered: {
+    if (!root.menuItems.notes || !root.menuItems["system.lock"]) { console.error("FAIL menus did not load"); Qt.exit(1); return }
+    editor.setText('{"todo": {"label": "Todo", "action": "t"}}')
+  } }
+  Timer { interval: 1400; running: true; onTriggered: {
+    var ids = Object.keys(root.menuItems).sort().join(" ")
+    if (ids !== "system system.lock todo") { console.error("FAIL", ids); Qt.exit(1) }
+    else { console.log("PASS"); Qt.quit() }
   } }
 ''')
 

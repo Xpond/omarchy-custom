@@ -31,11 +31,22 @@ Item {
 
   property string query: ""
   property int queryAt: 0
-  property var menuItems: ({})
+  property var defaultMenu: ({})
+  property var userMenu: ({})
+  // Answers re-read on every open stay raw text: a string reassigned unchanged notifies nothing.
+  property string lockText: ""
+  property string conditionText: ""
+  property string themeText: ""
+  property string fontText: ""
+  property string currentTheme: ""
+  property string currentFont: ""
+  // The user's entries override the defaults by id; lock designs join as a Style submenu.
+  readonly property var menuItems: MenuIndex.merge(MenuIndex.merge(root.defaultMenu,
+    MenuIndex.lockItems(MenuIndex.lines(root.lockText))), root.userMenu)
   // [] is home; nested ids point at submenu rings.
   property var path: []
   readonly property string crumb: MenuIndex.crumb(root.menuItems, root.path)
-  property var conditions: MenuIndex.NO_CONDITIONS
+  readonly property var conditions: MenuIndex.parseConditions(root.conditionText, root.menuItems)
   // Prefer the user's bar layout over the stock one.
   property var userBarIds: null
   property var stockBarIds: null
@@ -47,8 +58,8 @@ Item {
     : root.panels
   readonly property var staticRows: MenuIndex.panelRows(MenuIndex.OVERLAYS.concat(MenuIndex.EXTRAS))
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
-  property var themes: []
-  property var fonts: []
+  readonly property var styleRows: MenuIndex.styles(MenuIndex.lines(root.themeText), root.currentTheme,
+                                                    MenuIndex.lines(root.fontText), root.currentFont)
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
   readonly property var activeWindow: Hyprland.activeToplevel
@@ -260,10 +271,8 @@ Item {
     root.index = root.staticRows.concat(live, MenuIndex.liveRows({
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
-      focusOrder: root.focusOrder,
-      themes: root.themes,
-      fonts: root.fonts
-    }))
+      focusOrder: root.focusOrder
+    }), root.styleRows)
   }
 
   function closePeers() {
@@ -288,6 +297,7 @@ Item {
     root.openScreen = root.focusedScreen()
     root.opened = true
     root.rebuildIndex()
+    root.reread()
     spin.stepsLeft = root.sliceCount
     spin.restart()
     Qt.callLater(function () { root.shown = true; keys.forceActiveFocus() })
@@ -516,36 +526,67 @@ Item {
     }
   }
 
-  // Themes and fonts change rarely enough to list once at startup.
+  // Omarchy's menu re-checks its rows on every open, and so does the wheel, so a row follows
+  // state that changed under it. Answers land a moment after the wheel appears.
+  function reread() {
+    root.checkConditions()
+    themeList.running = true
+    themeNow.running = true
+    fontList.running = true
+    fontNow.running = true
+    lockList.running = true
+  }
+
   Process {
+    id: themeList
     running: true
     command: ["omarchy", "theme", "list"]
-    stdout: StdioCollector { onStreamFinished: root.themes = MenuIndex.lines(text) }
+    stdout: StdioCollector { onStreamFinished: root.themeText = text }
   }
 
   Process {
+    id: themeNow
+    running: true
+    command: ["omarchy", "theme", "current"]
+    stdout: StdioCollector { onStreamFinished: root.currentTheme = text.trim() }
+  }
+
+  Process {
+    id: fontList
     running: true
     command: ["omarchy", "font", "list"]
-    stdout: StdioCollector { onStreamFinished: root.fonts = MenuIndex.lines(text) }
+    stdout: StdioCollector { onStreamFinished: root.fontText = text }
   }
 
-  // Lock-screen designs join the menu as one Style submenu, listed once at startup like the themes.
   Process {
+    id: fontNow
+    running: true
+    command: ["omarchy", "font", "current"]
+    stdout: StdioCollector { onStreamFinished: root.currentFont = text.trim() }
+  }
+
+  Process {
+    id: lockList
     running: true
     command: ["omarchy-lock-design", "list"]
-    stdout: StdioCollector {
-      onStreamFinished: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.lockItems(MenuIndex.lines(text)))
-    }
+    stdout: StdioCollector { onStreamFinished: root.lockText = text }
   }
 
+  // Both menu files are watched, as Omarchy's menu watches them, so an edit shows on save.
   FileView {
     path: root.omarchyPath + "/default/omarchy/omarchy-menu.jsonc"
-    onLoaded: root.menuItems = MenuIndex.merge(MenuIndex.parse(text()), root.menuItems)
+    watchChanges: true
+    onFileChanged: reload()
+    onLoaded: root.defaultMenu = MenuIndex.parse(text())
   }
 
   FileView {
     path: Quickshell.env("HOME") + "/.config/omarchy/extensions/omarchy-menu.jsonc"
-    onLoaded: root.menuItems = MenuIndex.merge(root.menuItems, MenuIndex.parse(text()))
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.userMenu = MenuIndex.parse(text())
+    onLoadFailed: root.userMenu = ({})
   }
 
   FileView {
@@ -580,20 +621,26 @@ Item {
     onLoadFailed: root.ringIds = null
   }
 
-  // Evaluate all shell conditions once per menu load.
   Process {
     id: conditionScan
-    stdout: StdioCollector { onStreamFinished: root.conditions = MenuIndex.parseConditions(text, root.menuItems) }
+    // The menu the command was written for: writing it costs a millisecond, too much for every open.
+    property var writtenFor: null
+    stdout: StdioCollector { onStreamFinished: root.conditionText = text }
   }
 
-  // Set command before running; independent bindings can race.
-  onMenuItemsChanged: {
+  // Started again mid-run, a Process runs once more when the run ends, with the newest command.
+  function checkConditions() {
     if (!Object.keys(root.menuItems).length) return
-    conditionScan.command = ["bash", "-c", MenuIndex.conditionScript(root.menuItems)]
+    if (conditionScan.writtenFor !== root.menuItems) {
+      conditionScan.writtenFor = root.menuItems
+      conditionScan.command = ["bash", "-c", MenuIndex.conditionScript(root.menuItems)]
+    }
     conditionScan.running = true
   }
 
+  onMenuItemsChanged: root.checkConditions()
   onStaticRowsChanged: if (root.opened) root.rebuildIndex()
+  onStyleRowsChanged: if (root.opened) root.rebuildIndex()
 
   PanelWindow {
     id: surface

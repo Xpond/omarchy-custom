@@ -70,24 +70,34 @@ function recencyOf(order, address, cachedHistory) {
   return seen >= 0 ? seen : order.length + (Number(cachedHistory) || 0)
 }
 
-function styleRows(out, names, icon, trail, command) {
+function styleRows(out, names, current, icon, trail, command) {
   for (var i = 0; i < names.length; i++) {
     var name = String(names[i])
     out.push({
-      icon: icon, label: name, trail: trail, kind: KIND.style,
+      icon: icon, label: name + (name === current ? " ✓" : ""), trail: trail, kind: KIND.style,
       action: command + quote(name),
       keywords: (name + " " + trail).toLowerCase()
     })
   }
 }
 
+// Themes and fonts fire `omarchy theme|font set`; the current one is marked.
+function styles(themes, theme, fonts, font) {
+  var out = []
+  styleRows(out, themes, theme, "󰸌", "Theme", "omarchy theme set ")
+  styleRows(out, fonts, font, "󰛖", "Font", "omarchy font set ")
+  return out
+}
+
 // Lock-screen designs as one Style submenu: search finds it, and each design shows only inside it.
 function lockItems(names) {
+  if (!names.length) return {}
   var out = { "style.lockscreen": { icon: "󰌾", label: "Lockscreen Designs" } }
   for (var i = 0; i < names.length; i++) {
     var name = names[i]
     out["style.lockscreen." + i] = { icon: "󰋩", label: name.charAt(0).toUpperCase() + name.slice(1),
-                                     action: "omarchy-lock-design set " + quote(name), search: false }
+                                     action: "omarchy-lock-design set " + quote(name), search: false,
+                                     checked: "[[ $(omarchy-lock-design current) == " + quote(name) + " ]]" }
   }
   return out
 }
@@ -154,7 +164,11 @@ function barWidgets(raw) {
   for (var section in layout) {
     var row = layout[section]
     if (!row) continue
-    for (var i = 0; i < row.length; i++) if (row[i] && row[i].id) ids[row[i].id] = true
+    // Omarchy takes a widget as its id alone or as an object carrying one.
+    for (var i = 0; i < row.length; i++) {
+      var id = typeof row[i] === "string" ? row[i] : row[i] && row[i].id
+      if (id) ids[id] = true
+    }
   }
   return ids
 }
@@ -167,23 +181,53 @@ function panels(barIds) {
   return out.concat(OVERLAYS)
 }
 
-// Evaluate all Bash-only `when` expressions in one process.
+// Every `when` and `checked` in one bash script, echoing `<id>:w` or `<id>:c` for each that holds.
+// Asked one at a time the package checks alone take over a second, so one `pacman -T` answers
+// every name they ask about, and each `$(reader)` the checks share runs once.
 function conditionScript(items) {
-  var out = []
-  for (var id in items)
-    if (items[id].when)
-      out.push("if " + items[id].when + " >/dev/null 2>&1; then echo " + id + "; fi")
-  return out.join("\n")
+  var checks = [], names = {}, reads = []
+  for (var id in items) {
+    var tags = { w: items[id].when, c: items[id].checked }
+    for (var tag in tags) {
+      if (!tags[tag]) continue
+      var expr = String(tags[tag])
+      var asked = /omarchy-pkg-(?:present|missing)((?:[ \t]+[\w@.+-]+)+)/g, m
+      while ((m = asked.exec(expr))) m[1].trim().split(/\s+/).forEach(function (n) { names[n] = true })
+      // Only a substitution of plain words moves; anything quoted runs where it stands.
+      expr = expr.replace(/\$\(([\w .\/=-]+)\)/g, function (all, read) {
+        if (reads.indexOf(read) < 0) reads.push(read)
+        return "${__read" + reads.indexOf(read) + "}"
+      })
+      checks.push("if { " + expr + "; } >/dev/null 2>&1; then echo " + id + ":" + tag + "; fi")
+    }
+  }
+  var pkgs = Object.keys(names)
+  // Asked names start installed and pacman -T prints those that are not; any other name, or a
+  // query that failed, asks pacman itself, as omarchy-pkg-present does.
+  var head = [
+    "declare -A __pkg=(" + pkgs.map(function (n) { return "[" + n + "]=1" }).join(" ") + ")",
+    "__missing=$(pacman -T -- " + pkgs.join(" ") + " 2>/dev/null)",
+    "case $? in 0|127) for __p in $__missing; do __pkg[$__p]=0; done ;; *) __pkg=() ;; esac",
+    "__has() { case ${__pkg[$1]-} in 1) return 0 ;; 0) return 1 ;; esac; pacman -Q \"$1\" &>/dev/null; }",
+    "omarchy-pkg-present() { local p; for p; do __has \"$p\" || return 1; done; }",
+    "omarchy-pkg-missing() { local p; for p; do __has \"$p\" || return 0; done; return 1; }"
+  ]
+  for (var r = 0; r < reads.length; r++) head.push("__read" + r + "=$(" + reads[r] + " 2>/dev/null)")
+  return head.concat(checks).join("\n")
 }
 
-var NO_CONDITIONS = { when: {}, full: {}, ready: false }
+var NO_CONDITIONS = { when: {}, checked: {}, full: {}, ready: false }
 
 // Empty output signals evaluation failure; keep conditional rows visible.
 function parseConditions(raw, items) {
   var ls = lines(raw)
   if (!ls.length) return NO_CONDITIONS
-  var cond = { when: {}, ready: true }
-  for (var i = 0; i < ls.length; i++) cond.when[ls[i]] = true
+  var cond = { when: {}, checked: {}, ready: true }
+  for (var i = 0; i < ls.length; i++) {
+    var at = ls[i].lastIndexOf(":")
+    var holds = ls[i].slice(at + 1) === "c" ? cond.checked : cond.when
+    holds[ls[i].slice(0, at)] = true
+  }
   cond.full = populated(items, cond)
   return cond
 }
@@ -214,9 +258,11 @@ function shows(id, e, cond) {
   return e.action || e.provider || !cond.ready || cond.full[id] === true
 }
 
-// Providers hand off to Omarchy; nodes carry the id the ring drills into.
-function entryOf(id, e) {
-  var s = { id: id, icon: e.icon || "󰍜", label: e.label || id }
+// Providers hand off to Omarchy; nodes carry the id the ring drills into. Omarchy's own marks
+// sit in a font of their own, at codepoints a Nerd Font fills with other glyphs.
+function entryOf(id, e, cond) {
+  var s = { id: id, icon: e.icon || "󰍜", label: (e.label || id) + (cond.checked[id] ? " ✓" : "") }
+  if (e.iconFont) s.iconFont = e.iconFont
   if (e.action) s.action = e.action
   else if (e.provider) s.action = "omarchy-menu summon " + id
   else s.node = id
@@ -231,7 +277,7 @@ function childrenOf(items, parent, cond) {
     if (id.indexOf(prefix) !== 0 || id.split(".").length !== depth) continue
     var e = items[id]
     if (!shows(id, e, cond)) continue
-    out.push(entryOf(id, e))
+    out.push(entryOf(id, e, cond))
   }
   return out
 }
@@ -245,7 +291,7 @@ function ringOf(items, ids, cond) {
     var id = String(ids[j])
     if (byPlugin[id]) { out.push(byPlugin[id]); continue }
     var e = items[id]
-    if (e && shows(id, e, cond)) out.push(entryOf(id, e))
+    if (e && shows(id, e, cond)) out.push(entryOf(id, e, cond))
   }
   return out
 }
@@ -272,11 +318,11 @@ function menuRows(items, cond) {
     var e = items[id]
     if (!e || e.search === false || !shows(id, e, cond)) continue
     var trail = trailOf(items, id)
-    var row = entryOf(id, e)
+    var row = entryOf(id, e, cond)
     row.trail = trail.join(" › ")
     row.kind = KIND.menu
     row.keywords = [e.label, trail.join(" "), String(id).replace(/[.]/g, " "),
-                    (e.aliases || []).join(" "), e.description || ""]
+                    [].concat(e.aliases || []).join(" "), e.description || ""]
                    .join(" ").toLowerCase()
     out.push(row)
   }
@@ -320,8 +366,6 @@ function liveRows(sources) {
       keywords: (title + " " + appId).toLowerCase()
     })
   }
-  styleRows(out, sources.themes, "󰸌", "Theme", "omarchy theme set ")
-  styleRows(out, sources.fonts, "󰛖", "Font", "omarchy font set ")
   return out
 }
 

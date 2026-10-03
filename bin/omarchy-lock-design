@@ -1,5 +1,5 @@
 #!/bin/bash
-# List the lock-screen designs, or choose the one the next lock shows.
+# List the lock-screen designs, name the chosen one, or choose the one the next lock shows.
 designs=~/.local/share/omarchy-custom/lock
 choice=~/.config/omarchy-custom/lock-design
 
@@ -11,13 +11,18 @@ case ${1:-} in
       printf '%s\n' "${name##*/}"
     done
     ;;
+  current)
+    # The lock screen shows rally until a design is chosen.
+    read -r name 2>/dev/null < "$choice"
+    printf '%s\n' "${name:-rally}"
+    ;;
   set)
     [[ -f $designs/${2:-}/Scene.qml ]] || { echo "No lock-screen design named '${2:-}'" >&2; exit 1; }
     # Replace the file whole, so the lock screen never reads it half-written.
     mkdir -p "${choice%/*}" && printf '%s\n' "$2" > "$choice.new" && mv "$choice.new" "$choice"
     ;;
   *)
-    echo "Usage: omarchy-lock-design list | set <name>" >&2
+    echo "Usage: omarchy-lock-design list | current | set <name>" >&2
     exit 1
     ;;
 esac

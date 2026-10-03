@@ -3,7 +3,7 @@
 
 const fs = require("fs")
 const path = require("path")
-const { execSync } = require("child_process")
+const { execSync, spawnSync } = require("child_process")
 
 const here = __dirname
 const omarchy = process.env.OMARCHY_PATH || "/usr/share/omarchy"
@@ -27,8 +27,8 @@ const items = M.merge(
 check(Object.keys(items).length > 0, "menu definitions load",
       `nothing parsed from ${omarchy}/default/omarchy/omarchy-menu.jsonc`)
 
-const cond = M.parseConditions(
-  execSync("bash", { input: M.conditionScript(items), encoding: "utf8", maxBuffer: 1 << 22 }), items)
+const scan = execSync("bash", { input: M.conditionScript(items), encoding: "utf8", maxBuffer: 1 << 22 })
+const cond = M.parseConditions(scan, items)
 
 // Scan every caller; strip imports so their .js suffixes do not look like calls.
 const callers = fs.readdirSync(here)
@@ -39,6 +39,16 @@ const missing = [...new Set([...callers.matchAll(/MenuIndex\.(\w+)/g)].map(m => 
 check(missing.length === 0, "every call site names something MenuIndex.js defines", missing.join(", "))
 
 check(M.parseConditions("", items).ready === false, "an empty condition scan fails open")
+
+// The batch answers package checks and shared readers its own way; each check asked alone must agree.
+const alone = []
+for (const id in items)
+  for (const [tag, test] of [["w", items[id].when], ["c", items[id].checked]])
+    if (test && spawnSync("bash", ["-c", `{ ${test}; } >/dev/null 2>&1`]).status === 0) alone.push(`${id}:${tag}`)
+const batched = M.lines(scan)
+check(JSON.stringify(batched.slice().sort()) === JSON.stringify(alone.slice().sort()),
+      `the batched checks agree with asking each alone (${alone.length} hold)`,
+      `only batched: ${batched.filter(l => !alone.includes(l))}; only alone: ${alone.filter(l => !batched.includes(l))}`)
 
 const rows = M.menuRows(items, cond)
 const emitted = new Set(rows.map(r => r.id))

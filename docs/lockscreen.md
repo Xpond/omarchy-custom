@@ -10,7 +10,7 @@ patches replace, so a design can span any number of files. Six ship: `rally`, `t
 
 In the wheel, Style › Lockscreen Designs lists the designs (search "lockscreen"); picking
 one only switches to it, and the next lock shows it. From a terminal,
-`omarchy-lock-design list` and `omarchy-lock-design set <name>` do the same. The choice is one
+`omarchy-lock-design list`, `current` and `set <name>` do the same. The choice is one
 word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The lock and its preview
 build their view each time they show, reading that file then, so a switch needs no install or
 restart.
@@ -45,7 +45,7 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `lock-session/Bridge.qml` | Keeps the shell's lock IPC available and starts/reconnects the worker |
 | `lock-session/shell.qml` | Runs the installed authentication service and exits after unlock/wake or preview closure |
 | `patches/orig/plugins/lock/` | Stock copies used by the verified install/revert workflow |
-| `bin/omarchy-lock-design` | Lists the designs, or sets the one the next lock shows |
+| `bin/omarchy-lock-design` | Lists the designs, names the chosen one, or sets the one the next lock shows |
 | `lock/wallpaper/Scene.qml` | The wallpaper, blurred, fading out on unlock |
 | `lock/tunnel/Scene.qml` | The wheel's mark stacked into a corridor, flown through |
 | `lock/tunnel/mark.vert` / `.qsb` | Places and fades one mark as the flight goes on, source and compiled |
