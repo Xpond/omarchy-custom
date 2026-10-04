@@ -29,6 +29,7 @@ QtObject {
   property var _claimPopout: null
   property var _releasePopout: null
   property var _panelSurfaceVisible: null
+  property var _backdropPeek: null
   property var _updateSettings: null
   property var _mutateBarConfig: null
   property var _claimedPopout: null
@@ -94,6 +95,10 @@ QtObject {
     if (_surfaceVisible === next) return
     _surfaceVisible = next
     if (_panelSurfaceVisible) _panelSurfaceVisible(next)
+  }
+
+  function setBackdropPeek(active) {
+    if (_backdropPeek) _backdropPeek(active === true)
   }
 
   function updateEntryInline(id, settings) {

@@ -706,6 +706,11 @@ ShellRoot {
       _panelSurfaceVisible: function(shown) {
         if (visualCapabilities) shell.setPluginSurfaceVisible(cacheKey, shown)
       },
+      _backdropPeek: function(active) {
+        if (key === "xpo.wheel" && visualCapabilities && shell.bar
+            && typeof shell.bar.setWheelBackdropPeek === "function")
+          shell.bar.setWheelBackdropPeek(active)
+      },
       _updateSettings: function(requestedId, settings) {
         if (shell.pluginOwnsTarget(key, requestedId)) return shell.updateEntryInline(key, settings)
         if (hasCurrentBarCapabilities() && shell.barEntryConfigured(requestedId))

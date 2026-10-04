@@ -4,9 +4,16 @@ hl.config({ decoration = { blur = { enabled = true, size = 4, passes = 2 } } })
 
 -- Blur only the shared backdrop; blurring the overlays doubles the work.
 hl.layer_rule({
-  match = { namespace = "omarchy-panel-scrim" },
+  match = { namespace = "omarchy-panel-scrim-blur" },
   blur = true,
-  ignore_alpha = 0.05,
+  -- The separate blur mask uses one alpha step; the sharp tint has no blur.
+  ignore_alpha = 0.0001,
+  no_anim = true,
+  animation = "none",
+})
+hl.layer_rule({
+  match = { namespace = "omarchy-panel-scrim-sharp" },
+  blur = false,
   no_anim = true,
   animation = "none",
 })

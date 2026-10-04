@@ -63,6 +63,11 @@ key means and the dial performs it, which is what lets a test press a key.
 The query is a Qt `TextInput`, which types, deletes, moves and selects on its
 own; `MenuKeys.js` sees every key before it does.
 
+Pressing `SUPER+A` while the wheel is already open behaves like `Esc`: it
+clears the query first, then moves up a submenu, then dismisses at the root.
+That press's matching key release is ignored, so it cannot select a slice or
+start a second close animation.
+
 Until you type, the field reads `Search · / files · = calc`, and a lone `/`
 names the two keys a path answers to, `Ctrl+Y` and `Ctrl+Enter`.
 `tests/check.js` fails when a sigil joins `MODES` without a word in that
@@ -579,6 +584,10 @@ To choose the ring yourself, write `~/.config/omarchy/wheel.json`:
 
 ```json
 {
+  "backdropOpacity": 1,
+  "backdropBlur": true,
+  "backdropTransitionInMs": 0,
+  "backdropTransitionOutMs": 0,
   "slices": [
     "omarchy.audio",
     "omarchy.network",
@@ -589,6 +598,50 @@ To choose the ring yourself, write `~/.config/omarchy/wheel.json`:
   ]
 }
 ```
+
+All backdrop keys are optional. If `backdropOpacity` is absent, the scrim
+returns to its original theme-defined opacity (the tint alpha from
+`Color.menu.scrim`). If the transition keys are absent, transitions are
+instant; if `backdropBlur` is absent, blur is on. To restore the original
+backdrop behavior, remove or rename all four `backdrop...` keys from this file
+(keep `slices` if you still want a custom ring).
+
+`backdropOpacity` controls the dim tint's actual alpha independently, from `0`
+(no dimming) to `1` (fully opaque in the theme's scrim color). `backdropBlur`
+independently enables or disables Hyprland's blur for the shared backdrop.
+These settings combine independently:
+
+| `backdropBlur` | `backdropOpacity` | Result |
+|---|---:|---|
+| `true` | `0` | blurred, undimmed desktop |
+| `true` | above `0` | blurred and dimmed desktop |
+| `false` | `0` | sharp, undimmed desktop |
+| `false` | above `0` | sharp, dimmed desktop |
+
+The blur toggle is binary: Hyprland's layer rule can select which layer is
+blurred, but its blur radius and passes are global settings in
+`config/hyprland.lua`. Hyprland applies its blur as soon as the blur layer is
+mapped; the in/out transition durations fade the tint independently and do not
+animate the blur kernel itself.
+`backdropTransitionInMs` and
+`backdropTransitionOutMs` independently set its arrival and departure fade
+durations in milliseconds; `0` is instant. They are optional, clamped to zero
+or above, and watched on save. The older `backdropTransitionMs` remains a
+fallback for either direction when its specific setting is absent. These
+settings control the shared backdrop under the wheel (including
+search/results), Files, and shell panels. The duration animates the scrim tint
+in both directions. Hyprland enables its
+fullscreen blur when the shared layer appears and disables it when the layer
+goes away; that compositor blur itself is not animated by this setting. The
+normal short close hold remains fixed, so a long fade does not delay the wheel
+or panel from closing; the scrim stays mapped until its fade finishes.
+
+While the wheel is open, tap `F12` to temporarily peek at the desktop:
+the tint and blur are both turned off without changing the query, selection, or
+saved `wheel.json`. Tap it again to restore the configured backdrop. Closing
+the wheel also clears peek mode. `Caps Lock` also toggles peek when the keyboard
+layout sends it as a key; layouts that remap it to a modifier (such as
+`caps:hyper`) should use `F12`.
 
 Each id is either a panel — `omarchy.audio`, `network`, `bluetooth`, `monitor`,
 `clock`, `tailscale`, `agents`, `dropbox`, `power`, `clipboard` — or a menu id from

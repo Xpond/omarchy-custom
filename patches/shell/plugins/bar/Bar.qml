@@ -92,6 +92,15 @@ Item {
   property var activePopout: null
   // One wash behind every open shell surface.
   property color panelScrimColor: Color.menu.scrim
+  // User-tunable shared backdrop settings, also used under the wheel search UI.
+  property real panelScrimOpacity: 1
+  property bool panelScrimOpacityConfigured: false
+  readonly property real effectivePanelScrimOpacity: panelScrimOpacityConfigured
+    ? panelScrimOpacity : panelScrimColor.a
+  property bool panelScrimBlur: true
+  property bool panelScrimPeek: false
+  property int panelScrimTransitionInMs: 0
+  property int panelScrimTransitionOutMs: 0
   // Keep at least as long as KeyboardPanel.closeFadeDuration.
   property int panelScrimHoldMs: 150
   // Count mapped surfaces so the scrim does not arrive before their cards.
@@ -100,6 +109,87 @@ Item {
   function panelSurfaceVisible(shown) {
     visiblePanelSurfaces = Math.max(0, visiblePanelSurfaces + (shown ? 1 : -1))
   }
+
+  function transitionScrimTo(scrim, targetOpacity) {
+    var opacity = root.panelScrimPeek ? 0 : targetOpacity
+    scrim.scrimTransitionDuration = root.panelScrimPeek ? 0 : opacity > scrim.scrimOpacity
+      ? root.panelScrimTransitionInMs : root.panelScrimTransitionOutMs
+    scrim.scrimOpacity = opacity
+  }
+
+  function setWheelBackdropPeek(active) {
+    root.panelScrimPeek = active === true
+    for (var i = 0; i < scrimInstances.length; i++) {
+      var scrim = scrimInstances[i]
+      if (scrim && scrim.shown)
+        root.transitionScrimTo(scrim, root.effectivePanelScrimOpacity)
+    }
+  }
+
+  readonly property bool effectivePanelScrimBlur: panelScrimBlur && !panelScrimPeek
+
+  property var scrimInstances: []
+  function registerScrim(scrim) {
+    if (scrimInstances.indexOf(scrim) !== -1) return
+    scrimInstances = scrimInstances.concat([scrim])
+  }
+  function unregisterScrim(scrim) {
+    scrimInstances = scrimInstances.filter(function(item) { return item !== scrim })
+  }
+  function finishWheelBackdropPeek() {
+    if (!root.panelScrimPeek) return
+    for (var i = 0; i < scrimInstances.length; i++) {
+      var scrim = scrimInstances[i]
+      if (scrim && (scrim.wanted || scrim.shown || scrim.scrimOpacity > 0)) return
+    }
+    root.panelScrimPeek = false
+  }
+
+  function applyWheelBackdrop(raw) {
+    var opacity = 1
+    var opacityConfigured = false
+    var blur = true
+    var transitionInMs = 0
+    var transitionOutMs = 0
+    try {
+      var text = String(raw || "")
+        .replace(/^\s*\/\/[^\n]*(\n|$)/gm, "")
+        .replace(/,(\s*[}\]])/g, "$1")
+      var config = JSON.parse(text)
+      if (config && typeof config === "object" && !Array.isArray(config)) {
+        if (typeof config.backdropOpacity === "number" && isFinite(config.backdropOpacity)) {
+          opacity = Math.max(0, Math.min(1, config.backdropOpacity))
+          opacityConfigured = true
+        }
+        if (typeof config.backdropBlur === "boolean")
+          blur = config.backdropBlur
+        var legacyTransitionMs = typeof config.backdropTransitionMs === "number" && isFinite(config.backdropTransitionMs)
+          ? Math.max(0, Math.round(config.backdropTransitionMs)) : 0
+        transitionInMs = legacyTransitionMs
+        transitionOutMs = legacyTransitionMs
+        if (typeof config.backdropTransitionInMs === "number" && isFinite(config.backdropTransitionInMs))
+          transitionInMs = Math.max(0, Math.round(config.backdropTransitionInMs))
+        if (typeof config.backdropTransitionOutMs === "number" && isFinite(config.backdropTransitionOutMs))
+          transitionOutMs = Math.max(0, Math.round(config.backdropTransitionOutMs))
+      }
+    } catch (e) {
+    }
+    panelScrimOpacity = opacity
+    panelScrimOpacityConfigured = opacityConfigured
+    panelScrimBlur = blur
+    panelScrimTransitionInMs = transitionInMs
+    panelScrimTransitionOutMs = transitionOutMs
+  }
+
+  FileView {
+    path: root.home + "/.config/omarchy/wheel.json"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.applyWheelBackdrop(text())
+    onLoadFailed: root.applyWheelBackdrop("")
+  }
+
   property var barDragSource: null
   property var barDragTarget: null
   property var barDragTargetGeometry: null
@@ -1258,50 +1348,98 @@ Item {
   }
 
   // Bar ownership keeps the backdrop stable across panel handoffs.
-  component PanelScrim: PanelWindow {
-    id: scrimWindow
+  component PanelScrim: Item {
+    id: scrim
 
-    // Delay release until the closing card's fade completes.
+    required property var screen
     readonly property bool wanted: root.visiblePanelSurfaces > 0
     property bool shown: false
+    property real scrimOpacity: 0
+    property int scrimTransitionDuration: 0
+    readonly property color scrimTint: Qt.rgba(root.panelScrimColor.r, root.panelScrimColor.g,
+                                                root.panelScrimColor.b, scrim.scrimOpacity)
+
+    Component.onCompleted: root.registerScrim(scrim)
+    Component.onDestruction: root.unregisterScrim(scrim)
 
     onWantedChanged: {
       if (wanted) {
         scrimHold.stop()
         shown = true
+        root.transitionScrimTo(scrim, root.effectivePanelScrimOpacity)
       } else {
         scrimHold.restart()
+      }
+    }
+
+    Behavior on scrimOpacity {
+      NumberAnimation {
+        duration: scrim.scrimTransitionDuration
+        easing.type: Easing.OutCubic
       }
     }
 
     Timer {
       id: scrimHold
       interval: root.panelScrimHoldMs
-      onTriggered: scrimWindow.shown = false
+      onTriggered: {
+        scrim.shown = false
+        root.transitionScrimTo(scrim, 0)
+        root.finishWheelBackdropPeek()
+      }
     }
 
-    visible: shown
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-    mask: Region { width: 0; height: 0 }
-
-    WlrLayershell.namespace: "omarchy-panel-scrim"
-    // Top sits strictly below Overlay panels and cannot blur their cards.
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-    anchors {
-      top: true
-      bottom: true
-      left: true
-      right: true
+    Connections {
+      target: scrim
+      function onScrimOpacityChanged() { root.finishWheelBackdropPeek() }
     }
 
-    // Constant alpha avoids recomputing full-screen blur every frame.
-    Rectangle {
-      anchors.fill: parent
-      color: root.panelScrimColor
+    Connections {
+      target: root
+      function onEffectivePanelScrimOpacityChanged() {
+        if (scrim.shown) root.transitionScrimTo(scrim, root.effectivePanelScrimOpacity)
+      }
     }
+
+    // Hyprland enables blur per layer. Keep its near-transparent mask separate
+    // from the sharp tint so blur and dimming remain independent controls.
+    PanelWindow {
+      screen: scrim.screen
+      visible: root.effectivePanelScrimBlur && (scrim.shown || scrim.scrimOpacity > 0)
+      color: "transparent"
+      exclusionMode: ExclusionMode.Ignore
+      mask: Region { width: 0; height: 0 }
+      WlrLayershell.namespace: "omarchy-panel-scrim-blur"
+      WlrLayershell.layer: WlrLayer.Top
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      anchors { top: true; bottom: true; left: true; right: true }
+
+      Rectangle {
+        anchors.fill: parent
+        color: root.panelScrimColor
+        // A single alpha step keeps the compositor blur active independently
+        // of the tint, including when the requested dim opacity is zero.
+        opacity: scrim.shown || scrim.scrimOpacity > 0 ? 0.004 : 0
+      }
+    }
+
+    PanelWindow {
+      screen: scrim.screen
+      visible: scrim.shown || scrim.scrimOpacity > 0
+      color: "transparent"
+      exclusionMode: ExclusionMode.Ignore
+      mask: Region { width: 0; height: 0 }
+      WlrLayershell.namespace: "omarchy-panel-scrim-sharp"
+      WlrLayershell.layer: WlrLayer.Top
+      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+      anchors { top: true; bottom: true; left: true; right: true }
+
+      Rectangle {
+        anchors.fill: parent
+        color: scrim.scrimTint
+      }
+    }
+
   }
 
   component BarPanel: PanelWindow {

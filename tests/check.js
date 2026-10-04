@@ -222,7 +222,21 @@ console.log("ok: browser bare keys drive the list, shift drives the preview, ctr
 // The query field types, deletes, moves and selects; every wheel shortcut stays the wheel's.
 const copied = []
 const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
+const summonState = { opened: true, suppressNextCommit: false, escapeCalls: 0,
+  dismissByEscape() { this.escapeCalls++ } }
+const summonWheel = method(wheelSource, "open", { root: summonState, unmap: { running: false } })
+summonWheel()
+assert.equal(summonState.escapeCalls, 1, "summoning an open wheel follows the Escape path")
+assert.equal(summonState.suppressNextCommit, true, "same press release cannot commit or animate-close")
+const releaseState = { suppressNextCommit: true, opened: true }
+const releaseWheel = method(wheelSource, "commit", { root: releaseState })
+assert.equal(releaseWheel(), "dismissed", "release after repeated SUPER+A is consumed")
+assert.equal(releaseState.suppressNextCommit, false)
 const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
+  backdropPeek: false, selected: 2,
+  dismissByEscape() { if (this.searching) this.query = ""; else if (!this.up()) this.dismiss() },
+  up() { return true },
+  shell: { setBackdropPeek(value) { this.peek = value } },
   get searching() { return this.query.length > 0 },
   dismiss: () => copied.push("dismissed"), showResult() {}, moveResult(step) { this.resultIndex += step } }
 const edit = (query, at) => { dial.query = query; dial.queryAt = at }
@@ -234,8 +248,16 @@ dial.paste = method(wheelSource, "paste", { root: dial, searchInput: field,
   Quickshell: { clipboardText: "pasted  text" } })
 dial.copy = method(wheelSource, "copy", { Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
 dial.takePath = method(wheelSource, "takePath", { root: dial })
+dial.toggleBackdropPeek = method(wheelSource, "toggleBackdropPeek", { root: dial })
 const dialKey = keymap("plugins/xpo.wheel/MenuKeys.js", dial)
 const ctrl = 1 << 26
+assert.equal(dialKey("Key_CapsLock").accepted, true, "Caps Lock is consumed for backdrop peek")
+assert.equal(dial.backdropPeek, true)
+assert.equal(dial.shell.peek, true)
+assert.equal(dialKey("Key_F12").accepted, true, "F12 is the fallback peek key when Caps is remapped")
+assert.equal(dial.backdropPeek, false, "Caps Lock restores the backdrop on the next tap")
+assert.equal(dial.shell.peek, false)
+assert.equal(dial.selected, 2, "peek leaves the selected wheel slice intact")
 // Del on the bare ring did nothing to see, yet its DEL character landed in the query.
 assert.equal(dialKey("Key_Delete", 0, "\x7f").accepted + "|" + dial.query, "false|", "del on the ring adds nothing")
 edit("firefox", 3)
@@ -293,6 +315,18 @@ dial.up = () => levels.push("up") < 3
 dialKey("Key_Escape"); assert.equal(dial.query, "", "esc clears the query first")
 dialKey("Key_Backspace"); dialKey("Key_Escape"); dialKey("Key_Escape")
 assert.deepEqual([levels, copied], [["up", "up", "up"], ["dismissed"]])
+const escWheel = { searching: false, up() { return false }, dismissed: 0, dismiss() { this.dismissed++ } }
+escWheel.dismissByEscape = method(wheelSource, "dismissByEscape", { root: escWheel })
+escWheel.dismissByEscape()
+assert.equal(escWheel.dismissed, 1, "Escape dismisses through the shared handler")
+const repeated = { opened: true, suppressNextCommit: false, query: "query", path: [],
+  up() { return false }, dismiss() { this.dismissed = true }, dismissed: false }
+repeated.dismissByEscape = method(wheelSource, "dismissByEscape", { root: repeated })
+const repeatedOpen = method(wheelSource, "open", { root: repeated, unmap: { running: false } })
+repeatedOpen()
+assert.equal(repeated.dismissed, true, "repeated SUPER+A dismisses at the ring root like Escape")
+assert.equal(repeated.query, "query", "repeated SUPER+A keeps the current query like Escape")
+assert.equal(repeated.suppressNextCommit, true, "the paired SUPER+A release is suppressed")
 console.log("ok: the field edits the query, the wheel keeps its shortcuts, and a path can be taken away or opened in a terminal")
 
 // The placeholder names every search sigil, so a new mode cannot hide.
@@ -515,6 +549,97 @@ for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) 
   assert.match(read(f), /onOpenedChanged:[\s\S]*?panelSurfaceVisible\(root\.opened\)/,
     f + " does not drive the bar scrim from its open state")
 }
+const barSource = read("patches/shell/plugins/bar/Bar.qml")
+assert.match(barSource, /path: root\.home \+ "\/\.config\/omarchy\/wheel\.json"[\s\S]*?watchChanges: true[\s\S]*?onLoaded: root\.applyWheelBackdrop\(text\(\)\)/,
+  "the shared backdrop settings are not watched from wheel.json")
+assert.match(barSource, /backdropOpacity[\s\S]*?Math\.max\(0, Math\.min\(1,/,
+  "backdrop opacity is not clamped between transparent and the theme default")
+assert.match(barSource, /effectivePanelScrimOpacity: panelScrimOpacityConfigured\s*\?\s*panelScrimOpacity : panelScrimColor\.a/,
+  "omitting backdropOpacity must restore the theme-defined scrim alpha")
+assert.match(barSource, /typeof config\.backdropBlur === "boolean"[\s\S]*?blur = config\.backdropBlur/,
+  "backdrop blur is not independently configurable")
+assert.match(barSource, /effectivePanelScrimBlur: panelScrimBlur && !panelScrimPeek/,
+  "peek must temporarily disable blur without mutating the saved setting")
+assert.match(barSource, /function setWheelBackdropPeek\(active\)[\s\S]*?panelScrimPeek = active === true[\s\S]*?transitionScrimTo\(scrim, root\.effectivePanelScrimOpacity\)/,
+  "peek must apply only to the live backdrop and restore configured opacity")
+assert.match(wheelSource, /function close\(immediate\) \{(?:(?!^  \}).)*?releasePopout/s,
+  "wheel close path is present")
+assert.doesNotMatch(wheelSource.match(/function close\(immediate\) \{[^]*?^  \}/m)[0], /restoreBackdropPeek/,
+  "dismiss must not restore the configured backdrop before the scrim fades away")
+assert.match(barSource, /function finishWheelBackdropPeek\(\)[\s\S]*?if \(scrim && \(scrim\.wanted \|\| scrim\.shown \|\| scrim\.scrimOpacity > 0\)\) return[\s\S]*?root\.panelScrimPeek = false/,
+  "peek resets only after all shared backdrop fades have finished")
+assert.match(barSource, /onTriggered: \{\s*scrim\.shown = false\s*root\.transitionScrimTo\(scrim, 0\)\s*root\.finishWheelBackdropPeek\(\)/,
+  "dismiss applies the peek's clear, instant transition before resetting the override")
+assert.match(barSource, /backdropTransitionInMs[\s\S]*?Math\.max\(0, Math\.round\([\s\S]*?backdropTransitionOutMs[\s\S]*?Math\.max\(0, Math\.round\(/,
+  "backdrop in/out durations do not allow instant zero values")
+assert.match(barSource, /function transitionScrimTo\(scrim, targetOpacity\)[\s\S]*?opacity > scrim\.scrimOpacity[\s\S]*?root\.panelScrimTransitionInMs : root\.panelScrimTransitionOutMs[\s\S]*?scrim\.scrimOpacity = opacity/,
+  "transition duration must be selected from opacity direction")
+assert.match(barSource, /Behavior on scrimOpacity[\s\S]*?duration: scrim\.scrimTransitionDuration/,
+  "the selected in/out duration must drive the opacity animation")
+assert.match(barSource, /namespace: "omarchy-panel-scrim-blur"[\s\S]*?opacity: scrim\.shown \|\| scrim\.scrimOpacity > 0 \? 0\.004 : 0/,
+  "the blur-only layer must be separate from tint opacity")
+assert.match(barSource, /visible: scrim\.shown \|\| scrim\.scrimOpacity > 0[\s\S]*?namespace: "omarchy-panel-scrim-sharp"[\s\S]*?color: scrim\.scrimTint/,
+  "the sharp tint layer must render independently of the blur toggle")
+assert.match(barSource, /scrimTint: Qt\.rgba\(root\.panelScrimColor\.r, root\.panelScrimColor\.g,[\s\S]*?root\.panelScrimColor\.b, scrim\.scrimOpacity\)/,
+  "backdrop opacity must control the tint alpha directly")
+assert.match(barSource, /color: scrim\.scrimTint/,
+  "the tint layer must use the color with the configured alpha")
+assert.match(barSource, /id: scrimHold\s+interval: root\.panelScrimHoldMs/,
+  "the close hold must not grow with the backdrop transition duration")
+const transition = { panelScrimTransitionInMs: 2600, panelScrimTransitionOutMs: 0, panelScrimPeek: false }
+const transitionScrim = { scrimOpacity: 0, scrimTransitionDuration: 0 }
+const transitionScrimTo = method(barSource, "transitionScrimTo", { root: transition })
+transitionScrimTo(transitionScrim, 1)
+assert.equal(transitionScrim.scrimTransitionDuration, 2600, "fade-in uses the in duration")
+assert.equal(transitionScrim.scrimOpacity, 1)
+transitionScrimTo(transitionScrim, 0)
+assert.equal(transitionScrim.scrimTransitionDuration, 0, "fade-out uses the out duration")
+assert.equal(transitionScrim.scrimOpacity, 0)
+transition.panelScrimPeek = true
+transition.panelScrimTransitionInMs = 4000
+transition.panelScrimTransitionOutMs = 5000
+transitionScrim.scrimOpacity = 1
+transitionScrimTo(transitionScrim, 1)
+assert.equal(transitionScrim.scrimTransitionDuration, 0, "peek bypasses configured fade durations")
+assert.equal(transitionScrim.scrimOpacity, 0, "peek targets no tint")
+transition.panelScrimPeek = false
+transition.panelScrimTransitionInMs = 0
+transition.panelScrimTransitionOutMs = 900
+transitionScrimTo(transitionScrim, 0.5)
+assert.equal(transitionScrim.scrimTransitionDuration, 0, "instant fade-in remains independent")
+transitionScrimTo(transitionScrim, 0)
+assert.equal(transitionScrim.scrimTransitionDuration, 900, "slow fade-out remains independent")
+const backdrop = { panelScrimOpacity: 1, panelScrimOpacityConfigured: false,
+  panelScrimTransitionInMs: 0, panelScrimTransitionOutMs: 0 }
+const applyBackdrop = method(barSource, "applyWheelBackdrop", backdrop)
+applyBackdrop('{"backdropOpacity":0,"backdropBlur":false,"backdropTransitionInMs":0,"backdropTransitionOutMs":0}')
+assert.equal(backdrop.panelScrimOpacity, 0, "zero opacity makes the scrim fully clear")
+assert.equal(backdrop.panelScrimOpacityConfigured, true)
+assert.equal(backdrop.panelScrimBlur, false, "blur can be disabled while dim opacity is zero")
+assert.equal(backdrop.panelScrimTransitionInMs, 0, "zero transition-in is instant")
+assert.equal(backdrop.panelScrimTransitionOutMs, 0, "zero transition-out is instant")
+applyBackdrop('// user comment\n{"backdropOpacity":2,"backdropTransitionInMs":-5,"backdropTransitionOutMs":-10,}')
+assert.equal(backdrop.panelScrimOpacity, 1, "opacity is capped at the theme default")
+assert.equal(backdrop.panelScrimOpacityConfigured, true)
+assert.equal(backdrop.panelScrimTransitionInMs, 0, "negative transition-in is clamped to instant")
+assert.equal(backdrop.panelScrimTransitionOutMs, 0, "negative transition-out is clamped to instant")
+applyBackdrop('{"backdropOpacity":0.4,"backdropTransitionInMs":250,"backdropTransitionOutMs":800}')
+assert.equal(backdrop.panelScrimOpacity, 0.4)
+assert.equal(backdrop.panelScrimBlur, true, "omitting blur keeps the default enabled")
+assert.equal(backdrop.panelScrimTransitionInMs, 250)
+assert.equal(backdrop.panelScrimTransitionOutMs, 800)
+applyBackdrop('{"backdropTransitionMs":120}')
+assert.equal(backdrop.panelScrimOpacityConfigured, false, "omitting opacity restores the theme default")
+assert.equal(backdrop.panelScrimTransitionInMs, 120, "legacy duration is the in fallback")
+assert.equal(backdrop.panelScrimTransitionOutMs, 120, "legacy duration is the out fallback")
+applyBackdrop('{"backdropTransitionMs":120,"backdropTransitionOutMs":450}')
+assert.equal(backdrop.panelScrimTransitionInMs, 120, "legacy fallback remains for unset in duration")
+assert.equal(backdrop.panelScrimTransitionOutMs, 450, "specific duration overrides legacy fallback")
+applyBackdrop("invalid")
+assert.equal(backdrop.panelScrimOpacity, 1, "invalid config restores defaults")
+assert.equal(backdrop.panelScrimBlur, true)
+assert.equal(backdrop.panelScrimTransitionInMs, 0)
+assert.equal(backdrop.panelScrimTransitionOutMs, 0)
 console.log("ok: neither plugin paints a scrim; both count on the bar's")
 
 // Every third-party plugin gets a facade. A namespace must never grant the

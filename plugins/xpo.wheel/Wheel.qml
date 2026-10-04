@@ -22,6 +22,8 @@ Item {
 
   property bool opened: false
   property bool shown: false
+  property bool backdropPeek: false
+  property bool suppressNextCommit: false
   // Ignore the pointer position synthesized when the surface maps.
   property bool armed: false
   property bool justOpened: false
@@ -290,6 +292,14 @@ Item {
   }
 
   function open() {
+    // SUPER+A while already open is Escape, not a fresh summon followed by a
+    // release-commit. Keep the current query/ring state exactly as Escape does.
+    if (root.opened && !unmap.running) {
+      root.suppressNextCommit = true
+      root.dismissByEscape()
+      return
+    }
+    root.suppressNextCommit = false
     // Treat a press during fade-out as a fresh open.
     var wasOpen = root.opened && !unmap.running
     unmap.stop()
@@ -322,6 +332,22 @@ Item {
     unmap.start()
   }
 
+  function toggleBackdropPeek() {
+    root.backdropPeek = !root.backdropPeek
+    if (root.shell) root.shell.setBackdropPeek(root.backdropPeek)
+  }
+
+  function restoreBackdropPeek() {
+    if (!root.backdropPeek) return
+    root.backdropPeek = false
+    if (root.shell) root.shell.setBackdropPeek(false)
+  }
+
+  function dismissByEscape() {
+    if (root.searching) root.query = ""
+    else if (!root.up()) root.dismiss()
+  }
+
   Timer {
     id: unmap
     interval: root.fadeDuration
@@ -346,6 +372,10 @@ Item {
 
   // Release fires a flick; the first tap holds and the second dismisses.
   function commit() {
+    if (root.suppressNextCommit) {
+      root.suppressNextCommit = false
+      return "dismissed"
+    }
     if (!root.opened) return "closed"
     if (!root.searching && root.armed && root.selected >= 0) {
       var label = root.slices[root.selected].label

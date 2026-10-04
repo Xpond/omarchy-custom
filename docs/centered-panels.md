@@ -96,7 +96,8 @@ Overlay   omarchy-keyboard-panel   the card — opaque, stays sharp
 Overlay   omarchy-wheel            the ring
 Overlay   omarchy-files            the browser card
 Overlay   omarchy-clipboard        the clipboard card
-Top       omarchy-panel-scrim      the blurred wash, held by all of the above
+Top       omarchy-panel-scrim-blur  a constant-alpha blur mask
+Top       omarchy-panel-scrim-sharp the independently dimmed tint
 Top       omarchy-bar
 ```
 
@@ -236,10 +237,12 @@ lines in a `.conf` file are **silently ignored** — no error, no warning,
 **`hyprctl keyword` cannot set layerrules** on this parser: *"keyword can't
 work with non-legacy parsers."* Edit the Lua and `hyprctl reload`.
 
-**`ignore_alpha` must sit below the scrim's own alpha.** Hyprland skips blur on
-regions it considers too transparent. At a 0.32 scrim a default threshold
-suppressed the blur entirely while the dim still rendered — which looks exactly
-like a broken scrim rather than a blur problem.
+**`ignore_alpha` applies to the blur mask, not the tint.** Hyprland skips blur
+on regions it considers too transparent. The blur-only layer therefore uses a
+fixed low alpha above its `0.0001` threshold, while a separate unblurred layer
+handles the user-controlled dim opacity. This avoids coupling dimming to
+Hyprland's blur cutoff. The blur switch is binary because Hyprland exposes
+per-layer blur enablement, not a per-layer blur radius.
 
 **Only the scrim surface is blurred.** Every other shell surface — the panels,
 `omarchy-wheel`, `omarchy-files`, `omarchy-clipboard` — draws a card over it
@@ -380,10 +383,14 @@ and look at it.
 
 | Knob | Value | Effect |
 |---|---|---|
-| `panelScrimColor` | `Color.menu.scrim` | the one backdrop, behind panels, wheel, browser and clipboard alike |
+| `panelScrimColor` | `Color.menu.scrim` | the shared tint color behind panels, wheel, browser and clipboard alike |
 | `panelScrimHoldMs` | `150` | **must stay >= `closeFadeDuration`** or the backdrop drops out early |
 
-Installed blur strength comes from `config/hyprland.lua` (`size 4, passes 2`).
+`backdropBlur` in `~/.config/omarchy/wheel.json` enables the blur-only layer;
+`backdropOpacity` controls a separate sharp tint's actual alpha independently,
+where `1` is fully opaque. Both layers are composed together when blur is on.
+Installed blur strength
+comes from `config/hyprland.lua` (`size 4, passes 2`).
 Put personal overrides after the managed block in your main Hyprland config.
 `passes` has the most effect; `passes 1` for a lighter frost.
 

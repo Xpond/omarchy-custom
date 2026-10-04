@@ -3,6 +3,11 @@
 // Keep the key map pure enough to exercise without a running shell. The query
 // field types, deletes, moves and selects for itself; this is everything else.
 function onKey(wheel, event) {
+  if (event.key === Qt.Key_CapsLock || event.key === Qt.Key_F12) {
+    wheel.toggleBackdropPeek()
+    event.accepted = true
+    return
+  }
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
     case Qt.Key_U:
@@ -35,8 +40,7 @@ function onKey(wheel, event) {
     }
   }
   if (event.key === Qt.Key_Escape) {
-    if (wheel.searching) wheel.query = ""
-    else if (!wheel.up()) wheel.dismiss()
+    wheel.dismissByEscape()
     event.accepted = true; return
   }
   if (event.key === Qt.Key_Backspace && !wheel.searching) {
