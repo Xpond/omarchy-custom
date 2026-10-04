@@ -5,7 +5,7 @@ set -euo pipefail
 SHELL_DIR=/usr/share/omarchy/shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONF=~/.config/omarchy/shell.json
-STATE=~/.local/state/omarchy-custom
+STATE=~/.local/state/wheely
 source "$REPO/scripts/shell-files.sh"
 
 # Remove first: even a later revert failure must not reinstall on the next update.
@@ -60,12 +60,12 @@ find "$STATE" -depth -type d -empty -delete 2>/dev/null || true
 
 # A failed restore may leave the custom lock screen in use; keep its designs then.
 if (( failed == 0 )); then
-  rm -f ~/.local/share/omarchy-custom/lock-session/{Bridge.qml,shell.qml,Commons,Lock}
-  rmdir ~/.local/share/omarchy-custom/lock-session 2>/dev/null || true
-  rm -f ~/.local/share/omarchy-custom/lock
-  rmdir ~/.local/share/omarchy-custom 2>/dev/null || true
-  rm -f ~/.config/omarchy-custom/lock-design
-  rmdir ~/.config/omarchy-custom 2>/dev/null || true
+  rm -f ~/.local/share/wheely/lock-session/{Bridge.qml,shell.qml,Commons,Lock}
+  rmdir ~/.local/share/wheely/lock-session 2>/dev/null || true
+  rm -f ~/.local/share/wheely/lock
+  rmdir ~/.local/share/wheely 2>/dev/null || true
+  rm -f ~/.config/wheely/lock-design
+  rmdir ~/.config/wheely 2>/dev/null || true
 fi
 
 omarchy restart shell

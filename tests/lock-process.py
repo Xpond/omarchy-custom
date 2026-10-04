@@ -14,7 +14,7 @@ repo = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="lock-process-") as directory:
     out = Path(directory)
     home, runtime, stubs = out / "home", out / "runtime", out / "bin"
-    data = home / ".local/share/omarchy-custom"
+    data = home / ".local/share/wheely"
     worker = data / "lock-session"
     sources = out / "sources"
     shutil.copytree(repo / "lock-session", sources)
@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix="lock-process-") as directory:
     (out / "Commons").symlink_to(worker / "Commons")
     runtime.mkdir(mode=0o700)
     stubs.mkdir()
-    config = home / ".config/omarchy-custom"
+    config = home / ".config/wheely"
     config.mkdir(parents=True)
     (config / "lock-design").write_text("mycelium\n")
     for name in ["omarchy-hyprland-session-locked", "fprintd-list", "omarchy-system-wake",

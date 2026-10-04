@@ -8,18 +8,18 @@ FILES=(Ui/KeyboardPanel.qml Ui/PanelKeyCatcher.qml plugins/bar/Bar.qml
        plugins/clipboard/Clipboard.qml plugins/lock/LockView.qml plugins/lock/Service.qml
        services/PluginShellApi.qml shell.qml)
 CONF=~/.config/omarchy/shell.json
-STATE=~/.local/state/omarchy-custom
+STATE=~/.local/state/wheely
 source "$REPO/scripts/shell-files.sh"
 
 # Hook failures can scroll away, so report them on the desktop too.
 alert() {
   printf '\n\e[31m%s\e[0m\n' "$1" >&2
   printf '%s\n' "${@:2}" >&2
-  command -v notify-send >/dev/null && notify-send -u critical "omarchy-custom" "$1"
+  command -v notify-send >/dev/null && notify-send -u critical "wheely" "$1"
 }
 
 # Link the lock-screen designs before any QML can load them.
-data=~/.local/share/omarchy-custom
+data=~/.local/share/wheely
 mkdir -p "$data" && ln -sfn "$REPO/lock" "$data/lock" || { alert "Could not link the lock-screen designs"; exit 1; }
 mkdir -p "$data/lock-session" &&
   ln -sfn "$REPO/lock-session/Bridge.qml" "$data/lock-session/Bridge.qml" &&

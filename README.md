@@ -1,4 +1,4 @@
-# omarchy-custom
+# wheely
 
 A radial control center, a file browser and centered shell panels for
 [Omarchy](https://omarchy.org).
@@ -43,8 +43,8 @@ Needs `jq`, `python3`, `git`, `hyprctl`, `sudo`, `fd`, `wl-copy`, `gio`,
 ImageMagick's `identify` for image sizes. Run from your Omarchy session:
 
 ```bash
-git clone https://github.com/Xpond/omarchy-custom
-cd omarchy-custom
+git clone https://github.com/Xpond/wheely
+cd wheely
 ./install.sh
 ```
 
@@ -52,7 +52,7 @@ It links `plugins/` into `~/.config/omarchy/plugins/` and registers them in
 `~/.config/omarchy/shell.json`, appends a marked block (keybinds, layer rules,
 blur, render loop) to `~/.config/hypr/hyprland.lua`, links three helpers into
 `~/.local/bin`, links the lock-screen designs in `lock/` into
-`~/.local/share/omarchy-custom/`, patches eight shell files, installs a post-update
+`~/.local/share/wheely/`, patches eight shell files, installs a post-update
 hook, and restarts the shell. Rerunning is safe. Keep the checkout where it is:
 the hook points to it.
 

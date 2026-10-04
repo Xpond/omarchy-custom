@@ -8,15 +8,15 @@ import sys
 import tempfile
 
 REPO = Path(__file__).resolve().parents[1]
-BEGIN = "-- BEGIN omarchy-custom\n"
-END = "-- END omarchy-custom\n"
+BEGIN = "-- BEGIN wheely\n"
+END = "-- END wheely\n"
 HELPERS = ("omarchy-open-path", "omarchy-wheel-close", "omarchy-lock-design")
 
 
 def write(path, text):
     path = path.resolve()  # preserve a user's config symlink
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".omarchy-custom-")
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".wheely-")
     try:
         with os.fdopen(fd, "w") as stream:
             stream.write(text)
@@ -127,4 +127,4 @@ if __name__ == "__main__":
             raise ValueError("Expected install or revert")
         configure(mode, Path(config), Path(state), Path(bindir))
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        sys.exit(f"omarchy-custom: {error}")
+        sys.exit(f"wheely: {error}")

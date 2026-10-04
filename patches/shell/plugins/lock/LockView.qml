@@ -21,7 +21,7 @@ Item {
   property bool driving: false
   property bool blanked: false
   // Designs live outside the shell, a folder each; lock-design names the one shown.
-  property string designs: Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock/"
+  property string designs: Quickshell.env("HOME") + "/.local/share/wheely/lock/"
   property string design: chosen.text().trim() || "rally"
 
   readonly property string placeholderText: "Enter Password"
@@ -89,7 +89,7 @@ Item {
 
   FileView {
     id: chosen
-    path: Quickshell.env("HOME") + "/.config/omarchy-custom/lock-design"
+    path: Quickshell.env("HOME") + "/.config/wheely/lock-design"
     // Read at once, so the first design shown is the chosen one.
     blockLoading: true
     printErrors: false
