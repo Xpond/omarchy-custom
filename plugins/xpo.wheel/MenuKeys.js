@@ -1,14 +1,23 @@
 .pragma library
 
-// Keep the key map pure enough to exercise without a running shell.
+// Keep the key map pure enough to exercise without a running shell. The query
+// field types, deletes, moves and selects for itself; this is everything else.
 function onKey(wheel, event) {
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
-    // Ctrl+A remains TextInput's native select-all. Ctrl+E had only our old
-    // caret shortcut, so don't give it an accidental platform-specific action.
-    case Qt.Key_E:
-      if (wheel.searching) { event.accepted = true; return }
-      break
+    case Qt.Key_U:
+      wheel.query = wheel.query.slice(wheel.queryAt); wheel.queryAt = 0
+      event.accepted = true; return
+    case Qt.Key_K:
+      wheel.query = wheel.query.slice(0, wheel.queryAt); event.accepted = true; return
+    case Qt.Key_W:
+    case Qt.Key_Backspace:
+      var kept = wheel.query.slice(0, wheel.queryAt).replace(/\S+\s*$/, "")
+      wheel.query = kept + wheel.query.slice(wheel.queryAt)
+      wheel.queryAt = kept.length; event.accepted = true; return
+    case Qt.Key_A: wheel.queryAt = 0; event.accepted = true; return
+    case Qt.Key_E: wheel.queryAt = wheel.query.length; event.accepted = true; return
+    case Qt.Key_V: wheel.paste(); event.accepted = true; return
     case Qt.Key_Y:
       if (!wheel.takePath()) return
       event.accepted = true; return
@@ -17,22 +26,12 @@ function onKey(wheel, event) {
     case Qt.Key_Enter:
       if (!wheel.terminal()) break
       event.accepted = true; return
-    }
-  }
-  if (wheel.searching) {
-    // TextInput owns editing (including printable text and Delete). Consume
-    // movement combinations that would navigate or select nonexistent lines.
-    if (event.modifiers & Qt.ControlModifier) {
-      if (event.key === Qt.Key_Up || event.key === Qt.Key_Down
-          || event.key === Qt.Key_Home || event.key === Qt.Key_End
-          || event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
-        event.accepted = true; return
-      }
-    }
-    if ((event.modifiers & Qt.ShiftModifier)
-        && (event.key === Qt.Key_Up || event.key === Qt.Key_Down
-            || event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown)) {
-      event.accepted = true; return
+    case Qt.Key_N:
+      if (wheel.searching) { wheel.moveResult(1); event.accepted = true }
+      return
+    case Qt.Key_P:
+      if (wheel.searching) { wheel.moveResult(-1); event.accepted = true }
+      return
     }
   }
   if (event.key === Qt.Key_Escape) {
@@ -48,18 +47,15 @@ function onKey(wheel, event) {
     event.accepted = true; return
   }
   if (wheel.searching) {
-    if (event.modifiers === 0 && event.key === Qt.Key_Down) { wheel.moveResult(1); event.accepted = true; return }
-    if (event.modifiers === 0 && event.key === Qt.Key_Up) { wheel.moveResult(-1); event.accepted = true; return }
-    // Home/End belong to the text caret; page keys jump to the result-list ends.
-    if (event.modifiers === 0 && event.key === Qt.Key_PageUp) {
-      wheel.resultIndex = 0; wheel.showResult(); event.accepted = true; return
-    }
-    if (event.modifiers === 0 && event.key === Qt.Key_PageDown) {
+    if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { wheel.moveResult(1); event.accepted = true; return }
+    if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { wheel.moveResult(-1); event.accepted = true; return }
+    // Shift+Home and Shift+End select in the field.
+    if (event.modifiers & Qt.ShiftModifier) return
+    if (event.key === Qt.Key_Home) { wheel.resultIndex = 0; wheel.showResult(); event.accepted = true; return }
+    if (event.key === Qt.Key_End) {
       wheel.resultIndex = Math.max(0, wheel.results.length - 1)
       wheel.showResult(); event.accepted = true; return
     }
-    if (event.modifiers === 0 && event.key === Qt.Key_Tab) { wheel.moveResult(1); event.accepted = true; return }
-    if (event.key === Qt.Key_Backtab) { wheel.moveResult(-1); event.accepted = true; return }
   } else {
     switch (event.key) {
     // Up/down choose by bearing; left/right step around any ring size.

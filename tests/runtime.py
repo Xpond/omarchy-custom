@@ -91,22 +91,27 @@ Scope {
   } }
 ''')
 
-    # Clearing the query anywhere has to carry the caret home. Only the real
-    # onQueryChanged can fire that, so the binding itself is the fixture.
-    changed = block(wheel, r"  onQueryChanged: \{")
-    run("query-caret", '''
+    # The field and the query are one value both ways, and queryAt is the field's own
+    # caret: typing edits from inside, Esc clears from outside, and Ctrl+W places the
+    # caret after it assigns the query. The real lines are the fixture.
+    run("query-field", '''
   property string query: ""
-  property int queryAt: 0
-  property int resultIndex: 0
-  property int resultTop: 0
-''' + changed + '''
+''' + line(wheel, r"^  property alias queryAt:.*$") + '''
+  TextInput {
+    id: searchInput
+''' + line(wheel, r"^ +text: root\.query$") + line(wheel, r"^ +onTextChanged:.*$") + '''
+  }
   Timer { interval: 1; running: true; onTriggered: {
-    root.query = "firefox"; root.queryAt = 7
+    searchInput.insert(0, "firefox")
+    if (root.query !== "firefox") { console.error("FAIL typing missed the query", root.query); Qt.exit(1); return }
+    root.query = "fox"; root.queryAt = 1
+    if (searchInput.text + "|" + searchInput.cursorPosition !== "fox|1") {
+      console.error("FAIL the caret did not land", searchInput.text, searchInput.cursorPosition); Qt.exit(1); return
+    }
     root.query = ""
-    if (root.queryAt !== 0) { console.error("FAIL caret left behind", root.queryAt); Qt.exit(1) }
-    root.query = "abc"; root.queryAt = 3
-    root.query = "a"
-    if (root.queryAt !== 1) { console.error("FAIL caret past the end", root.queryAt); Qt.exit(1) }
+    if (searchInput.text !== "" || root.queryAt !== 0) { console.error("FAIL caret left behind", root.queryAt); Qt.exit(1); return }
+    searchInput.insert(0, "a"); root.query = "b"
+    if (searchInput.text !== "b") { console.error("FAIL typing cut the field loose", searchInput.text); Qt.exit(1); return }
     console.log("PASS"); Qt.quit()
   } }
 ''')
