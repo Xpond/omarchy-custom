@@ -97,13 +97,14 @@ Item {
     function check(condition, message) {
       if (!condition) throw new Error("FAIL " + message)
     }
+    var wheel, files
     function listed() {
       return String(wheel.shell.panels().map(function(p) {
         return p.id + ":" + p.name + ":" + p.source }).sort())
     }
     try {
-      var wheel = root.panelLoaders["xpo.wheel"].item
-      var files = root.panelLoaders["xpo.files"].item
+      wheel = root.panelLoaders["xpo.wheel"].item
+      files = root.panelLoaders["xpo.files"].item
       check(wheel.shell !== root && files.shell !== root, "plugin received ShellRoot")
       check(wheel.shell.bar !== root.bar && files.shell.bar !== root.bar, "plugin received live bar")
       wheel.opened = true

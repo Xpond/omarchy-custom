@@ -9,6 +9,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="lock-process-") as directory:
@@ -122,6 +123,9 @@ ShellRoot { Lock.Service {} }
             retained = rss(parent.pid) - baseline
             assert retained < 12, f"parent retained {retained:.1f} MiB after {design}"
             print(f"ok: {design} worker {pid} exits; parent RSS change {retained:.1f} MiB", flush=True)
+
+        # Every worker so far retired cleanly, which logs nothing.
+        qslog.check("\n".join(p.read_text() for p in runtime.glob("quickshell/by-id/*/log.log")))
 
         entry = worker / "shell.qml"
         original = entry.read_text()
