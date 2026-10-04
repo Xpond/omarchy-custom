@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 source = (repo / "plugins/xpo.files/Files.qml").read_text()
@@ -82,6 +83,6 @@ Scope {
     result = subprocess.run(["quickshell", "--no-color", "-p", str(base / "shell.qml")],
                             env=env, capture_output=True, text=True, timeout=5)
     log = result.stdout + result.stderr
-    assert result.returncode == 0 and "PASS" in log and "FAIL" not in log, log
-    assert not re.search(r"TypeError|ReferenceError|Cannot assign", log), log
+    assert result.returncode == 0 and "PASS" in log, log
+    qslog.check(log)
     print("ok: hidden preview suppression, visible updates, reopen and pending close")

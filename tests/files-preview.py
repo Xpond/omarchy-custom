@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 plugin = repo / "plugins/xpo.files"
@@ -137,7 +138,8 @@ Scope {
     result = subprocess.run(["quickshell", "--no-color", "-p", str(base / "shell.qml")], cwd=base,
                             env=env, capture_output=True, text=True, timeout=900)
     log = result.stdout + result.stderr
-    assert "PASS" in log and not any(e in log for e in ["TypeError", "ReferenceError"]), log
+    assert "PASS" in log, log
+    qslog.check(log)
 
     pairs = sorted(p.name[:-len("-rich.png")] for p in (base / "out").glob("*-rich.png"))
     assert len(pairs) == len(cases) * 6, len(pairs)

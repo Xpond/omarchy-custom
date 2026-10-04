@@ -492,7 +492,8 @@ finally **label length**, which floats
 calculator results. `node tests/wheel-binds.js` covers reading the records and
 which bindings join which rows. `node tests/wheel-conditions.js` checks the
 batched script, custom Bash included; `python3 tests/runtime.py` checks live
-refresh, selection and menu-file changes.
+refresh, selection and menu-file changes, and like every test that starts
+Quickshell, fails on a warning it doesn't expect (`tests/qslog.py`).
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,

@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/meadow-wind-render").resolve()
@@ -74,7 +75,7 @@ result = subprocess.run(["quickshell", "--no-color", "-p", str(out / "shell.qml"
                         env=env, capture_output=True, text=True, timeout=30)
 (out / "render.log").write_text(result.stdout + result.stderr)
 assert result.returncode == 0, result.stdout + result.stderr
-assert not any(word in result.stdout + result.stderr for word in ["ERROR", "ReferenceError", "TypeError", "Failed to"])
+qslog.check(result.stdout + result.stderr)
 
 
 def stem(scale, x, fractions):

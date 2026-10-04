@@ -11,6 +11,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/mycelium-render").resolve()
@@ -75,7 +76,7 @@ result = subprocess.run(["quickshell", "--no-color", "-p", str(out / "shell.qml"
                         env=env, capture_output=True, text=True, timeout=20)
 (out / "render.log").write_text(result.stdout + result.stderr)
 assert result.returncode == 0, result.stdout + result.stderr
-assert not any(word in result.stdout + result.stderr for word in ["ERROR", "ReferenceError", "TypeError"])
+qslog.check(result.stdout + result.stderr)
 
 def pixels(name, crop):
     return subprocess.check_output(["magick", str(out / (name + ".png")), "-crop", crop,

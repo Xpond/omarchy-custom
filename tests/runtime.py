@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 from plugin_shell import check as check_plugin_shell
 from wheel_refresh import check as check_wheel_refresh
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 wheel = (repo / "plugins/xpo.wheel/Wheel.qml").read_text()
@@ -48,7 +49,7 @@ Scope {
                                 text=True, timeout=6)
         log = result.stdout + result.stderr
         assert result.returncode == 0 and "PASS" in log, log
-        assert not any(error in log for error in ["TypeError", "ReferenceError", "FAIL"]), log
+        qslog.check(log)
         print("ok:", name)
 
     check_plugin_shell(repo, base, run, block)
@@ -67,6 +68,7 @@ Scope {
   property bool opened: true
   property string mode: ""
   property var files: null
+  property real daylight: 0
 ''' + scan("0.15") + handlers + '''
   Component.onCompleted: root.mode = "file"
   Timer { interval: 30; running: true; onTriggered: {
@@ -82,6 +84,7 @@ Scope {
   property bool opened: true
   property string mode: ""
   property var files: null
+  property real daylight: 0
 ''' + scan("5") + handlers + '''
   Component.onCompleted: root.mode = "file"
   Timer { interval: 30; running: true; onTriggered: root.opened = false }

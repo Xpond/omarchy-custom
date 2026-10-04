@@ -514,6 +514,9 @@ python3 tests/lock-process.py
 python3 tests/install.py
 ```
 
+Every test that starts Quickshell also fails on a warning it doesn't expect: `tests/qslog.py`
+ignores only an offscreen run's notice, and a test names any it causes on purpose.
+
 The GPU test opens a temporary preview, never a session lock. It needs a working
 Wayland/OpenGL session, Quickshell and ImageMagick. Captures go to `/tmp/lock-render/`
 or a directory supplied as its argument. The car is captured parked, then departed, when it

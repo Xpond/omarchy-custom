@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import qslog
 
 repo = Path(__file__).resolve().parents[1]
 output = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/lock-render").resolve()
@@ -110,7 +111,7 @@ with (output / "render.log").open("w") as log:
                             env=env, stdout=log, stderr=log, timeout=63)
 log = (output / "render.log").read_text()
 assert result.returncode == 0 and "PASS captures" in log, log
-assert not re.search(r"ERROR|FATAL|ReferenceError|TypeError|Failed to|shader.*error", log, re.I), log
+qslog.check(log, r"/missing/Scene\.qml")  # the design left missing on purpose
 assert float(re.search(r"EXIT (-?[\d.]+)", log)[1]) < 0, "car remains visible when unlock completes"
 print("ok: the car parks and drives out of frame without shader or QML errors:", output)
 
