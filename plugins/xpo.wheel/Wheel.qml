@@ -96,7 +96,7 @@ Item {
   readonly property string emptyText: root.mode === "calc" ? (root.term ? "No answer" : "Type to calculate")
     : root.mode !== "file" ? "No match"
     : !root.files ? "Scanning\u2026"
-    : !root.term ? "Type to find files"
+    : !root.term ? "Type to find files\nctrl+y copy path\nctrl+enter terminal"
     : "No match"
 
   // Clockwise from north; node slices drill into submenu rings.
@@ -816,7 +816,7 @@ Item {
           Text {
             anchors.centerIn: parent
             visible: !root.searching
-            text: "Search"
+            text: "Search · / files · = calc"
             color: Color.menu.text
             opacity: 0.45
             font.family: Style.font.menuFamily
