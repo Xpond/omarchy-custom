@@ -1,5 +1,6 @@
 #version 440
 
+layout(location = 0) in vec4 qt_Vertex;  // unused, but Qt's mesh feeds it and warns when no input takes it
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec2 qt_TexCoord0;
 // The mark's opacity, its grid units per screen pixel, and its comet's head along the maze.

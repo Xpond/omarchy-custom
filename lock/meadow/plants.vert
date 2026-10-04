@@ -1,4 +1,5 @@
 #version 440
+layout(location = 0) in vec4 qt_Vertex;  // unused, but Qt's mesh feeds it and warns when no input takes it
 layout(location = 1) in vec2 qt_MultiTexCoord0;
 layout(location = 0) out vec4 shape;  // along and across in garden units, part, half width
 layout(location = 1) out vec4 paint;  // ribbon colour, or leaf and flower sizes
