@@ -9,7 +9,7 @@ STATE=~/.local/state/wheely
 source "$REPO/scripts/shell-files.sh"
 
 # Remove first: even a later revert failure must not reinstall on the next update.
-rm -f ~/.config/omarchy/hooks/post-update.d/centered-panels
+rm -f ~/.config/omarchy/hooks/post-update.d/wheely
 echo "removed post-update hook"
 
 python3 "$REPO/scripts/user-config.py" revert ~/.config/hypr/hyprland.lua "$STATE" ~/.local/bin

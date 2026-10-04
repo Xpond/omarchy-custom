@@ -66,7 +66,7 @@ exit 0''',
         script.chmod(0o755)
     env = dict(os.environ, PATH=str(stubs) + ":" + os.environ["PATH"], CHECK_USER=str(user))
     conf = user / ".config/omarchy/shell.json"
-    hook = user / ".config/omarchy/hooks/post-update.d/centered-panels"
+    hook = user / ".config/omarchy/hooks/post-update.d/wheely"
 
     # A pacman package: its mtree checksums say what stock is, and its cached archive holds it.
     def publish(files):
@@ -136,7 +136,7 @@ exit 0''',
     conf.write_text(json.dumps(config))
     assert run().returncode == 0
     assert json.loads(conf.read_text()) == config
-    assert [p.name for p in hook.parent.iterdir()] == ["centered-panels"]
+    assert [p.name for p in hook.parent.iterdir()] == ["wheely"]
     # Execute the generated trampoline too, so quoting is checked by bash itself.
     result = subprocess.run([str(hook)], cwd=base, env=env, capture_output=True, timeout=15)
     assert result.returncode == 0, result.stderr

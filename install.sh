@@ -57,8 +57,8 @@ done
 
 # The copied hook is a shell-quoted trampoline back to this checkout.
 hook_dir=$(mktemp -d) || exit 1
-printf '#!/bin/bash\nexec %q\n' "$REPO/install.sh" > "$hook_dir/centered-panels" &&
-  omarchy hook install post-update "$hook_dir/centered-panels" || {
+printf '#!/bin/bash\nexec %q\n' "$REPO/install.sh" > "$hook_dir/wheely" &&
+  omarchy hook install post-update "$hook_dir/wheely" || {
     plugins_ok=0
     alert "Could not install the post-update hook"
   }
