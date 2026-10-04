@@ -15,7 +15,6 @@ function onKey(wheel, event) {
       var kept = wheel.query.slice(0, wheel.queryAt).replace(/\S+\s*$/, "")
       wheel.query = kept + wheel.query.slice(wheel.queryAt)
       wheel.queryAt = kept.length; event.accepted = true; return
-    case Qt.Key_A: wheel.queryAt = 0; event.accepted = true; return
     case Qt.Key_E: wheel.queryAt = wheel.query.length; event.accepted = true; return
     case Qt.Key_V: wheel.paste(); event.accepted = true; return
     case Qt.Key_Y:
@@ -49,8 +48,8 @@ function onKey(wheel, event) {
   if (wheel.searching) {
     if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab) { wheel.moveResult(1); event.accepted = true; return }
     if (event.key === Qt.Key_Up || event.key === Qt.Key_Backtab) { wheel.moveResult(-1); event.accepted = true; return }
-    // Shift+Home and Shift+End select in the field.
-    if (event.modifiers & Qt.ShiftModifier) return
+    // Home and End move and select in the field; Ctrl+Home and Ctrl+End reach the ends of the list.
+    if (!(event.modifiers & Qt.ControlModifier)) return
     if (event.key === Qt.Key_Home) { wheel.resultIndex = 0; wheel.showResult(); event.accepted = true; return }
     if (event.key === Qt.Key_End) {
       wheel.resultIndex = Math.max(0, wheel.results.length - 1)

@@ -44,15 +44,16 @@ key means and the dial performs it, which is what lets a test press a key.
 | `↑` `↓` `←` `→` | `↑`/`↓` jump to the slice at that compass point; `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
 | `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
-| `Home` `End` | the first and last of the forty results, from wherever you are |
+| `Ctrl+Home` `Ctrl+End` | the first and last of the forty results, from wherever you are |
 | type anything | search menu entries, apps, windows, themes and fonts |
 | `Backspace` | delete the character before the caret, then go up one level |
 | `Del` | delete the character after the caret |
 | `Ctrl+W` `Ctrl+Backspace` | delete the word before the caret |
 | `←` `→` | move the caret through the query; with `Ctrl`, a word at a time |
+| `Home` `End` | the start and the end of the query; `Ctrl+E` also goes to the end |
 | `Shift+←` `Shift+→` | select; with `Ctrl`, a word at a time |
 | `Shift+Home` `Shift+End` | select to the start, or to the end |
-| `Ctrl+A` `Ctrl+E` | the start and the end of the query |
+| `Ctrl+A` | select the whole query |
 | `Ctrl+U` `Ctrl+K` | cut to the start, or to the end |
 | `Ctrl+V` | paste at the caret or over the selection, runs of whitespace collapsed to one space |
 | `Ctrl+Y` | copy the highlighted path and close |
@@ -506,8 +507,8 @@ row on screen and `showResult()` walks it by one whenever the selection steps
 past an edge, jumping outright when the selection wraps around an end. The
 `Repeater` is fed that window, so eight delegates exist however deep the list
 runs. A rail beside the stack -- the same one the file browser runs beside its
-list -- is what says the ninth row is there at all, and `Home` and `End` are
-what reach the two ends of it without walking.
+list -- is what says the ninth row is there at all, and `Ctrl+Home` and
+`Ctrl+End` are what reach the two ends of it without walking.
 
 An open window whose words match is never a weak hit: it counts as rank 0. A
 window's title is written by the program, so a query lands mid-string
