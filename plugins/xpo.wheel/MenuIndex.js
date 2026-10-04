@@ -371,7 +371,8 @@ function liveRows(sources) {
       ident: String(a.id).split(".").pop().replace(/[_-]/g, " ").toLowerCase()
     })
   }
-  // Store window addresses, and resolve icons through matching desktop entries.
+  // Store window addresses, and resolve icons through matching desktop entries. The trail names
+  // the live workspace (lastIpcObject's goes stale) and is searchable: "workspace" lists windows.
   var windows = sources.windows
   for (var w = 0; w < windows.length; w++) {
     var t = windows[w]
@@ -379,12 +380,13 @@ function liveRows(sources) {
     var appId = String((t.wayland && t.wayland.appId) || "")
     var title = String(t.title || appId)
     if (!title) continue
+    var where = t.workspace ? "Workspace " + t.workspace.name.replace(/^special:/, "") : "Window"
     out.push({
       icon: "󰖯", appIcon: iconByAppId[appId.toLowerCase()] || "", label: title,
-      trail: "Window" + (appId ? " · " + appId : ""), address: "0x" + t.address,
+      trail: where + (appId ? " · " + appId : ""), address: "0x" + t.address,
       kind: KIND.window,
       recency: recencyOf(sources.focusOrder, t.address, ipc.focusHistoryID),
-      keywords: (title + " " + appId).toLowerCase()
+      keywords: (title + " " + appId + " " + where).toLowerCase()
     })
   }
   return out

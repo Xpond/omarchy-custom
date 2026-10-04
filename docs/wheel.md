@@ -414,9 +414,13 @@ wraps Quickshell's `DesktopEntries`: it sorts, drops entries marked hidden,
 resolves an icon name to a file, and launches through `uwsm-app -- gtk-launch`
 so an app does not inherit the compositor's service scope.
 
-Open windows come from `Hyprland.toplevels`. Their rows say `Window · <app id>`;
-launcher rows say `App`, so focusing an existing window and launching an app are
-distinct choices. A window row carries its address rather than its toplevel
+Open windows come from `Hyprland.toplevels`. Their rows say
+`Workspace <n> · <app id>`; launcher rows say `App`, so focusing an existing
+window and launching an app are distinct choices. The workspace is the
+toplevel's live one, since the cached IPC object goes stale like the focus
+history below, and it is searchable: `workspace` lists every open window and
+`workspace 2` the ones on 2 (the scratchpad reads `Workspace scratchpad`).
+A window row carries its address rather than its toplevel
 object, so it can never go stale on a window that has
 since closed, and focusing one is a `Hyprland.dispatch` — see the trap above.
 
