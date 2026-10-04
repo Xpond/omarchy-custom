@@ -14,14 +14,17 @@ echo "removed post-update hook"
 
 python3 "$REPO/scripts/user-config.py" revert ~/.config/hypr/hyprland.lua "$STATE" ~/.local/bin
 
-for p in "$REPO"/plugins/*/; do
-  id=$(basename "$p")
+# Unregister every plugin before unlinking any: the shell rebuilds registered plugins when their
+# files change, and would load one from files that are gone.
+ids=()
+for p in "$REPO"/plugins/*/; do ids+=("$(basename "$p")"); done
+# A missing config must not prevent restoring package files.
+if [[ -f $CONF ]]; then
+  jq '.plugins = [.plugins[]? | select(.id | IN($ARGS.positional[]) | not)]' "$CONF" --args "${ids[@]}" \
+     > "$CONF.new" && mv "$CONF.new" "$CONF"
+fi
+for id in "${ids[@]}"; do
   rm -f ~/.config/omarchy/plugins/"$id"
-  # A missing config must not prevent restoring package files.
-  if [[ -f $CONF ]]; then
-    jq --arg id "$id" '.plugins = [.plugins[]? | select(.id != $id)]' \
-       "$CONF" > "$CONF.new" && mv "$CONF.new" "$CONF"
-  fi
   echo "removed $id"
 done
 
