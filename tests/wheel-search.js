@@ -30,6 +30,19 @@ assert.deepEqual(M.search(M.menuRows({ arch: { label: "Arch", action: "a" } }, M
   M.liveRows({ apps: [], windows: [{ title: "~/x/omarchy-custom", address: "1", wayland: { appId: "kitty" } }],
   focusOrder: [] })), "ar", 40, {}).map(r => r.label), ["Arch", "~/x/omarchy-custom"])
 
+// Window rows name their live workspace, so "workspace" lists every window, most recent first,
+// above the bindings that mention one, and "workspace 2" only the windows on 2.
+const spread = M.liveRows({ apps: [], focusOrder: ["1", "2", "3"], windows: [
+  { title: "Server", address: "1", wayland: { appId: "kitty" }, workspace: { name: "2" } },
+  { title: "Docs", address: "2", wayland: { appId: "brave-browser" }, workspace: { name: "1" } },
+  { title: "Notes", address: "3", wayland: { appId: "kitty" }, workspace: { name: "special:scratchpad" } }
+] }).concat(M.bindRows("SUPER + 2 → Switch to workspace 2\tlua\thl.dsp.focus({ workspace = \"2\" })\n"))
+assert.deepEqual(spread.filter(r => r.address).map(r => r.trail),
+  ["Workspace 2 · kitty", "Workspace 1 · brave-browser", "Workspace scratchpad · kitty"])
+assert.deepEqual(M.search(spread, "workspace", 40, {}).map(r => r.label),
+  ["Server", "Docs", "Notes", "Switch to workspace 2"])
+assert.deepEqual(M.search(spread, "workspace 2", 40, {}).map(r => r.label), ["Server", "Switch to workspace 2"])
+
 // An independent scorer keeps stable ties in input order and returns original rows.
 function reference(rows, query, limit, uses) {
   const q = query.trim().toLowerCase()
