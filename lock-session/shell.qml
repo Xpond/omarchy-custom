@@ -71,10 +71,17 @@ ShellRoot {
     running: !root.channel || !root.channel.connected
     onTriggered: root.connect()
   }
-  // Let the final wake command finish and flush the unlocked state before exit.
+  // Let the final wake command finish and flush the unlocked state before exit. Saying goodbye
+  // first lets the bridge hang up on reading it, so only a crash logs the close as an error.
   Timer {
     id: retire
     interval: 250
-    onTriggered: if (root.idle) Qt.quit()
+    onTriggered: {
+      if (!root.idle) return
+      if (root.channel && root.channel.connected) {
+        root.channel.write('{"bye":true}\n'); root.channel.flush(); root.channel.connected = false
+      }
+      Qt.quit()
+    }
   }
 }
