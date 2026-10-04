@@ -59,6 +59,8 @@ Item {
       parser: SplitParser {
         onRead: data => {
           const message = JSON.parse(data)
+          // A retiring worker says goodbye; hanging up first keeps its close out of the log.
+          if (message.bye) { connection.connected = false; return }
           root.state = message.state
           if (root.pending && message.serial === root.pending.serial) root.pending = null
           if (root.pending) connection.write(JSON.stringify(root.pending) + "\n")
