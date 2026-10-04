@@ -38,6 +38,7 @@ Item {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: wheel.results.length === 0
+      horizontalAlignment: Text.AlignHCenter
       text: wheel.emptyText
       color: Color.menu.text
       opacity: 0.5

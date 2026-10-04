@@ -63,6 +63,11 @@ key means and the dial performs it, which is what lets a test press a key.
 The query is a Qt `TextInput`, which types, deletes, moves and selects on its
 own; `MenuKeys.js` sees every key before it does.
 
+Until you type, the field reads `Search · / files · = calc`, and a lone `/`
+names the two keys a path answers to, `Ctrl+Y` and `Ctrl+Enter`.
+`tests/check.js` fails when a sigil joins `MODES` without a word in that
+placeholder.
+
 `Backspace` inside a panel the wheel opened closes it and brings the wheel
 back. A panel cannot tell the wheel from its own bar button, so it does not
 try: it calls `xpo.wheel back`, and the wheel returns `none` for a panel it did

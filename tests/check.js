@@ -295,6 +295,11 @@ dialKey("Key_Backspace"); dialKey("Key_Escape"); dialKey("Key_Escape")
 assert.deepEqual([levels, copied], [["up", "up", "up"], ["dismissed"]])
 console.log("ok: the field edits the query, the wheel keeps its shortcuts, and a path can be taken away or opened in a terminal")
 
+// The placeholder names every search sigil, so a new mode cannot hide.
+const placeholder = wheelSource.match(/visible: !root\.searching\n\s+text: "([^"]+)"/)[1]
+for (const sigil of Object.keys(M.MODES)) assert.ok(placeholder.includes(sigil + " "), `the placeholder hides ${sigil}`)
+console.log("ok: the search placeholder names every search sigil")
+
 // A panel cannot tell how it was opened, so the wheel answers for it: only the
 // panel the wheel put on screen, and only while it is still there.
 const opened = {}
