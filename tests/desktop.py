@@ -28,7 +28,7 @@ esac
 
 def verify(user, repo, installed=True):
     config = (user / ".config/hypr/hyprland.lua").read_text()
-    assert ("-- BEGIN omarchy-custom\n" in config) == installed
+    assert ("-- BEGIN wheely\n" in config) == installed
     for name in ("omarchy-open-path", "omarchy-wheel-close", "omarchy-lock-design"):
         link = user / ".local/bin" / name
         assert link.is_symlink() == installed

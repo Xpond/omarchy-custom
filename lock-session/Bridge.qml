@@ -10,7 +10,7 @@ Item {
   property int serial: 0
   property bool passwordPamConfigured: false
   readonly property bool locked: !!state.locked || !!(pending && pending.action === "lock")
-  readonly property string directory: Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock-session"
+  readonly property string directory: Quickshell.env("HOME") + "/.local/share/wheely/lock-session"
   readonly property string socketPath: Quickshell.env("XDG_RUNTIME_DIR") + "/omarchy-lock-" +
     Quickshell.env("WAYLAND_DISPLAY").replace(/[^a-zA-Z0-9_.-]/g, "_") + ".sock"
 

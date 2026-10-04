@@ -1,7 +1,7 @@
 #!/bin/bash
 # List the lock-screen designs, name the chosen one, or choose the one the next lock shows.
-designs=~/.local/share/omarchy-custom/lock
-choice=~/.config/omarchy-custom/lock-design
+designs=~/.local/share/wheely/lock
+choice=~/.config/wheely/lock-design
 
 case ${1:-} in
   list)

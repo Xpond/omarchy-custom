@@ -11,7 +11,7 @@ patches replace, so a design can span any number of files. Six ship: `rally`, `t
 In the wheel, Style › Lockscreen Designs lists the designs (search "lockscreen"); picking
 one only switches to it, and the next lock shows it. From a terminal,
 `omarchy-lock-design list`, `current` and `set <name>` do the same. The choice is one
-word in `~/.config/omarchy-custom/lock-design` (`rally` when absent). The lock and its preview
+word in `~/.config/wheely/lock-design` (`rally` when absent). The lock and its preview
 build their view each time they show, reading that file then, so a switch needs no install or
 restart.
 
@@ -82,7 +82,7 @@ the lock surface, so an installed plugin cannot draw where the password is typed
 | `tests/lock-render.py` | GPU captures, drive-off exit and design switching checks |
 | `tests/lock-process.py` | Offscreen memory, process exit, shell reconnection and crash recovery; simulated compositor and authentication |
 
-Run `./install.sh` to apply the patches. It links `lock/` to `~/.local/share/omarchy-custom/lock`
+Run `./install.sh` to apply the patches. It links `lock/` to `~/.local/share/wheely/lock`
 and links the worker plus the installed lock service and Commons under `lock-session/`
 before updating the QML and restarting the shell, and needs no shader compiler. `./revert.sh`
 restores stock files, then removes the link and the design choice only after a successful

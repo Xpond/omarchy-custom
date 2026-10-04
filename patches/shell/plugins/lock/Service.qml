@@ -8,7 +8,7 @@ import qs.Commons
 // Keep the renderer and its driver caches out of the long-lived desktop shell.
 Loader {
   source: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? "" :
-    "file://" + Quickshell.env("HOME") + "/.local/share/omarchy-custom/lock-session/Bridge.qml"
+    "file://" + Quickshell.env("HOME") + "/.local/share/wheely/lock-session/Bridge.qml"
   sourceComponent: Quickshell.env("OMARCHY_LOCK_SESSION") === "1" ? session : undefined
 
   Component {

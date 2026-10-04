@@ -114,7 +114,7 @@ exit 0''',
     def all_stock():
         return all(installed(relative) == stock[relative] for relative in files)
 
-    asset_dir = user / ".local/share/omarchy-custom"
+    asset_dir = user / ".local/share/wheely"
     result = run()
     assert result.returncode == 0, result.stderr
     designs = asset_dir / "lock"
@@ -171,7 +171,7 @@ exit 0''',
     # The state revert broke on: patches an older installer left without records, two of
     # them an older committed version of the patch.
     assert run().returncode == 0
-    shutil.rmtree(user / ".local/state/omarchy-custom/installed")
+    shutil.rmtree(user / ".local/state/wheely/installed")
     older = {}
     for relative in ["shell.qml", "services/PluginShellApi.qml"]:
         current = patched(relative)
