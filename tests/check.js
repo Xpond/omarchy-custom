@@ -219,49 +219,50 @@ browserKey("Key_Return", 1 << 26); browserKey("Key_Return")
 assert.deepEqual(browsed, ["closed", ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"], "open"])
 console.log("ok: browser bare keys drive the list, shift drives the preview, ctrl+enter opens a terminal")
 
-// The wheel leaves text editing to TextInput and owns only result navigation.
+// The query field types, deletes, moves and selects; every wheel shortcut stays the wheel's.
 const copied = []
 const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
-const dial = { query: "", results: [], resultIndex: 0, resultTop: 0, resultCap: 8,
+const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
   get searching() { return this.query.length > 0 },
-  dismiss: () => copied.push("dismissed") }
+  dismiss: () => copied.push("dismissed"), showResult() {}, moveResult(step) { this.resultIndex += step } }
+const edit = (query, at) => { dial.query = query; dial.queryAt = at }
+// TextInput's remove() does nothing for an empty selection; insert() moves the caret past its text.
+const field = { selectionStart: 0, selectionEnd: 0, get cursorPosition() { return dial.queryAt },
+  remove(from, to) { if (from < to) edit(dial.query.slice(0, from) + dial.query.slice(to), from) },
+  insert(at, text) { edit(dial.query.slice(0, at) + text + dial.query.slice(at), at + text.length) } }
+dial.paste = method(wheelSource, "paste", { root: dial, searchInput: field,
+  Quickshell: { clipboardText: "pasted  text" } })
 dial.copy = method(wheelSource, "copy", { Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
 dial.takePath = method(wheelSource, "takePath", { root: dial })
 const dialKey = keymap("plugins/xpo.wheel/MenuKeys.js", dial)
 const ctrl = 1 << 26
-dial.showResult = () => {}
-dial.moveResult = step => { dial.resultIndex += step }
-dial.query = "firefox"
+// Del on the bare ring did nothing to see, yet its DEL character landed in the query.
+assert.equal(dialKey("Key_Delete", 0, "\x7f").accepted + "|" + dial.query, "false|", "del on the ring adds nothing")
+edit("firefox", 3)
+// A printable key is only its text here.
+for (const [key, modifiers, text] of [["", 0, "x"], ["Key_Delete", 0, "\x7f"], ["Key_Backspace"], ["Key_Left"],
+     ["Key_Right", ctrl], ["Key_Left", shift], ["Key_Home", shift], ["Key_End", shift | ctrl]])
+  assert.equal(dialKey(key, modifiers, text).accepted, false, `${key || text} belongs to the field`)
+assert.equal(dial.query + "|" + dial.queryAt, "firefox|3", "the wheel edits nothing the field does")
+dialKey("Key_K", ctrl)
+assert.equal(dial.query, "fir", "ctrl+k kills to the end")
+dialKey("Key_A", ctrl); assert.equal(dial.queryAt, 0)
+dialKey("Key_E", ctrl); assert.equal(dial.queryAt, 3)
+dialKey("Key_V", ctrl)
+assert.equal(dial.query, "firpasted text", "a pasted run of whitespace collapses")
+field.selectionEnd = dial.query.length
+dialKey("Key_V", ctrl); field.selectionEnd = 0
+assert.equal(dial.query + "|" + dial.queryAt, "pasted text|11", "a paste replaces the selection")
+dialKey("Key_U", ctrl)
+assert.equal(dial.query + "|" + dial.queryAt, "|0", "ctrl+u from the end still clears")
+edit("a b c", 3)
+dialKey("Key_W", ctrl)
+assert.equal(dial.query + "|" + dial.queryAt, "a  c|2", "ctrl+w takes the word before the caret")
 dial.results = Array.from({ length: 40 }, (_, i) => ({ label: "result" + i }))
-dialKey("Key_Down"); assert.equal(dial.resultIndex, 1, "down advances results")
-dialKey("Key_Up"); assert.equal(dial.resultIndex, 0, "up reverses results")
-dialKey("Key_PageUp"); assert.equal(dial.resultIndex, 0, "page up selects the first result")
-dialKey("Key_PageDown"); assert.equal(dial.resultIndex, 39, "page down selects the fortieth result")
-dialKey("Key_Home"); assert.equal(dial.resultIndex, 39, "home is left for TextInput caret movement")
-dialKey("Key_End"); assert.equal(dial.resultIndex, 39, "end is left for TextInput caret movement")
-assert.equal(dialKey("Key_Home").accepted, false, "home reaches TextInput")
-assert.equal(dialKey("Key_End").accepted, false, "end reaches TextInput")
-assert.equal(dialKey("Key_A", ctrl).accepted, false, "ctrl+a reaches native select-all")
-assert.equal(dialKey("Key_E", ctrl).accepted, true, "ctrl+e is intentionally disabled")
-assert.equal(dial.query, "firefox", "caret shortcuts do not edit the query")
-assert.equal(dialKey("Key_Delete", 0, "\u007f").accepted, false, "delete reaches TextInput")
-assert.equal(dial.query, "firefox", "DEL is not inserted into the query")
-for (const key of ["Key_Left", "Key_Right", "Key_Backspace", "Key_Delete"])
-  assert.equal(dialKey(key).accepted, false, `${key} reaches TextInput`)
-for (const key of ["Key_Left", "Key_Right", "Key_Home", "Key_End"])
-  assert.equal(dialKey(key, 1 << 25).accepted, false, `shift+${key} reaches TextInput selection`)
-for (const key of ["Key_Left", "Key_Right"])
-  assert.equal(dialKey(key, ctrl).accepted, false, `ctrl+${key} reaches TextInput word navigation`)
-for (const key of ["Key_Up", "Key_Down", "Key_Home", "Key_End", "Key_PageUp", "Key_PageDown"])
-  assert.equal(dialKey(key, ctrl).accepted, true, `ctrl+${key} is disabled in a single-line query`)
-for (const key of ["Key_Home", "Key_End"])
-  assert.equal(dialKey(key, ctrl | (1 << 25)).accepted, true, `ctrl+shift+${key} is disabled in a single-line query`)
-for (const key of ["Key_Up", "Key_Down", "Key_PageUp", "Key_PageDown"])
-  assert.equal(dialKey(key, 1 << 25).accepted, true, `shift+${key} is disabled in a single-line query`)
-for (const key of ["Key_Left", "Key_Right"])
-  assert.equal(dialKey(key, ctrl | (1 << 25)).accepted, false, `ctrl+shift+${key} reaches TextInput`)
-dialKey("Key_Down", ctrl); assert.equal(dial.resultIndex, 39, "control+down has no list action")
-dialKey("Key_Home", ctrl); assert.equal(dial.resultIndex, 39, "control+home has no list action")
+dialKey("Key_Down"); dialKey("Key_N", ctrl); assert.equal(dial.resultIndex, 2)
+dialKey("Key_P", ctrl); dialKey("Key_Up"); assert.equal(dial.resultIndex, 0)
+dialKey("Key_End"); assert.equal(dial.resultIndex, 39, "end is the last of the forty results")
+dialKey("Key_Home"); assert.equal(dial.resultIndex, 0, "home is the first")
 
 // Ctrl+Y takes a path away; anything else on the ring is not a path.
 dial.results = [{ label: "Firefox", appId: "firefox" }, { path: "/home/test/notes.md" }]
@@ -284,7 +285,15 @@ dial.resultIndex = 2; dialKey("Key_Enter", ctrl)
 assert.deepEqual(terminals, [["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test"],
                              ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"]])
 assert.equal(entered.length, 1, "a path row also ran as enter")
-console.log("ok: wheel delegates text editing to TextInput, navigates first/last results, and supports path actions")
+
+// Esc clears the query, then goes up a level, then closes; Backspace on no query goes up.
+const levels = []
+copied.length = 0
+dial.up = () => levels.push("up") < 3
+dialKey("Key_Escape"); assert.equal(dial.query, "", "esc clears the query first")
+dialKey("Key_Backspace"); dialKey("Key_Escape"); dialKey("Key_Escape")
+assert.deepEqual([levels, copied], [["up", "up", "up"], ["dismissed"]])
+console.log("ok: the field edits the query, the wheel keeps its shortcuts, and a path can be taken away or opened in a terminal")
 
 // A panel cannot tell how it was opened, so the wheel answers for it: only the
 // panel the wheel put on screen, and only while it is still there.

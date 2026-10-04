@@ -31,6 +31,7 @@ Item {
   property int launchedAt: -1
 
   property string query: ""
+  property alias queryAt: searchInput.cursorPosition
   property var defaultMenu: ({})
   property var userMenu: ({})
   // Answers re-read on every open stay raw text: a string reassigned unchanged notifies nothing.
@@ -425,6 +426,12 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
+  function paste() {
+    var text = String(Quickshell.clipboardText || "").replace(/\s+/g, " ").trim()
+    searchInput.remove(searchInput.selectionStart, searchInput.selectionEnd)
+    searchInput.insert(searchInput.cursorPosition, text)
+  }
+
   function takePath() {
     var hit = root.searching ? root.results[root.resultIndex] : null
     if (!hit || !hit.path) return false
@@ -483,9 +490,6 @@ Item {
   }
 
   onQueryChanged: {
-    // Escape and other wheel actions can change query outside TextInput; mirror
-    // those changes without feeding the TextInput's own edits back recursively.
-    if (searchInput.text !== root.query) searchInput.text = root.query
     root.resultIndex = 0; root.resultTop = 0
   }
 
@@ -828,7 +832,6 @@ Item {
             horizontalAlignment: TextInput.AlignHCenter
             clip: true
             focus: true
-            activeFocusOnPress: true
             text: root.query
             color: Color.menu.text
             selectionColor: Util.alpha(Color.accent, 0.35)
@@ -842,7 +845,7 @@ Item {
               // TextInput does not hide a custom cursor delegate automatically.
               visible: searchInput.cursorVisible
             }
-            onTextChanged: if (root.query !== text) root.query = text
+            onTextChanged: root.query = text
             Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
           }
         }
