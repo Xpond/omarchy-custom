@@ -219,7 +219,7 @@ browserKey("Key_Return", 1 << 26); browserKey("Key_Return")
 assert.deepEqual(browsed, ["closed", ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"], "open"])
 console.log("ok: browser bare keys drive the list, shift drives the preview, ctrl+enter opens a terminal")
 
-// The query field types, deletes, moves and selects; every wheel shortcut stays the wheel's.
+// The query field types, deletes, moves and selects, Home, End and Ctrl+A included; the rest is the wheel's.
 const copied = []
 const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
 const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
@@ -241,13 +241,13 @@ assert.equal(dialKey("Key_Delete", 0, "\x7f").accepted + "|" + dial.query, "fals
 edit("firefox", 3)
 // A printable key is only its text here.
 for (const [key, modifiers, text] of [["", 0, "x"], ["Key_Delete", 0, "\x7f"], ["Key_Backspace"], ["Key_Left"],
-     ["Key_Right", ctrl], ["Key_Left", shift], ["Key_Home", shift], ["Key_End", shift | ctrl]])
+     ["Key_Right", ctrl], ["Key_Left", shift], ["Key_Home"], ["Key_End"], ["Key_A", ctrl],
+     ["Key_Home", shift], ["Key_End", shift]])
   assert.equal(dialKey(key, modifiers, text).accepted, false, `${key || text} belongs to the field`)
 assert.equal(dial.query + "|" + dial.queryAt, "firefox|3", "the wheel edits nothing the field does")
 dialKey("Key_K", ctrl)
 assert.equal(dial.query, "fir", "ctrl+k kills to the end")
-dialKey("Key_A", ctrl); assert.equal(dial.queryAt, 0)
-dialKey("Key_E", ctrl); assert.equal(dial.queryAt, 3)
+dial.queryAt = 0; dialKey("Key_E", ctrl); assert.equal(dial.queryAt, 3)
 dialKey("Key_V", ctrl)
 assert.equal(dial.query, "firpasted text", "a pasted run of whitespace collapses")
 field.selectionEnd = dial.query.length
@@ -261,8 +261,8 @@ assert.equal(dial.query + "|" + dial.queryAt, "a  c|2", "ctrl+w takes the word b
 dial.results = Array.from({ length: 40 }, (_, i) => ({ label: "result" + i }))
 dialKey("Key_Down"); dialKey("Key_N", ctrl); assert.equal(dial.resultIndex, 2)
 dialKey("Key_P", ctrl); dialKey("Key_Up"); assert.equal(dial.resultIndex, 0)
-dialKey("Key_End"); assert.equal(dial.resultIndex, 39, "end is the last of the forty results")
-dialKey("Key_Home"); assert.equal(dial.resultIndex, 0, "home is the first")
+dialKey("Key_End", ctrl); assert.equal(dial.resultIndex, 39, "ctrl+end is the last of the forty results")
+dialKey("Key_Home", ctrl); assert.equal(dial.resultIndex, 0, "ctrl+home is the first")
 
 // Ctrl+Y takes a path away; anything else on the ring is not a path.
 dial.results = [{ label: "Firefox", appId: "firefox" }, { path: "/home/test/notes.md" }]
