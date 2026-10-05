@@ -384,7 +384,7 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
 // own bindings mean nothing from inside it, so they are no rows, and no conflict for a new key.
 {
   const records = [
-    "SUPER + A                 → Wheel\texec\tomarchy-shell -q shell summon xpo.wheel",
+    "SUPER + A                 → Wheel\texec\tomarchy-shell -q shell toggle xpo.wheel",
     "SUPER + A                 → \texec\tomarchy-shell -q shell call xpo.wheel commit ''",
     "SUPER + W                 → Close window\texec\t/home/test/wheely/bin/omarchy-wheel-close",
     "SUPER + SPACE             → Omarchy menu\texec\tomarchy-menu toggle",

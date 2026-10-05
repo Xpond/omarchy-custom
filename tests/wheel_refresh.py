@@ -30,6 +30,7 @@ def check(wheel, run, block):
   readonly property var slices: MenuIndex.childrenOf(root.menuItems, "system", root.conditions)
   readonly property var results: MenuIndex.search(MenuIndex.menuRows(root.menuItems, root.conditions), root.query, 40, {})
   QtObject { id: spin; function stop() {} }
+  QtObject { id: unmap; property bool running: false }
   function sliceAngle(i) { return i * 90 }
   function dismiss() {}
   function run(e) { if (e) root.ran = e.action || "" }
@@ -50,7 +51,7 @@ def check(wheel, run, block):
     root.conditionText = "system.logout:c\\n"
   } }
   Timer { interval: 100; running: true; onTriggered: {
-    root.commit()
+    root.justOpened = true; root.commit()
     root.expect(root.ran === "logout", "refresh changed Logout into Reboot")
     root.expect(root.selected === 0 && root.armed, "selection did not follow the surviving action")
     root.ran = ""
@@ -58,14 +59,19 @@ def check(wheel, run, block):
       label: "Logout", action: "changed-command" } })
   } }
   Timer { interval: 150; running: true; onTriggered: {
-    root.commit()
+    root.justOpened = true; root.commit()
     root.expect(!root.ran && root.selected === -1, "a replaced action stayed selected")
     root.select(root.slices.length - 1)
     root.menuItems = { system: {label: "System"} }
   } }
   Timer { interval: 200; running: true; onTriggered: {
-    root.commit()
+    root.justOpened = true; root.commit()
     root.expect(!root.ran && root.selected === -1, "removed final slice remained selected")
+    // A later release belongs to the press that closes the wheel, whichever lands first.
+    root.select(0)
+    root.expect(root.commit() === "dismissed" && !root.ran, "a later release fired the selection")
+    unmap.running = true; root.justOpened = true
+    root.expect(root.commit() === "closed" && !root.ran, "a release during the close fade fired")
     root.finish()
   } }
 ''')
