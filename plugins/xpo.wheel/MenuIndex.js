@@ -34,6 +34,7 @@ var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4, bind: 5 }
 
 // Prefer stable ids for use counts; windows already sort by live focus.
 function keyOf(e) {
+  if (e.setting) return "setting:" + e.setting
   if (e.plugin) return e.plugin
   if (e.id) return e.id
   if (e.appId) return "app:" + e.appId
@@ -392,6 +393,9 @@ function liveRows(sources) {
   return out
 }
 
+// The wheel's own bindings (open, commit, close) mean nothing from inside it.
+var WHEEL_BIND = /xpo\.wheel|omarchy-wheel-close/
+
 // Omarchy's keybinding records, `KEYS → Description<TAB>kind<TAB>arg`, as rows. Exec and Lua binds
 // run from a row; a sendshortcut needs its web app focused, and a mouse bind needs the mouse.
 function bindRows(raw) {
@@ -400,7 +404,8 @@ function bindRows(raw) {
   for (var i = 0; i < ls.length; i++) {
     var f = ls[i].split("\t")
     var at = f[0].indexOf("→")
-    if (at < 0 || /mouse/i.test(f[0].slice(0, at)) || !f[2] || (f[1] !== "exec" && f[1] !== "lua")) continue
+    if (at < 0 || /mouse/i.test(f[0].slice(0, at)) || !f[2] || (f[1] !== "exec" && f[1] !== "lua")
+        || WHEEL_BIND.test(f.slice(2).join("\t"))) continue
     var label = f[0].slice(at + 1).trim()
     var row = { icon: "", label: label, trail: "", kind: KIND.bind,
                 keywords: label.toLowerCase() }
@@ -437,6 +442,40 @@ function withBindings(rows, binds, items) {
     out[j] = merge(out[j], { keywords: out[j].keywords + " " + bind.keywords, _search: null })
   }
   return out
+}
+
+// Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
+function settingRows(shortcut) {
+  return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
+            keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" }]
+}
+
+var SHORTCUT = "SUPER + A"
+
+// The saved shortcut by the rule the Hyprland block reads it with; anything else is the default.
+function shortcutIn(raw) {
+  var saved = String(raw || "").split("\n")[0].trim()
+  return /^[A-Z0-9_][A-Z0-9_ +]*[A-Z0-9_]$/.test(saved) && saved.indexOf(" + ") >= 0 ? saved : SHORTCUT
+}
+
+// One spelling for a combo however it was written: "SUPER SHIFT + b" is "SUPER + SHIFT + B".
+function comboOf(keys) {
+  var parts = String(keys || "").toUpperCase().split(/[\s+]+/).filter(Boolean)
+  var key = parts.pop() || ""
+  return ["SUPER", "CTRL", "ALT", "SHIFT"].filter(function (m) { return parts.indexOf(m) >= 0 })
+    .concat([key]).join(" + ")
+}
+
+// What a combo already does, by its description in Omarchy's records; the wheel's own are not in the way.
+function bindingAt(raw, combo) {
+  var ls = lines(raw)
+  for (var i = 0; i < ls.length; i++) {
+    var f = ls[i].split("\t")
+    var at = f[0].indexOf("→")
+    if (at < 0 || comboOf(f[0].slice(0, at)) !== combo || WHEEL_BIND.test(f.slice(2).join("\t"))) continue
+    return f[0].slice(at + 1).trim() || "another binding"
+  }
+  return ""
 }
 
 // Menu terms start words; app and window text also accepts substrings.

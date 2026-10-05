@@ -2,6 +2,7 @@
 """Managed desktop setup checks; no live Hyprland configuration is loaded."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -168,8 +169,19 @@ def check():
                 run("revert")
         print("ok: failed reload validation rolls back fresh setup, updates, and removals")
 
-    subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua")], check=True)
-    print("ok: shipped Lua installs press/release bindings, render environment and shared blur rules")
+    # The shortcut file is data: a key the row could have written is bound, anything else is SUPER+A.
+    cases = [(None, "SUPER + A"), ("SUPER + SHIFT + B\n", "SUPER + SHIFT + B"),
+             ("  ALT + SPACE \r\n", "ALT + SPACE"), ("SPACE\n", "SUPER + A"), ("", "SUPER + A"),
+             ('super + b") os.execute("touch pwned\n', "SUPER + A")]
+    for saved, key in cases:
+        with tempfile.TemporaryDirectory(prefix="omarchy-desktop-home-") as home:
+            if saved is not None:
+                (Path(home) / ".config/omarchy").mkdir(parents=True)
+                (Path(home) / ".config/omarchy/wheel-shortcut").write_text(saved)
+            subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"), key],
+                           check=True, cwd=home, env=dict(os.environ, HOME=home))
+            assert not (Path(home) / "pwned").exists()
+    print("ok: shipped Lua installs press/release bindings on the saved key, render environment and shared blur")
 
 
 if __name__ == "__main__":

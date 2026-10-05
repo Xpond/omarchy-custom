@@ -1,6 +1,6 @@
 # The wheel
 
-A radial control center for Omarchy, on `SUPER+A`.
+A radial control center for Omarchy, on `SUPER+A` or a key you choose (see **Settings**).
 
 Your bar's panels sit on a ring, reachable by direction; typing turns the hub
 into a search over every entry in the Omarchy menu, every installed app, every
@@ -452,8 +452,9 @@ A binding that runs what a row already runs — the row's command, its panel's
 toggle, or Omarchy's menu opened at it by id or alias — is not a second row. It
 lends that row its description as search words, so `idle` finds Stay Awake
 (Toggle locking on idle) and `ocr` finds Capture › Text. Bindings sharing a
-command are one row. Here 213 bindings make 171 rows of their own and join 32
-more. The keys themselves are never shown: the wheel is there so that none need
+command are one row. The wheel's own bindings (open, commit, close) are no rows, since
+they mean nothing from inside it. Here the other 211 make 169 rows of their own and join
+32 more. The keys themselves are never shown: the wheel is there so that none need
 remembering.
 
 A window action — Toggle floating, Full screen, Move window to workspace 3 —
@@ -535,6 +536,41 @@ the left, as the query is. A half-typed sum, a unit or a letter shows "No
 answer" rather than a guess; units and currency would need `qalc`, which
 Omarchy does not ship. `node tests/wheel-calc.js` pins issue #8's sums and
 checks 2000 random ones against JavaScript's own arithmetic.
+
+## Settings
+
+Settings are search rows. `wheely settings` lists every one, and each answers to its
+own words (`wheely shortcut`, `keybind`). A setting row ends in its value, drawn as a
+control in Omarchy's control fill and border, the way its panel rows end in a switch;
+every other row ends in plain text, so a setting cannot pass for a result. Enter on
+one changes it in place: the wheel stays up, and the row says what is happening.
+
+**Wheely shortcut** is the key that opens the wheel, `SUPER + A` until you choose
+another. Enter starts recording, and the row takes every key. The field shows the combo
+pressed, where a value is typed, and the row, with its whole width, says what saving
+would do: `enter saves`, `replaces Omarchy menu` when another binding holds it (the
+wheel's own do not count), or why it cannot be had (`add SUPER, CTRL or ALT`, `closes
+the wheel`, `pick another key` for a key with no name here, such as a shifted symbol).
+One row cannot hold both: a long combo lost its key. Plain Enter saves; plain Esc gives
+up, and the query comes back.
+
+A bound combo never reaches a client, since Hyprland runs it instead (the `SUPER`+arrows
+trap). So while the row records, the wheel holds a keyboard-shortcuts inhibitor
+(Quickshell's `ShortcutInhibitor`), and Hyprland skips every binding while the focused
+surface holds one, layer surfaces included (`isInhibited()` in its `ShortcutsInhibit.cpp`).
+A taken combo is recorded and nothing it is bound to runs. Hyprland honours an inhibitor
+only while its surface has the keyboard, and this one ends with the recording, so nothing
+can be left stuck. With `binds:disable_keybind_grabbing = true` Hyprland ignores
+inhibitors, and only free combos arrive.
+
+Saving writes `~/.config/omarchy/wheel-shortcut`, then runs `hyprctl reload` once the
+write has landed, as Omarchy's own toggles reload. The managed Hyprland block cannot
+carry the key itself, because the installer refuses a block that was edited. It reads
+the file as data instead, the way Omarchy reads a disabled input device's name, and binds
+what it holds if that reads as keys joined by ` + `; anything else is `SUPER + A`. It
+unbinds the key before binding it, so a taken key's binding is gone until the wheel
+moves off it. The names come from Qt's key codes, and `tests/runtime.py` has Hyprland's
+own `--verify-config` accept every one the wheel can write.
 
 ## What it remembers
 

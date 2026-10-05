@@ -27,7 +27,7 @@ def line(source, pattern):
 
 with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     base = Path(temporary)
-    for name, plugin in [("FilesIndex.js", "xpo.files"), ("MenuIndex.js", "xpo.wheel")]:
+    for name, plugin in [("FilesIndex.js", "xpo.files"), ("MenuIndex.js", "xpo.wheel"), ("MenuKeys.js", "xpo.wheel")]:
         shutil.copyfile(repo / "plugins" / plugin / name, base / name)
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="generic",
                QT_FORCE_STDERR_LOGGING="1", XDG_RUNTIME_DIR=str(base / "runtime"),
@@ -40,6 +40,7 @@ import Quickshell
 import Quickshell.Io
 import "FilesIndex.js" as FilesIndex
 import "MenuIndex.js" as MenuIndex
+import "MenuKeys.js" as MenuKeys
 Scope {
   id: root
   Timer { interval: 3000; running: true; onTriggered: { console.error("FAIL timeout"); Qt.exit(1) } }
@@ -51,6 +52,7 @@ Scope {
         assert result.returncode == 0 and "PASS" in log, log
         qslog.check(log)
         print("ok:", name)
+        return log
 
     check_plugin_shell(repo, base, run, block)
     check_wheel_refresh(wheel, run, block)
@@ -69,6 +71,7 @@ Scope {
   property string mode: ""
   property var files: null
   property real daylight: 0
+  property string editing: ""
 ''' + scan("0.15") + handlers + '''
   Component.onCompleted: root.mode = "file"
   Timer { interval: 30; running: true; onTriggered: {
@@ -85,6 +88,7 @@ Scope {
   property string mode: ""
   property var files: null
   property real daylight: 0
+  property string editing: ""
 ''' + scan("5") + handlers + '''
   Component.onCompleted: root.mode = "file"
   Timer { interval: 30; running: true; onTriggered: root.opened = false }
@@ -279,3 +283,69 @@ Scope {
     console.log("PASS"); Qt.quit()
   } }
 ''')
+
+    # Shortcut names come from Qt's real key codes, and every one is a key Hyprland can bind.
+    keys = ["Key_A", "Key_Z", "Key_0", "Key_9", "Key_F1", "Key_F12", "Key_F24", "Key_Space", "Key_Return",
+            "Key_Tab", "Key_Backspace", "Key_Escape", "Key_Delete", "Key_Insert", "Key_Home", "Key_End",
+            "Key_PageUp", "Key_PageDown", "Key_Left", "Key_Right", "Key_Up", "Key_Down", "Key_Print",
+            "Key_Comma", "Key_Period", "Key_Slash", "Key_Semicolon", "Key_Apostrophe", "Key_BracketLeft",
+            "Key_BracketRight", "Key_Backslash", "Key_Minus", "Key_Equal", "Key_QuoteLeft"]
+    log = run("shortcut-names", '''
+  function named(key, modifiers) { return MenuKeys.shortcutOf({ key: key, modifiers: modifiers }) }
+  Timer { interval: 1; running: true; onTriggered: {
+    var keys = ''' + json.dumps(keys) + '''
+    console.log("NAMES " + JSON.stringify(keys.map(function (k) { return named(Qt[k], Qt.MetaModifier) })))
+    var all = Qt.MetaModifier | Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier
+    var cases = [[named(Qt.Key_B, all), "SUPER + CTRL + ALT + SHIFT + B"],
+                 [named(Qt.Key_Backtab, Qt.ShiftModifier | Qt.MetaModifier), "SUPER + SHIFT + TAB"],
+                 [named(Qt.Key_Space, Qt.AltModifier), "ALT + SPACE"],
+                 [named(Qt.Key_Super_L, Qt.MetaModifier), null], [named(Qt.Key_Shift, Qt.ShiftModifier), null],
+                 [named(Qt.Key_CapsLock, 0), null], [named(Qt.Key_Exclam, Qt.ShiftModifier), ""],
+                 [named(Qt.Key_Enter, Qt.MetaModifier), ""]]
+    for (var i = 0; i < cases.length; i++)
+      if (cases[i][0] !== cases[i][1]) { console.error("FAIL", i, cases[i][0]); Qt.exit(1); return }
+    console.log("PASS"); Qt.quit()
+  } }
+''')
+    names = json.loads(re.search(r"NAMES (\[.*\])", log)[1])
+    assert len(names) == len(keys) and all(n and n.startswith("SUPER + ") for n in names), names
+    binds = base / "names.lua"
+    binds.write_text("".join(f'hl.bind("{n}", hl.dsp.exec_cmd("true"))\n' for n in names))
+    verdict = subprocess.run(["Hyprland", "--verify-config", "-c", str(binds)], env=env,
+                             capture_output=True, text=True, timeout=20).stdout
+    assert verdict.rstrip().endswith("config ok"), verdict
+    print("ok: every shortcut name the wheel writes is a key Hyprland binds")
+
+    # Saving writes the file, then reloads Hyprland, then reads the bindings again; the reload
+    # must see the new key. An edit by hand is read back by the same rule as the Hyprland block.
+    home = base / "home"
+    (home / ".config/omarchy").mkdir(parents=True)
+    reload = block(wheel, r"  Process \{\n    id: hyprReload")
+    reload = re.sub(r"command: \[.*\]", 'command: ["sh", "-c", "cat $HOME/.config/omarchy/wheel-shortcut >> $HOME/reloads"]', reload)
+    run("shortcut-save", '''
+  property string shortcut: "unset"
+  property int stage: 0
+  QtObject { id: bindList; property bool running: false }
+  Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel-shortcut", "sh", text] }
+  function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
+''' + block(wheel, r"  FileView \{\n    id: shortcutFile") + "\n" + reload + "\n" + block(wheel, r"  function saveShortcut\(") + '''
+  Timer { interval: 150; running: true; repeat: true; onTriggered: {
+    switch (root.stage++) {
+    case 0:
+      root.check(root.shortcut === "SUPER + A", "a missing file is not SUPER + A: " + root.shortcut)
+      root.saveShortcut("SUPER + SHIFT + B"); break
+    case 1:
+      root.check(root.shortcut === "SUPER + SHIFT + B" && bindList.running, "the bindings were not read again")
+      edit.text = "ALT + SPACE\\n"; edit.running = true; break
+    case 2:
+      root.check(root.shortcut === "ALT + SPACE", "an edit by hand was missed: " + root.shortcut)
+      edit.text = "rm -rf /\\n"; edit.running = true; break
+    case 3:
+      root.check(root.shortcut === "SUPER + A", "a bad file was believed: " + root.shortcut)
+      console.log("PASS"); Qt.quit()
+    }
+  } }
+''', {"HOME": str(home)})
+    assert (home / "reloads").read_text() == "SUPER + SHIFT + B\n", "the reload ran before the write landed"
+    assert (home / ".config/omarchy/wheel-shortcut").read_text() == "rm -rf /\n"
+    print("ok: saving reloads Hyprland once the key is written; edits by hand are read by the block's rule")

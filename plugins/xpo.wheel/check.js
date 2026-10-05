@@ -74,7 +74,7 @@ const bindCommand = JSON.parse(fs.readFileSync(path.join(here, "Wheel.qml"), "ut
   .match(/id: bindList[^]*?command: (\[.*\])/)[1])
 const binds = M.bindRows(spawnSync(bindCommand[0], bindCommand.slice(1), { encoding: "utf8" }).stdout)
 check(binds.length > 0, `keybindings load (${binds.length} runnable)`, "no records from omarchy-menu-keybindings")
-const fixed = [...M.panelRows([...M.panels(null), ...M.EXTRAS]), ...rows]
+const fixed = [...M.panelRows([...M.panels(null), ...M.EXTRAS]), ...rows, ...M.settingRows(M.SHORTCUT)]
 // Windows are uncounted because every launch has a new address.
 const counted = M.withBindings(fixed, binds, items)
 const unfound = binds.filter(b => !M.search(counted, b.label, Infinity, {})

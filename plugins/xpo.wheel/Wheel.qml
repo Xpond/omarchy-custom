@@ -63,6 +63,13 @@ Item {
   readonly property var styleRows: MenuIndex.styles(MenuIndex.lines(root.themeText), root.currentTheme,
                                                     MenuIndex.lines(root.fontText), root.currentFont)
   readonly property var bindRows: MenuIndex.bindRows(root.bindText)
+  property string shortcut: MenuIndex.SHORTCUT
+  readonly property var settingRows: MenuIndex.settingRows(root.shortcut)
+  // The setting row being changed in place: the field shows the value, the row what saving would do.
+  property string editing: ""
+  property string editValue: ""
+  property string editNote: ""
+  property string pending: ""
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
   readonly property var activeWindow: Hyprland.activeToplevel
@@ -282,7 +289,7 @@ Item {
       apps: root.appLibrary ? root.appLibrary.sortedEntries("") : [],
       windows: Hyprland.toplevels.values,
       focusOrder: root.focusOrder
-    }), root.styleRows), root.bindRows, root.menuItems)
+    }), root.styleRows, root.settingRows), root.bindRows, root.menuItems)
   }
 
   function closePeers() {
@@ -303,6 +310,7 @@ Item {
     root.path = []
     root.launched = ""
     root.launchedAt = -1
+    root.editing = ""
     root.justOpened = !wasOpen
     root.openScreen = root.focusedScreen()
     root.opened = true
@@ -398,6 +406,7 @@ Item {
     if (!e) return
     root.countUse(e)
     if (e.node) { root.enter(e.node); return }
+    if (e.setting) { root.edit(e); return }
     root.launchedAt = root.slices.indexOf(e)
     root.dismiss(true)
     // Unmap this layer before the target requests keyboard focus.
@@ -424,6 +433,44 @@ Item {
     bump[key] = (root.uses[key] || 0) + 1
     root.uses = MenuIndex.merge(root.uses, bump)
     usesFile.setText(JSON.stringify(root.uses) + "\n")
+  }
+
+  // The shortcut row records the next combo. Hyprland's bindings pause meanwhile, so a taken one arrives too.
+  function edit(e) {
+    root.editing = e.setting
+    root.pending = ""
+    root.editValue = "Press a shortcut"
+    root.editNote = "esc cancels"
+  }
+
+  // Plain Enter saves what was pressed, plain Esc gives up, and any other combo is the new candidate.
+  function record(event) {
+    var bare = !(event.modifiers & (Qt.MetaModifier | Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier))
+    if (bare && event.key === Qt.Key_Escape) { root.editing = ""; return }
+    if (bare && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+      if (root.pending) root.saveShortcut(root.pending)
+      root.editing = ""
+      return
+    }
+    var combo = MenuKeys.shortcutOf(event)
+    if (combo === null) return
+    root.pending = ""
+    root.editValue = combo || "Press a shortcut"
+    if (!combo) root.editNote = "pick another key"
+    else if (!/^(SUPER|CTRL|ALT) \+ /.test(combo)) root.editNote = "add SUPER, CTRL or ALT"
+    else if (combo === "SUPER + W") root.editNote = "closes the wheel"
+    else if (combo === root.shortcut) root.editNote = "already set"
+    else {
+      var taken = MenuIndex.bindingAt(root.bindText, combo)
+      root.editNote = taken ? "replaces " + taken : "enter saves"
+      root.pending = combo
+    }
+  }
+
+  // Hyprland reads the file on reload; the bindings are read again after it, for the next conflict.
+  function saveShortcut(combo) {
+    root.shortcut = combo
+    shortcutFile.setText(combo + "\n")
   }
 
   function paste() {
@@ -541,6 +588,7 @@ Item {
       fileScan.running = false
       root.files = null
       root.daylight = 0
+      root.editing = ""
     }
   }
 
@@ -648,6 +696,32 @@ Item {
     onLoadFailed: root.ringIds = null
   }
 
+  // The launch key, as data the Hyprland block reads on reload; Hyprland does not watch it.
+  FileView {
+    id: shortcutFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/wheel-shortcut"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.shortcut = MenuIndex.shortcutIn(text())
+    onLoadFailed: root.shortcut = MenuIndex.SHORTCUT
+    onSaved: hyprReload.running = true
+  }
+
+  Process {
+    id: hyprReload
+    command: ["hyprctl", "reload"]
+    onExited: bindList.running = true
+  }
+
+  // Recording pauses Hyprland's bindings for this surface alone, until the row lets go.
+  ShortcutInhibitor {
+    window: surface
+    enabled: root.editing === "shortcut"
+    onCancelled: root.editing = ""
+  }
+
   Process {
     id: conditionScan
     // The menu the command was written for: writing it costs a millisecond, too much for every open.
@@ -669,6 +743,7 @@ Item {
   onStaticRowsChanged: if (root.opened) root.rebuildIndex()
   onStyleRowsChanged: if (root.opened) root.rebuildIndex()
   onBindRowsChanged: if (root.opened) root.rebuildIndex()
+  onSettingRowsChanged: if (root.opened) root.rebuildIndex()
 
   PanelWindow {
     id: surface
@@ -813,6 +888,19 @@ Item {
 
           ClickShield {}
 
+          // While a setting row records, the field shows what was pressed; the query waits underneath.
+          Text {
+            anchors.centerIn: parent
+            width: parent.width - Style.spacing.rowPaddingX * 2
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideLeft
+            visible: !!root.editing
+            text: root.editValue
+            color: Color.accent
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.subtitle
+          }
+
           Text {
             anchors.centerIn: parent
             visible: !root.searching
@@ -832,6 +920,8 @@ Item {
             horizontalAlignment: TextInput.AlignHCenter
             clip: true
             focus: true
+            // Hidden by opacity: an invisible item would lose the keyboard the recording needs.
+            opacity: root.editing ? 0 : 1
             text: root.query
             color: Color.menu.text
             selectionColor: Util.alpha(Color.accent, 0.35)
