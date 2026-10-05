@@ -154,6 +154,33 @@ assert.equal(root.opened, false)
 assert.equal(hides, 1)
 console.log("ok: navigation preserves dirty/pending edits; self-close does not recurse")
 
+// Ctrl+T pops the overlay out into a window the shell no longer counts as open.
+// A summon then raises the window, and moves it only when a path asks.
+const popped = []
+const win = { opened: true, windowed: false, editing: false, filter: "", naming: "",
+  dir: "/home/test/here", shell: { hide: id => popped.push("hide " + id) },
+  raise: () => popped.push("raise"), enter(d) { this.dir = d }, claimPending() {},
+  focusedScreen: () => null }
+const winScope = { root: win, keys: { forceActiveFocus() {} }, Qt: { callLater: fn => fn() } }
+win.popOut = method(source, "popOut", winScope)
+win.close = method(source, "close", winScope)
+const winKey = keymap("plugins/xpo.files/FilesKeys.js", win, { doomed: "" }, {})
+winKey("Key_T", 1 << 26)
+assert.equal(win.windowed, true)
+assert.equal(win.opened, false)
+assert.deepEqual(popped, ["hide xpo.files"], "the shell forgets the overlay once")
+winKey("Key_T", 1 << 26); winKey("Key_Escape")
+assert.deepEqual(popped, ["hide xpo.files"], "a window neither pops out again nor closes on Escape")
+const winOpen = method(source, "open", winScope)
+winOpen("{}")
+assert.equal(win.dir, "/home/test/here", "a bare summon keeps the window's place")
+winOpen('{"dir":"/home/test/there","select":"a.txt"}')
+assert.equal(win.dir, "/home/test/there")
+assert.equal(win.pending, "a.txt")
+assert.equal(win.opened, false, "a summon never reopens the overlay over the window")
+assert.deepEqual(popped.slice(1), ["raise", "raise"])
+console.log("ok: ctrl+t pops out once; the window ignores Escape, keeps its place, and is raised")
+
 const opsSource = read("plugins/xpo.files/FilesOps.qml")
 const busy = { root: { note: text => calls.push(text) }, filer: { running: true } }
 method(opsSource, "run", busy)(["cp"], {})

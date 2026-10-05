@@ -13,7 +13,7 @@ Item {
   // Path, filter and rename share one caret timer.
   property bool caretLit: true
   Timer {
-    running: panel.opened && (!!panel.naming || panel.filter.length > 0)
+    running: panel.shown && (!!panel.naming || panel.filter.length > 0)
     interval: 530
     repeat: true
     onTriggered: root.caretLit = !root.caretLit

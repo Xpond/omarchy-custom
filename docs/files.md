@@ -7,7 +7,7 @@ the right.
 
     plugins/xpo.files/
       manifest.json     kind: "overlay", keepLoaded
-      Files.qml         state, derivation, and the surface itself
+      Files.qml         state, derivation, and both surfaces
       FilesOps.qml      everything that writes: one process, one contract
       FilesHeader.qml   breadcrumb, path entry, filter and rename field
       FilesList.qml     the directory, one row per entry
@@ -60,6 +60,7 @@ red, and a save is confirmed by reading the file back.
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
 | `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
+| `Ctrl+T` | pop out into a window — see [Popping out](#popping-out) |
 | `Esc` | clear the field, then close |
 
 Shift is the one modifier that means "the other pane", and it is the whole
@@ -376,6 +377,22 @@ blank line with a paragraph holding a single non-breaking space, which
 CommonMark counts as content rather than as more blank. Fenced blocks are left
 exactly as written.
 
+## Popping out
+
+`Ctrl+T` moves the browser out of the overlay into a normal Hyprland window,
+keeping the folder, the selection and the preview. Hyprland tiles it beside
+whatever else is open, and it moves, floats and pins like any other window. The
+overlay goes, and the dimmed backdrop with it.
+
+To the shell the browser is then closed, so opening the wheel or a panel leaves
+the window alone, and `SUPER+W` closes it as it closes any window. `Esc` only
+clears the field: closing is the window's business. A file picked in the wheel
+sends the window there and focuses it; summoning the browser without a path only
+focuses it. Once the window is gone, the next summon opens the overlay again.
+
+Closing a window cannot ask twice, so an unsaved edit does not go with it: the
+overlay comes back holding the edit, where `Esc` asks as usual.
+
 ## Traps
 
 **`FolderListModel` is snapshotted, not bound.** Qt's model does not apply
@@ -505,9 +522,9 @@ release, which covers the ~55 ms a replacement surface takes to map.
   two agree.
 - No undo for a move, a copy, a rename or a new file — only a delete can be
   taken back, out of the trash. Use `yazi` for the rest.
-- The key legend is one line, 1030 px wide at the stock size. On a screen
-  narrower than about 1160 logical pixels the card is narrower than that, and
-  the legend runs past its edges.
+- The key legend is one line, 1117 px wide at the stock size. Where the card
+  or the window is narrower, it shrinks to fit: barely in a half-screen tile,
+  to about 60% in a third of a 1080p screen, where it is hard to read.
 - An image's pixel size comes from `identify`. Colour and dimensions are both
   niceties rather than dependencies: without ImageMagick there are no numbers,
   and the size and the date still stand.

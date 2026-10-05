@@ -17,6 +17,10 @@ Item {
   readonly property string home: Quickshell.env("HOME")
 
   property bool opened: false
+  // Ctrl+T pops the overlay out into a Hyprland window. The shell then counts
+  // the panel as closed, so the wheel and other panels leave the window alone.
+  property bool windowed: false
+  readonly property bool shown: root.opened || root.windowed
   // Absolute, and without a trailing slash except at the root itself.
   property string dir: Quickshell.env("HOME")
   // A leading / or ~ enters path completion; both are rooted at $HOME.
@@ -100,6 +104,8 @@ Item {
     + Style.font.iconLarge + Style.spacing.rowPaddingX * 2 + Style.spacing.md
   readonly property int previewWidth: Math.round(codeMetrics.advanceWidth * 100)
   readonly property int gutterGap: Math.round(codeMetrics.advanceWidth * 2)
+  readonly property int cardWidth: root.listWidth + root.previewWidth + Style.spacing.huge
+                                   + Style.spacing.lg * 2 + Style.spacing.panelPadding * 2
 
   readonly property int rowHeight: Style.spacing.popupRowHeight + Style.spacing.md
   // Shared by gutter, body, and keyboard scrolling to keep line numbers aligned.
@@ -171,7 +177,7 @@ Item {
     root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
     : root.showsCode ? root.previewHtml || FilesIndex.styledCode(root.previewText)
       : ""
-  onSelChanged: { if (root.opened) settle.restart(); ops.doomed = "" }
+  onSelChanged: { if (root.shown) settle.restart(); ops.doomed = "" }
   // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
     preview.resetScroll()
@@ -202,7 +208,14 @@ Item {
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
 
   // Payloads may choose a start; otherwise use the stable home directory.
+  // A popped-out window is raised instead, and keeps its place unless sent elsewhere.
   function open(payloadJson) {
+    var payload = {}
+    try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) {}
+    if (root.windowed) {
+      root.raise()
+      if (!payload.dir) return
+    }
     if (root.editing && (root.dirty || root.saving !== null)) {
       ops.note("save or discard the current edit first")
       preview.focusEditor()
@@ -210,12 +223,12 @@ Item {
     }
     if (root.editing) root.leaveEdit()
     root.naming = ""
-    var payload = {}
-    try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) {}
     root.enter(payload.dir ? String(payload.dir) : root.home)
     root.pending = payload.select ? String(payload.select) : ""
-    root.openScreen = root.focusedScreen()
-    root.opened = true
+    if (!root.windowed) {
+      root.openScreen = root.focusedScreen()
+      root.opened = true
+    }
     // Rows may already be loaded, so claim directly as well as onRowsChanged.
     Qt.callLater(function () { keys.forceActiveFocus(); root.claimPending() })
   }
@@ -242,10 +255,29 @@ Item {
     if (root.shell) root.shell.hide("xpo.files")
   }
 
+  // Setting windowed before clearing opened keeps the panel shown, so the selection
+  // and preview carry over.
+  function popOut() {
+    if (!root.opened) return
+    root.windowed = true
+    root.opened = false
+    if (root.shell) root.shell.hide("xpo.files")
+  }
+
+  // Focus the window the way the wheel focuses any other.
+  function raise() {
+    var all = Hyprland.toplevels.values
+    for (var i = 0; i < all.length; i++) {
+      var t = all[i]
+      if (t.wayland && t.wayland.appId === "org.quickshell" && t.title === window.title)
+        Hyprland.dispatch("hl.dsp.focus({ window = \"address:0x" + t.address + "\" })")
+    }
+  }
+
+  onOpenedChanged: if (root.shell) root.shell.panelSurfaceVisible(root.opened)
   // Drop preview state and pending work when the panel closes.
-  onOpenedChanged: {
-    if (root.shell) root.shell.panelSurfaceVisible(root.opened)
-    if (root.opened) {
+  onShownChanged: {
+    if (root.shown) {
       // Rebuild a preview even when reopening on the same row.
       settle.restart()
     } else {
@@ -468,6 +500,24 @@ Item {
     root.claimPending()
   }
 
+  // A plain toplevel, so Hyprland tiles, moves, and closes it like any other window.
+  FloatingWindow {
+    id: window
+    visible: root.windowed
+    title: "Files"
+    color: card.color
+    implicitWidth: root.cardWidth
+    implicitHeight: Style.space(900)
+    // Closing the window cannot ask twice, so an unsaved edit returns to the overlay.
+    onClosed: {
+      if (root.editing && root.dirty) {
+        root.openScreen = root.focusedScreen()
+        root.opened = true
+      }
+      root.windowed = false
+    }
+  }
+
   PanelWindow {
     id: surface
     visible: root.opened
@@ -482,10 +532,9 @@ Item {
     MouseArea { anchors.fill: parent; onClicked: root.close() }
 
     BorderSurface {
+      id: card
       anchors.centerIn: parent
-      width: Math.min(root.listWidth + root.previewWidth + Style.spacing.huge
-                      + Style.spacing.lg * 2 + Style.spacing.panelPadding * 2,
-                      surface.width * 0.92)
+      width: Math.min(root.cardWidth, surface.width * 0.92)
       height: Math.min(Style.space(900), surface.height * 0.80)
       radius: Style.space(24)
       color: Util.alpha(Color.menu.background, 0.94)
@@ -495,6 +544,8 @@ Item {
 
       Item {
         id: keys
+        // The window has its own border, so it takes the content without the card.
+        parent: root.windowed ? window.contentItem : card
         anchors.fill: parent
         anchors.margins: Style.spacing.panelPadding
         anchors.bottomMargin: Style.spacing.xl
