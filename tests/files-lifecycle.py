@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Closed file panels must not restart previews when their directory changes."""
+"""Closed file panels must not restart previews when their directory changes,
+and popping out into a window must keep the preview it had."""
 import os
 from pathlib import Path
 import re
@@ -11,7 +12,9 @@ import qslog
 repo = Path(__file__).resolve().parents[1]
 source = (repo / "plugins/xpo.files/Files.qml").read_text()
 selection = re.search(r"^  onSelChanged: .*", source, re.M)[0]
-opened = re.search(r"^  onOpenedChanged: \{.*?^  }", source, re.M | re.S)[0]
+shown = re.search(r"^  readonly property bool shown: .*", source, re.M)[0]
+lifecycle = re.search(r"^  onShownChanged: \{.*?^  }", source, re.M | re.S)[0]
+pop_out = re.search(r"^  function popOut\(\) \{.*?^  }", source, re.M | re.S)[0]
 settle = re.search(r"^  Timer \{\n    id: settle.*?^  }", source, re.M | re.S)[0]
 ordering = "\n".join(re.findall(r"^  readonly property var (?:orderedEntries|rows): .*", source, re.M))
 with tempfile.TemporaryDirectory(prefix="files-lifecycle-") as temporary:
@@ -23,6 +26,7 @@ import "FilesIndex.js" as FilesIndex
 Scope {
   id: root
   property bool opened: false
+  property bool windowed: false
   property var shell: null
   property var sel: null
   property var settledSel: null
@@ -38,7 +42,7 @@ Scope {
   function check(ok, message) {
     if (!ok) { console.error("FAIL", message); Qt.exit(1) }
   }
-''' + ordering + "\n" + selection + "\n" + opened + "\n" + settle + '''
+''' + "\n".join([shown, ordering, selection, lifecycle, settle, pop_out]) + '''
   Component.onCompleted: {
     entries = [{ name: "zAlpha", size: 9, isDir: false },
                { name: "alpha", size: 2, isDir: false }]
@@ -74,6 +78,16 @@ Scope {
       root.sel = ({ path: "pending" }); root.opened = false; break
     case 5:
       root.check(!root.settledSel, "close did not cancel pending preview")
+      root.opened = true; break
+    case 6:
+      root.popOut()
+      root.check(root.settledSel === root.sel, "popping out dropped the preview")
+      root.sel = ({ path: "windowed-change" }); break
+    case 7:
+      root.check(root.settledSel === root.sel, "windowed selection did not settle")
+      root.sel = ({ path: "closing" }); root.windowed = false; break
+    case 8:
+      root.check(!root.settledSel, "closing the window did not cancel pending preview")
       console.log("PASS"); Qt.quit()
     }
   } }
@@ -85,4 +99,4 @@ Scope {
     log = result.stdout + result.stderr
     assert result.returncode == 0 and "PASS" in log, log
     qslog.check(log)
-    print("ok: hidden preview suppression, visible updates, reopen and pending close")
+    print("ok: hidden preview suppression, visible updates, reopen, pending close and the window")

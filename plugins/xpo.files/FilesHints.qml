@@ -25,19 +25,22 @@ Item {
             ["/ at the end", "a folder"], [". at the end", "a file"],
             ["enter", "make it"], ["esc", "cancel"]]
          : [["type", "the new name"], ["enter", "rename"], ["esc", "cancel"]])
+    // A window closes like any other, so only the overlay offers esc and ctrl+t.
     : panel.held
       ? [["↑↓", "select"], ["→", "open"], ["←", "up"],
          ["ctrl+v", (panel.held.move ? "move " : "copy ") + panel.held.name + " here"],
-         ["ctrl+e", "edit"], ["esc", "close"]]
+         ["ctrl+e", "edit"]].concat(panel.windowed ? [] : [["esc", "close"]])
     : [["↑↓", "select"], ["→", "open"], ["←", "up"],
        ["shift+↑↓", "scroll"], ["ctrl+x/c/v", "move/copy"],
        ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
-       ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"],
-       ["esc", "close"]]
+       ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"]]
+      .concat(panel.windowed ? [] : [["ctrl+t", "window"], ["esc", "close"]])
 
   Row {
     id: hints
     anchors.horizontalCenter: parent.horizontalCenter
+    // Shrink rather than clip when a tiled window is narrower than the legend.
+    scale: implicitWidth > root.width ? root.width / implicitWidth : 1
     spacing: Style.spacing.xxl
 
     Repeater {
