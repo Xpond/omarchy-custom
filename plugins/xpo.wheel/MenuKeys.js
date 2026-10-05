@@ -3,6 +3,8 @@
 // Keep the key map pure enough to exercise without a running shell. The query
 // field types, deletes, moves and selects for itself; this is everything else.
 function onKey(wheel, event) {
+  // A setting row being changed takes every key until Enter or Esc.
+  if (wheel.editing) { wheel.record(event); event.accepted = true; return }
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
     case Qt.Key_U:
@@ -66,4 +68,31 @@ function onKey(wheel, event) {
     case Qt.Key_Backtab:  wheel.rotate(-1); event.accepted = true; return
     }
   }
+}
+
+// The combo a press makes, in Hyprland's names: "SUPER + SHIFT + B". A modifier alone is null,
+// still on its way to a combo; a key without a name here is "", as is a shifted symbol, since
+// Hyprland binds the unshifted key.
+function shortcutOf(event) {
+  var k = event.key
+  if ([Qt.Key_Shift, Qt.Key_Control, Qt.Key_Meta, Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Super_L, Qt.Key_Super_R,
+       Qt.Key_Hyper_L, Qt.Key_Hyper_R, Qt.Key_CapsLock, Qt.Key_NumLock].indexOf(k) >= 0) return null
+  var name = ""
+  if (k >= Qt.Key_A && k <= Qt.Key_Z || k >= Qt.Key_0 && k <= Qt.Key_9) name = String.fromCharCode(k)
+  else if (k >= Qt.Key_F1 && k <= Qt.Key_F24) name = "F" + (k - Qt.Key_F1 + 1)
+  var named = [[Qt.Key_Space, "SPACE"], [Qt.Key_Return, "RETURN"], [Qt.Key_Tab, "TAB"], [Qt.Key_Backtab, "TAB"],
+    [Qt.Key_Backspace, "BACKSPACE"], [Qt.Key_Escape, "ESCAPE"], [Qt.Key_Delete, "DELETE"],
+    [Qt.Key_Insert, "INSERT"], [Qt.Key_Home, "HOME"], [Qt.Key_End, "END"], [Qt.Key_PageUp, "PAGE_UP"],
+    [Qt.Key_PageDown, "PAGE_DOWN"], [Qt.Key_Left, "LEFT"], [Qt.Key_Right, "RIGHT"], [Qt.Key_Up, "UP"],
+    [Qt.Key_Down, "DOWN"], [Qt.Key_Print, "PRINT"], [Qt.Key_Comma, "COMMA"], [Qt.Key_Period, "PERIOD"],
+    [Qt.Key_Slash, "SLASH"], [Qt.Key_Semicolon, "SEMICOLON"], [Qt.Key_Apostrophe, "APOSTROPHE"],
+    [Qt.Key_BracketLeft, "BRACKETLEFT"], [Qt.Key_BracketRight, "BRACKETRIGHT"], [Qt.Key_Backslash, "BACKSLASH"],
+    [Qt.Key_Minus, "MINUS"], [Qt.Key_Equal, "EQUAL"], [Qt.Key_QuoteLeft, "GRAVE"]]
+  for (var i = 0; i < named.length && !name; i++) if (named[i][0] === k) name = named[i][1]
+  if (!name) return ""
+  var mods = [[Qt.MetaModifier, "SUPER"], [Qt.ControlModifier, "CTRL"], [Qt.AltModifier, "ALT"],
+              [Qt.ShiftModifier, "SHIFT"]]
+  var out = []
+  for (var m = 0; m < mods.length; m++) if (event.modifiers & mods[m][0]) out.push(mods[m][1])
+  return out.concat([name]).join(" + ")
 }

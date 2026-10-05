@@ -354,7 +354,8 @@ console.log("ok: only the panel the wheel opened answers backspace with a return
 
 // Search takes every panel the live bar can open, whether or not it has a disc.
 const indexed = { staticRows: M.panelRows(M.OVERLAYS.concat(M.EXTRAS)),
-  styleRows: [], bindRows: [], menuItems: {}, focusOrder: [], appLibrary: null,
+  styleRows: [], bindRows: [], settingRows: M.settingRows(M.SHORTCUT), menuItems: {},
+  focusOrder: [], appLibrary: null,
   shell: { panels: () => [
     { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
     { id: "alice.audio", name: "Alice Audio", source: "omarchy.audio" },
@@ -375,9 +376,93 @@ assert.equal(indexed.index.filter(r => r.plugin === "xpo.files").length, 1,
 assert.ok(!M.panels(null).some(p => p.plugin === "omarchy.weather"), "Weather joined the ring")
 indexed.shell = {}
 rebuildIndex()
-assert.equal(indexed.index.length, indexed.staticRows.length,
+assert.equal(indexed.index.length, indexed.staticRows.length + indexed.settingRows.length,
   "a facade without panels() fills search")
 console.log("ok: every panel the bar can open is searchable, on the ring or not")
+
+// Wheel settings are rows: `wheely settings` lists them and their own words find each. The wheel's
+// own bindings mean nothing from inside it, so they are no rows, and no conflict for a new key.
+{
+  const records = [
+    "SUPER + A                 → Wheel\texec\tomarchy-shell -q shell summon xpo.wheel",
+    "SUPER + A                 → \texec\tomarchy-shell -q shell call xpo.wheel commit ''",
+    "SUPER + W                 → Close window\texec\t/home/test/wheely/bin/omarchy-wheel-close",
+    "SUPER + SPACE             → Omarchy menu\texec\tomarchy-menu toggle",
+    "SUPER SHIFT CTRL + SPACE  → Theme menu\texec\tomarchy-menu toggle theme",
+    "SUPER + C                 → Universal copy\t\t",
+    "SUPER + X                 → \t\t"].join("\n")
+  assert.deepEqual(M.bindRows(records).map(r => r.label), ["Omarchy menu", "Theme menu"],
+    "the wheel's own bindings are rows")
+  const rows = M.withBindings(M.settingRows("SUPER + A"), M.bindRows(records), {})
+  for (const query of ["wheely shortcut", "wheely settings", "wheel", "shortcut", "keybind", "preferences"])
+    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
+  assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE"), rows[0]), 0, "saving a key lost the row")
+
+  assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
+  assert.equal(M.bindingAt(records, "SUPER + CTRL + SHIFT + SPACE"), "Theme menu", "another spelling hid a binding")
+  assert.equal(M.bindingAt(records, "SUPER + SPACE"), "Omarchy menu")
+  assert.equal(M.bindingAt(records, "SUPER + C"), "Universal copy", "a binding no row runs gave up its key")
+  assert.equal(M.bindingAt(records, "SUPER + X"), "another binding", "a binding without a description gave up its key")
+  assert.equal(M.bindingAt(records, "SUPER + A") + M.bindingAt(records, "SUPER + B"), "")
+
+  // The Hyprland block reads the file by the same rule, over the same cases (tests/desktop.py).
+  for (const [saved, key] of [[undefined, "SUPER + A"], ["SUPER + SHIFT + B\n", "SUPER + SHIFT + B"],
+       ["  ALT + SPACE \r\n", "ALT + SPACE"], ["SPACE\n", "SUPER + A"], ["", "SUPER + A"],
+       ['super + b") os.execute("touch pwned\n', "SUPER + A"]])
+    assert.equal(M.shortcutIn(saved), key, JSON.stringify(saved))
+
+  // Recording: a modifier alone waits, plain Esc gives up, plain Enter saves only a candidate,
+  // and any other press is judged. shortcutOf's names are checked against real Qt in runtime.py.
+  const Q = { ShiftModifier: 1 << 25, ControlModifier: 1 << 26, AltModifier: 1 << 27, MetaModifier: 1 << 28,
+              Key_Escape: 1, Key_Return: 2, Key_Enter: 3 }
+  const saved = []
+  const rec = { shortcut: "SUPER + A", bindText: records, saveShortcut: combo => saved.push(combo) }
+  const edit = method(wheelSource, "edit", { root: rec })
+  const record = method(wheelSource, "record",
+    { root: rec, Qt: Q, MenuIndex: M, MenuKeys: { shortcutOf: event => event.combo } })
+  const press = (combo, key = 0, modifiers = Q.MetaModifier) => {
+    record({ combo, key, modifiers })
+    return rec.editValue + " | " + rec.editNote + " | " + rec.pending
+  }
+  edit({ setting: "shortcut" })
+  assert.equal(press(null), "Press a shortcut | esc cancels | ", "a modifier alone was judged")
+  assert.equal(press(""), "Press a shortcut | pick another key | ")
+  assert.equal(press("SHIFT + B", 0, Q.ShiftModifier), "SHIFT + B | add SUPER, CTRL or ALT | ")
+  assert.equal(press("F13", 0, 0), "F13 | add SUPER, CTRL or ALT | ")
+  assert.equal(press("SUPER + W"), "SUPER + W | closes the wheel | ")
+  assert.equal(press("SUPER + A"), "SUPER + A | already set | ")
+  assert.equal(press("SUPER + SPACE"), "SUPER + SPACE | replaces Omarchy menu | SUPER + SPACE")
+  assert.equal(press("SUPER + RETURN", Q.Key_Return), "SUPER + RETURN | enter saves | SUPER + RETURN",
+    "enter with a modifier was not a candidate")
+  record({ key: Q.Key_Return, modifiers: 0 })
+  assert.deepEqual(saved, ["SUPER + RETURN"])
+  assert.equal(rec.editing, "", "saving left the row recording")
+  // Enter saves only a candidate: after nothing, or after a refused combo, it saves nothing.
+  for (const [presses, last] of [[[], "SUPER + RETURN"], [["SUPER + B", "SHIFT + B"], "SUPER + RETURN"],
+                                 [["SUPER + B"], "SUPER + B"]]) {
+    edit({ setting: "shortcut" })
+    for (const combo of presses) press(combo, 0, combo.startsWith("SHIFT") ? Q.ShiftModifier : Q.MetaModifier)
+    record({ key: Q.Key_Enter, modifiers: 0 })
+    assert.equal(rec.editing + saved.at(-1), last, "enter after " + JSON.stringify(presses))
+  }
+  edit({ setting: "shortcut" }); press("SUPER + C")
+  record({ key: Q.Key_Escape, modifiers: 0 })
+  assert.equal(rec.editing + saved.at(-1), "SUPER + B", "esc saved the candidate")
+
+  // While a row records, every key is the row's: none types, moves or closes.
+  const recorded = []
+  const editingKey = keymap("plugins/xpo.wheel/MenuKeys.js", { editing: "shortcut", record: e => recorded.push(e) })
+  for (const key of ["Key_Escape", "Key_Return", "Key_Backspace", "Key_Up", "Key_A"])
+    assert.equal(editingKey(key).accepted, true, key + " escaped the shortcut row")
+  assert.equal(recorded.length, 5)
+
+  // Enter on a setting row starts changing it; the wheel stays up.
+  const setRow = { countUse() {}, dismiss() { throw new Error("a setting row closed the wheel") },
+                   slices: [], edited: "", edit(e) { this.edited = e.setting } }
+  method(wheelSource, "run", { root: setRow, Qt: {}, MenuIndex: M })(rows[0])
+  assert.equal(setRow.edited, "shortcut")
+}
+console.log("ok: settings are rows, the wheel's own bindings are not, and the shortcut row records, judges and saves")
 
 // The host closes peers without exposing its panel registries to the wheel.
 const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }

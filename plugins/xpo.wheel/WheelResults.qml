@@ -54,6 +54,8 @@ Item {
         required property var modelData
         readonly property int row: wheel.resultTop + index
         readonly property bool active: wheel.resultIndex === resultCard.row
+        // A setting row being changed says what saving would do; the field shows what was pressed.
+        readonly property bool editing: !!modelData.setting && modelData.setting === wheel.editing
 
         width: wheel.resultWidth
         height: wheel.resultHeight
@@ -83,7 +85,8 @@ Item {
           spacing: Style.spacing.controlGap
 
           readonly property real textBudget:
-            Math.max(0, width - Style.font.iconLarge - spacing * 2 - chevron.width)
+            Math.max(0, width - Style.font.iconLarge - spacing * 2 - chevron.width
+                        - (valueField.visible ? valueField.width + spacing : 0))
 
           Text {
             anchors.verticalCenter: parent.verticalCenter
@@ -121,7 +124,7 @@ Item {
             visible: !modelData.copy
             width: Math.min(implicitWidth, resultRow.textBudget - trailText.width)
             elide: Text.ElideRight
-            text: modelData.label
+            text: resultCard.editing ? wheel.editNote : modelData.label
             color: active ? Color.accent : Color.menu.text
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
@@ -132,7 +135,7 @@ Item {
             width: Math.min(implicitWidth,
                             Math.max(resultRow.textBudget * 0.4,
                                      resultRow.textBudget - labelText.implicitWidth))
-            text: modelData.trail
+            text: modelData.setting ? "" : modelData.trail
             color: Color.menu.text
             opacity: 0.45
             // Preserve the filename end of paths and the root of breadcrumbs.
@@ -150,6 +153,28 @@ Item {
             opacity: 0.5
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.body
+          }
+        }
+
+        // A setting row ends in its value, drawn as a control, the way Omarchy's panel rows end in one.
+        BorderSurface {
+          id: valueField
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.right: resultRow.right
+          visible: !!modelData.setting && !resultCard.editing
+          width: valueText.implicitWidth + Style.spacing.controlPaddingX * 2
+          height: valueText.implicitHeight + Style.spacing.xs * 2
+          radius: height / 2
+          color: Style.controlFill(resultCard.active, false, Color.menu.text, Color.accent)
+          borderSpec: Border.controlSpec(resultCard.active ? "focus" : "normal", Color.menu.text, Color.accent)
+
+          Text {
+            id: valueText
+            anchors.centerIn: parent
+            text: modelData.trail
+            color: resultCard.active ? Color.accent : Color.menu.text
+            font.family: Style.font.menuFamily
+            font.pixelSize: Style.font.caption
           }
         }
 

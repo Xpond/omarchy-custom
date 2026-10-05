@@ -112,7 +112,7 @@ for (const renamed of [false, true]) {
 const wheel = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/Wheel.qml"), "utf8")
 const desktop = { id: "org.example.editor", name: "Old Editor" }
 const top = { title: "Old Document", address: "123", wayland: { appId: desktop.id } }
-const root = { staticRows: [], styleRows: [], focusOrder: [], menuItems: {},
+const root = { staticRows: [], styleRows: [], settingRows: [], focusOrder: [], menuItems: {},
   bindRows: M.bindRows("SUPER + N → New thing\texec\tnew action\n"),
   appLibrary: { sortedEntries: () => [{ entry: desktop }] } }
 const rebuild = new Function("root", "MenuIndex", "Hyprland",
