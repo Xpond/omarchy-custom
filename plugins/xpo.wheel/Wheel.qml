@@ -352,16 +352,17 @@ Item {
     return acted ? "closed" : "none"
   }
 
-  // Release fires a flick; the first tap holds and the second dismisses.
+  // Release fires a flick; the first tap holds and the second dismisses. Only the opening press's
+  // release fires: the next press closes the wheel itself, and its release may land first.
   function commit() {
-    if (!root.opened) return "closed"
+    if (!root.opened || unmap.running) return "closed"
+    if (!root.justOpened) { root.dismiss(); return "dismissed" }
+    root.justOpened = false
     if (!root.searching && root.armed && root.selected >= 0) {
       var label = root.slices[root.selected].label
       root.run(root.slices[root.selected])
       return "fired:" + label
     }
-    if (!root.justOpened) { root.dismiss(); return "dismissed" }
-    root.justOpened = false
     return "held"
   }
 

@@ -40,7 +40,7 @@ key means and the dial performs it, which is what lets a test press a key.
 
 | | |
 |---|---|
-| `SUPER+A` | open (tap — do not hold, see below) |
+| `SUPER+A` | open (tap — do not hold, see below); again to close |
 | `↑` `↓` `←` `→` | `↑`/`↓` jump to the slice at that compass point; `←`/`→` step around the ring |
 | `Enter` | fire the highlighted slice, or open it if it is a submenu |
 | `↑` `↓` `Ctrl+P` `Ctrl+N` | step the result list while searching |
@@ -571,6 +571,11 @@ what it holds if that reads as keys joined by ` + `; anything else is `SUPER + A
 unbinds the key before binding it, so a taken key's binding is gone until the wheel
 moves off it. The names come from Qt's key codes, and `tests/runtime.py` has Hyprland's
 own `--verify-config` accept every one the wheel can write.
+
+Pressing the key again with the wheel up closes it: the press is a `toggle`. Only the
+release of the press that opened the wheel fires a flick. Press and release reach the
+shell as separate processes, so a closing tap's release can land before its press, and
+a release that fired or reopened would leave the wheel up.
 
 ## What it remembers
 
