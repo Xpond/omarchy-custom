@@ -54,30 +54,36 @@ Item {
   property var stockBarIds: null
   readonly property var barIds: root.userBarIds || root.stockBarIds
   readonly property var panels: MenuIndex.panels(root.barIds)
+  // A chosen ring is keys into search; otherwise it follows the bar.
   property var ringIds: null
-  readonly property var ring: root.ringIds
-    ? MenuIndex.ringOf(root.menuItems, root.ringIds, root.conditions)
-    : root.panels
+  readonly property var ring: root.ringIds ? MenuIndex.ringOf(root.index, root.ringIds) : root.panels
   readonly property var staticRows: MenuIndex.panelRows(MenuIndex.OVERLAYS.concat(MenuIndex.EXTRAS))
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   readonly property var styleRows: MenuIndex.styles(MenuIndex.lines(root.themeText), root.currentTheme,
                                                     MenuIndex.lines(root.fontText), root.currentFont)
   readonly property var bindRows: MenuIndex.bindRows(root.bindText)
   property string shortcut: MenuIndex.SHORTCUT
-  readonly property var settingRows: MenuIndex.settingRows(root.shortcut)
+  readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
   property string editValue: ""
   property string editNote: ""
   property string pending: ""
+  // The ring editor: search adds to the ring, and the ring's own keys move and remove its slices.
+  property bool editingRing: false
+  // Ctrl+R asks twice before the ring is reset to the bar's.
+  property bool resetAsked: false
+  readonly property string ringHint: root.searching ? "enter adds to the ring"
+    : root.resetAsked ? "ctrl+r again resets the ring\nany other key cancels"
+    : "del removes · shift+←→ reorders\n" + (root.ringIds ? "ctrl+r resets · " : "") + "esc done"
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
   readonly property var activeWindow: Hyprland.activeToplevel
   readonly property var appLibrary: root.shell ? root.shell.appLibrary : null
   property var index: []
   property var uses: ({})
-  // A leading sigil selects one search source.
-  readonly property string mode: MenuIndex.modeOf(root.query)
+  // A leading sigil selects one search source; the ring editor searches only what a ring holds.
+  readonly property string mode: root.editingRing ? "" : MenuIndex.modeOf(root.query)
   readonly property string term: MenuIndex.termOf(root.query)
   // Cache scanned home paths only for the current open.
   property var files: null
@@ -86,7 +92,8 @@ Item {
   readonly property var results: root.mode === "file"
     ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home)
     : root.mode === "calc" ? Calc.rows(root.term)
-    : MenuIndex.search(root.index, root.term, root.resultLimit, root.uses)
+    : MenuIndex.search(root.editingRing ? root.index.filter(MenuIndex.pinnable) : root.index,
+                       root.term, root.resultLimit, root.uses)
   property int resultIndex: 0
   property int resultTop: 0
   readonly property var beads: root.results.slice(root.resultTop,
@@ -311,6 +318,7 @@ Item {
     root.launched = ""
     root.launchedAt = -1
     root.editing = ""
+    root.editingRing = false
     root.justOpened = !wasOpen
     root.openScreen = root.focusedScreen()
     root.opened = true
@@ -405,6 +413,7 @@ Item {
 
   function run(e) {
     if (!e) return
+    if (root.editingRing) { root.pin(e); return }
     root.countUse(e)
     if (e.node) { root.enter(e.node); return }
     if (e.setting) { root.edit(e); return }
@@ -436,8 +445,10 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
-  // The shortcut row records the next combo. Hyprland's bindings pause meanwhile, so a taken one arrives too.
+  // The ring row hands the home ring to its editor. The shortcut row records the next combo;
+  // Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
+    if (e.setting === "ring") { root.enter(""); root.editingRing = true; root.resetAsked = false; return }
     root.editing = e.setting
     root.pending = ""
     root.editValue = "Press a shortcut"
@@ -472,6 +483,55 @@ Item {
   function saveShortcut(combo) {
     root.shortcut = combo
     shortcutFile.setText(combo + "\n")
+  }
+
+  // A row joins the ring after the selected slice, or at the end; one already there is selected.
+  function pin(e) {
+    var keys = root.ring.map(MenuIndex.keyOf)
+    var at = keys.indexOf(MenuIndex.keyOf(e))
+    if (at < 0) {
+      at = root.selected >= 0 ? root.selected + 1 : keys.length
+      keys.splice(at, 0, MenuIndex.keyOf(e))
+      root.saveRing(keys)
+    }
+    root.query = ""
+    root.select(at)
+  }
+
+  // The next slice takes the removed one's place, so Del can clear a run of them.
+  function unpin() {
+    var at = root.selected
+    if (at < 0) return
+    var keys = root.ring.map(MenuIndex.keyOf)
+    keys.splice(at, 1)
+    root.saveRing(keys)
+    root.select(Math.min(at, root.sliceCount - 1))
+  }
+
+  // A slice swaps places with its neighbour, across north too, as the ring has no ends.
+  function moveSlice(step) {
+    var n = root.sliceCount
+    if (root.selected < 0 || n < 2) return
+    var keys = root.ring.map(MenuIndex.keyOf)
+    var to = (root.selected + step + n) % n
+    var key = keys[root.selected]
+    keys[root.selected] = keys[to]
+    keys[to] = key
+    root.saveRing(keys)
+    root.select(to)
+  }
+
+  function resetRing() {
+    if (!root.ringIds) return
+    if (!root.resetAsked) { root.resetAsked = true; return }
+    root.resetAsked = false
+    root.saveRing(null)
+  }
+
+  // An empty ring follows the bar, as an empty list in the file does.
+  function saveRing(keys) {
+    root.ringIds = keys && keys.length ? keys : null
+    ringFile.setText(MenuIndex.withSlices(ringFile.text(), root.ringIds))
   }
 
   function paste() {
@@ -688,9 +748,11 @@ Item {
   }
 
   FileView {
+    id: ringFile
     printErrors: false
     path: Quickshell.env("HOME") + "/.config/omarchy/wheel.json"
     watchChanges: true
+    atomicWrites: true
     onFileChanged: reload()
     onLoaded: root.ringIds = MenuIndex.ringIds(text())
     // Deleting wheel.json restores the default ring.
@@ -870,9 +932,10 @@ Item {
           width: root.searchWidth
           horizontalAlignment: Text.AlignHCenter
           elide: Text.ElideLeft
-          text: "‹  " + root.crumb
+          // A submenu's crumb, or what the ring editor's keys do.
+          text: root.editingRing ? root.ringHint : "‹  " + root.crumb
           color: Color.menu.text
-          opacity: root.path.length && !root.searching ? 0.7 : 0
+          opacity: root.editingRing || root.path.length && !root.searching ? 0.7 : 0
           Behavior on opacity { NumberAnimation { duration: root.fadeDuration } }
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.caption
@@ -905,7 +968,7 @@ Item {
           Text {
             anchors.centerIn: parent
             visible: !root.searching
-            text: "Search · / files · = calc"
+            text: root.editingRing ? "Add to ring" : "Search · / files · = calc"
             color: Color.menu.text
             opacity: 0.45
             font.family: Style.font.menuFamily

@@ -349,3 +349,40 @@ Scope {
     assert (home / "reloads").read_text() == "SUPER + SHIFT + B\n", "the reload ran before the write landed"
     assert (home / ".config/omarchy/wheel-shortcut").read_text() == "rm -rf /\n"
     print("ok: saving reloads Hyprland once the key is written; edits by hand are read by the block's rule")
+
+    # The ring editor saves on every key, faster than key repeat when Shift+arrow is held: a write
+    # reloaded behind a newer one must never put an older ring back. The rest of wheel.json stays.
+    run("ring-save", '''
+  property var ringIds: "unset"
+  property int stage: 0
+  Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel.json", "sh", text] }
+  function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
+''' + block(wheel, r"  FileView \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + '''
+  Timer { id: burst; interval: 15; repeat: true; property int n: 0; onTriggered: {
+    root.check(n === 0 || JSON.stringify(root.ringIds) === JSON.stringify(["omarchy.audio", "app:" + n]),
+               "an older ring came back: " + JSON.stringify(root.ringIds))
+    if (++n > 30) { stop(); return }
+    root.saveRing(["omarchy.audio", "app:" + n])
+  } }
+  Timer { interval: 150; running: true; repeat: true; onTriggered: {
+    if (burst.running) return
+    switch (root.stage++) {
+    case 0:
+      root.check(root.ringIds === null, "a missing file is a ring: " + root.ringIds)
+      burst.start(); break
+    case 1:
+      root.check(JSON.stringify(root.ringIds) === '["omarchy.audio","app:30"]', "the burst ended on " + JSON.stringify(root.ringIds))
+      edit.text = '{ "slices": ["system"], "other": 1 }'; edit.running = true; break
+    case 2:
+      root.check(JSON.stringify(root.ringIds) === '["system"]', "an edit by hand was missed: " + JSON.stringify(root.ringIds))
+      root.saveRing(["system", "omarchy.audio"]); break
+    case 3:
+      root.saveRing([]); break
+    case 4:
+      root.check(root.ringIds === null, "an empty ring did not follow the bar")
+      console.log("PASS"); Qt.quit()
+    }
+  } }
+''', {"HOME": str(home)})
+    assert json.loads((home / ".config/omarchy/wheel.json").read_text()) == {"other": 1}
+    print("ok: the ring saves on every change, a burst ends on its last ring, and the rest of wheel.json stays")
