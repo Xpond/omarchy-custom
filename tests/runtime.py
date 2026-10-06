@@ -69,6 +69,7 @@ Scope {
     run("scan-close-reopen", '''
   property bool opened: true
   property string mode: ""
+  property string listing: ""
   property var files: null
   property real daylight: 0
   property string editing: ""
@@ -86,6 +87,7 @@ Scope {
     run("scan-close", '''
   property bool opened: true
   property string mode: ""
+  property string listing: ""
   property var files: null
   property real daylight: 0
   property string editing: ""
@@ -94,6 +96,22 @@ Scope {
   Timer { interval: 30; running: true; onTriggered: root.opened = false }
   Timer { interval: 500; running: true; onTriggered: {
     if (root.files !== null || fileScan.running) { console.error("FAIL retained scan"); Qt.exit(1) }
+    else { console.log("PASS"); Qt.quit() }
+  } }
+''')
+
+    # The skip list's suggestions are the scan's folders, so showing it scans as `/` does.
+    run("scan-skip-list", '''
+  property bool opened: true
+  property string mode: ""
+  property string listing: ""
+  property var files: null
+  property real daylight: 0
+  property string editing: ""
+''' + scan("0.05") + handlers + '''
+  Component.onCompleted: root.listing = "skipped"
+  Timer { interval: 400; running: true; onTriggered: {
+    if (!root.files) { console.error("FAIL the skip list did not scan"); Qt.exit(1) }
     else { console.log("PASS"); Qt.quit() }
   } }
 ''')
@@ -383,10 +401,16 @@ Scope {
     # reloaded behind a newer one must never put an older ring back. The rest of wheel.json stays.
     run("ring-save", '''
   property var ringIds: "unset"
+  property var savedFolders: "unset"
+  property var savedSkipped: "unset"
+  property string listing: ""
   property int stage: 0
+  function dropScan() {}
+  function scanFiles() {}
   Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel.json", "sh", text] }
   function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
-''' + block(wheel, r"  FileView \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + '''
+''' + block(wheel, r"  FileView \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + "\n"
+        + block(wheel, r"  function saveList\(") + '''
   Timer { id: burst; interval: 15; repeat: true; property int n: 0; onTriggered: {
     root.check(n === 0 || JSON.stringify(root.ringIds) === JSON.stringify(["omarchy.audio", "app:" + n]),
                "an older ring came back: " + JSON.stringify(root.ringIds))
@@ -409,9 +433,17 @@ Scope {
       root.saveRing([]); break
     case 4:
       root.check(root.ringIds === null, "an empty ring did not follow the bar")
+      edit.text = '{ "folders": ["/x"], "skipped": [], "other": 1 }'; edit.running = true; break
+    case 5:
+      root.check(JSON.stringify([root.savedFolders, root.savedSkipped]) === '[["/x"],null]', "the lists were misread")
+      root.listing = "skipped"; root.saveList(["~/Android"]); break
+    case 6:
+      root.listing = "folders"; root.saveList([]); break
+    case 7:
+      root.check(root.savedFolders === null, "an emptied list did not go back to its default")
       console.log("PASS"); Qt.quit()
     }
   } }
 ''', {"HOME": str(home)})
-    assert json.loads((home / ".config/omarchy/wheel.json").read_text()) == {"other": 1}
+    assert json.loads((home / ".config/omarchy/wheel.json").read_text()) == {"other": 1, "skipped": ["~/Android"]}
     print("ok: the ring saves on every change, a burst ends on its last ring, and the rest of wheel.json stays")
