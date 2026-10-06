@@ -501,7 +501,9 @@ Quickshell, fails on a warning it doesn't expect (`tests/qslog.py`).
 by rank and name length as it scans, keeping only the first 40 of each tie,
 which is every row that could be read. Closing cancels the scan and rejects
 whatever it was about to say; reopening starts a fresh one. `Enter` on a path
-opens the browser there, whether or not the browser was already up.
+opens the browser there, whether or not the browser was already up. The browser
+keeps to home, so a path from a folder outside it (Settings) opens the way the
+browser opens a file, through `omarchy-open-path`.
 
 Both are asked for 40, and the stack shows 8: `resultTop` is the first
 row on screen and `showResult()` walks it by one whenever the selection steps
@@ -587,6 +589,17 @@ Omarchy's `[menu] scrim-alpha` in `~/.config/omarchy/shell.toml`, which its own 
 too. The blur is `~/.config/omarchy/wheel-blur`, which the managed block reads like the
 shortcut's file (`off` turns it off, and Hyprland's own blur with it); only crossing 0%
 reloads Hyprland, which re-applies the layer rule to the open backdrop.
+
+**Searched folders** and **Skipped folders** change what `/` searches; until they do, it is
+what it always was: home, hidden folders included, six levels deep, skipping every folder
+named `.cache`, `.git` or `node_modules`. Searched folders adds folders outside home
+(`Home + 1`) to the same scan. Enter on either puts its list in the results: typing suggests
+what to add, folders under home to skip as `/` would find them, or the subfolders of a path
+typed from `/`, and Enter adds the one picked; Del removes the picked entry, and Esc is done.
+Both are saved to `wheel.json` beside the ring (`"folders"`, `"skipped"`), and an emptied list
+is its default again. A skip with a slash is that folder under home; one without is every
+folder of that name. fd anchors a path only to the first folder it is given, home, so a
+folder outside home is skipped only by name.
 
 ## What it remembers
 

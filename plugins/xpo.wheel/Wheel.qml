@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick.Effects
+import Qt.labs.folderlistmodel
 import qs.Commons
 import qs.Ui
 import "Calc.js" as Calc
@@ -67,7 +68,12 @@ Item {
   property int backdropDraft: 0
   readonly property int backdrop: root.editing === "backdrop" ? root.backdropDraft
     : Math.round(Color.menu.scrim.a * 100)
-  readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds)
+  // Folders `/` searches outside home, and folders it skips, as wheel.json keeps them.
+  property var savedFolders: null
+  property var savedSkipped: null
+  readonly property var folders: root.savedFolders || []
+  readonly property var skipped: root.savedSkipped || MenuIndex.SKIPPED
+  readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds, root.folders, root.skipped)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
   property string editValue: ""
@@ -80,6 +86,22 @@ Item {
   readonly property string ringHint: root.searching ? "enter adds to the ring"
     : root.resetAsked ? "ctrl+r again resets the ring\nany other key cancels"
     : "del removes · shift+←→ reorders\n" + (root.ringIds ? "ctrl+r resets · " : "") + "esc done"
+  // The list a setting row shows in the results; typing suggests what to add to it.
+  property string listing: ""
+  readonly property var listed: root.listing === "skipped" ? root.skipped : root.folders
+  readonly property var subfolderPaths: {
+    var out = []
+    for (var i = 0; i < subfolders.count; i++) out.push(subfolders.get(i, "filePath"))
+    return out
+  }
+  // The folder whose subfolders a path typed into the folders list would add.
+  FolderListModel {
+    id: subfolders
+    folder: root.listing === "folders" && root.query.charAt(0) === "/"
+      ? "file://" + root.query.slice(0, root.query.lastIndexOf("/") + 1) : ""
+    showFiles: false
+    showHidden: true
+  }
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
   readonly property var activeWindow: Hyprland.activeToplevel
@@ -87,13 +109,16 @@ Item {
   property var index: []
   property var uses: ({})
   // A leading sigil selects one search source; the ring editor searches only what a ring holds.
-  readonly property string mode: root.editingRing ? "" : MenuIndex.modeOf(root.query)
+  readonly property string mode: root.editingRing || root.listing ? "" : MenuIndex.modeOf(root.query)
   readonly property string term: MenuIndex.termOf(root.query)
-  // Cache scanned home paths only for the current open.
+  // Cache scanned paths only for the current open.
   property var files: null
   readonly property int resultLimit: 40
   readonly property int resultCap: 8
-  readonly property var results: root.mode === "file"
+  readonly property var results: root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
+    : root.listing === "skipped" ? MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true)
+    : root.listing ? MenuIndex.subfolderRows(root.subfolderPaths, root.query, root.home)
+    : root.mode === "file"
     ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home)
     : root.mode === "calc" ? Calc.rows(root.term)
     : MenuIndex.search(root.editingRing ? root.index.filter(MenuIndex.pinnable) : root.index,
@@ -102,7 +127,7 @@ Item {
   property int resultTop: 0
   readonly property var beads: root.results.slice(root.resultTop,
                                                   root.resultTop + root.resultCap)
-  readonly property bool searching: root.query.length > 0
+  readonly property bool searching: root.query.length > 0 || !!root.listing
 
   // Ignore synthetic hover moves when result rows shift under the pointer.
   property point hoverAt: Qt.point(-1, -1)
@@ -112,7 +137,8 @@ Item {
     return true
   }
   readonly property string emptyText: root.mode === "calc" ? (root.term ? "No answer" : "Type to calculate")
-    : root.mode !== "file" ? "No match"
+    : root.listing === "folders" && !root.query ? "Home is always searched"
+    : root.mode !== "file" && root.listing !== "skipped" ? "No match"
     : !root.files ? "Scanning\u2026"
     : !root.term ? "Type to find files\nctrl+y copy path\nctrl+enter terminal"
     : "No match"
@@ -323,6 +349,7 @@ Item {
     root.launchedAt = -1
     root.editing = ""
     root.editingRing = false
+    root.listing = ""
     root.justOpened = !wasOpen
     root.openScreen = root.focusedScreen()
     root.opened = true
@@ -418,6 +445,7 @@ Item {
   function run(e) {
     if (!e) return
     if (root.editingRing) { root.pin(e); return }
+    if (root.listing) { root.addEntry(e); return }
     root.countUse(e)
     if (e.node) { root.enter(e.node); return }
     if (e.setting) { root.edit(e); return }
@@ -430,6 +458,8 @@ Item {
       else if (e.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + e.address + "\" })")
       else if (e.dispatch) Hyprland.dispatch(e.dispatch)
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
+      // The browser keeps to home, so a path outside it opens the way the browser opens a file.
+      else if (e.path && e.path.indexOf(root.home + "/") !== 0) Quickshell.execDetached(["omarchy-open-path", e.path])
       else if (e.path && root.shell) {
         root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
         root.launched = "xpo.files"
@@ -453,6 +483,7 @@ Item {
   // row records the next combo; Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
     if (e.setting === "ring") { root.enter(""); root.editingRing = true; root.resetAsked = false; return }
+    if (e.setting === "folders" || e.setting === "skipped") { root.listing = e.setting; root.query = ""; return }
     root.backdropDraft = root.backdrop
     root.editing = e.setting
     root.pending = ""
@@ -545,7 +576,31 @@ Item {
   // An empty ring follows the bar, as an empty list in the file does.
   function saveRing(keys) {
     root.ringIds = keys && keys.length ? keys : null
-    ringFile.setText(MenuIndex.withSlices(ringFile.text(), root.ringIds))
+    ringFile.setText(MenuIndex.withList(ringFile.text(), "slices", root.ringIds))
+  }
+
+  function addEntry(e) {
+    var entry = e.path ? MenuIndex.listEntry(e.path, root.home) : ""
+    if (entry && root.listed.indexOf(entry) < 0) root.saveList(root.listed.concat([entry]))
+    root.query = ""
+  }
+
+  // The next entry takes the removed one's place, as on the ring.
+  function removeEntry() {
+    var at = root.resultIndex
+    if (at < 0 || at >= root.listed.length) return
+    root.saveList(root.listed.slice(0, at).concat(root.listed.slice(at + 1)))
+    root.resultIndex = Math.min(at, root.results.length - 1)
+  }
+
+  // An emptied list is its default again, as an emptied ring follows the bar.
+  function saveList(list) {
+    var kept = list.length ? list : null
+    if (root.listing === "folders") root.savedFolders = kept
+    else root.savedSkipped = kept
+    ringFile.setText(MenuIndex.withList(ringFile.text(), root.listing, kept))
+    root.dropScan()
+    root.scanFiles()
   }
 
   function paste() {
@@ -639,8 +694,7 @@ Item {
   // Scan lazily per open; cap depth to avoid large cache and SDK trees.
   Process {
     id: fileScan
-    command: ["fd", "--hidden", "--max-depth", "6", "--exclude", ".cache",
-              "--exclude", ".git", "--exclude", "node_modules", ".", root.home]
+    command: MenuIndex.scanCommand(root.folders, root.skipped, root.home)
     property int epoch: 0
     // Ignore partial output from canceled scans.
     stdout: StdioCollector {
@@ -651,17 +705,22 @@ Item {
 
   property int scanEpoch: 0
   function scanFiles() {
-    if (!root.opened || root.mode !== "file" || root.files || fileScan.running) return
+    if (!root.opened || root.mode !== "file" && root.listing !== "skipped" || root.files || fileScan.running) return
     fileScan.epoch = root.scanEpoch
     fileScan.running = true
   }
+  // Closing, or changing a list, drops the scan; the next search scans again.
+  function dropScan() {
+    root.scanEpoch++
+    fileScan.running = false
+    root.files = null
+  }
   onModeChanged: root.scanFiles()
+  onListingChanged: root.scanFiles()
   onOpenedChanged: {
     if (root.shell) root.shell.panelSurfaceVisible(root.opened)
     if (!root.opened) {
-      root.scanEpoch++
-      fileScan.running = false
-      root.files = null
+      root.dropScan()
       root.daylight = 0
       root.editing = ""
     }
@@ -768,9 +827,13 @@ Item {
     watchChanges: true
     atomicWrites: true
     onFileChanged: reload()
-    onLoaded: root.ringIds = MenuIndex.ringIds(text())
-    // Deleting wheel.json restores the default ring.
-    onLoadFailed: root.ringIds = null
+    onLoaded: {
+      root.ringIds = MenuIndex.listIn(text(), "slices")
+      root.savedFolders = MenuIndex.listIn(text(), "folders")
+      root.savedSkipped = MenuIndex.listIn(text(), "skipped")
+    }
+    // Deleting wheel.json restores the defaults.
+    onLoadFailed: { root.ringIds = null; root.savedFolders = null; root.savedSkipped = null }
   }
 
   // The launch key, as data the Hyprland block reads on reload; Hyprland does not watch it.
@@ -967,9 +1030,9 @@ Item {
           horizontalAlignment: Text.AlignHCenter
           elide: Text.ElideLeft
           // A submenu's crumb, or what the ring editor's keys do.
-          text: root.editingRing ? root.ringHint : "‹  " + root.crumb
+          text: root.editingRing ? root.ringHint : root.listing ? "del removes · esc done" : "‹  " + root.crumb
           color: Color.menu.text
-          opacity: root.editingRing || root.path.length && !root.searching ? 0.7 : 0
+          opacity: root.editingRing || root.listing && !root.query || root.path.length && !root.searching ? 0.7 : 0
           Behavior on opacity { NumberAnimation { duration: root.fadeDuration } }
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.caption
@@ -1001,8 +1064,9 @@ Item {
 
           Text {
             anchors.centerIn: parent
-            visible: !root.searching
-            text: root.editingRing ? "Add to ring" : "Search · / files · = calc"
+            visible: !root.query
+            text: root.listing === "folders" ? "Add a folder from /" : root.listing ? "Find a folder to skip"
+              : root.editingRing ? "Add to ring" : "Search · / files · = calc"
             color: Color.menu.text
             opacity: 0.45
             font.family: Style.font.menuFamily

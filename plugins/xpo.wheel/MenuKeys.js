@@ -25,6 +25,11 @@ function onKey(wheel, event) {
       }
     }
   }
+  // A list in the results: Del removes the picked entry and Esc is done, until something is typed.
+  if (wheel.listing && !wheel.query) {
+    if (event.key === Qt.Key_Delete) { wheel.removeEntry(); event.accepted = true; return }
+    if (event.key === Qt.Key_Escape) { wheel.listing = ""; event.accepted = true; return }
+  }
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
     case Qt.Key_U:

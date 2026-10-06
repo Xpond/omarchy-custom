@@ -196,15 +196,17 @@ assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not 
 assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
   "Files.qml does not hand its operations object to the list")
 
-const wheel = { root: { countUse() {}, dismiss() {}, slices: [], copy: text => calls.push(text), shell: {
+const wheel = { root: { home: "/home/test", countUse() {}, dismiss() {}, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
-} }, Qt: { callLater: fn => fn() }, MenuIndex: M,
+} }, Qt: { callLater: fn => fn() }, MenuIndex: M, Quickshell: { execDetached: argv => calls.push([...argv]) },
   Hyprland: { dispatch: expression => calls.push(["dispatch", expression]) } }
 const runRow = method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)
 runRow({ path: "/home/test/new.txt" })
 assert.equal(calls.at(-1)[0], "xpo.files")
 assert.equal(calls.at(-1)[1].select, "new.txt")
+runRow({ path: "/mnt/share/movie.mkv" })
+assert.deepEqual(calls.at(-1), ["omarchy-open-path", "/mnt/share/movie.mkv"], "a path outside home went to the browser")
 runRow({ copy: "42" })
 assert.equal(calls.at(-1), "42")
 runRow({ dispatch: "hl.dsp.window.pseudo()" })
@@ -249,6 +251,9 @@ console.log("ok: browser bare keys drive the list, shift drives the preview, ctr
 // The query field types, deletes, moves and selects, Home, End and Ctrl+A included; the rest is the wheel's.
 const copied = []
 const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
+// A readonly binding of Wheel.qml, evaluated over the names given.
+const binding = (name, scope) => new Function(...Object.keys(scope), "return " + wheelSource
+  .match(new RegExp("readonly property \\w+ " + name + ": ([^]*?)\\n  (?:readonly )?property"))[1])(...Object.values(scope))
 const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
   get searching() { return this.query.length > 0 },
   dismiss: () => copied.push("dismissed"), showResult() {}, moveResult(step) { this.resultIndex += step } }
@@ -323,7 +328,7 @@ assert.deepEqual([levels, copied], [["up", "up", "up"], ["dismissed"]])
 console.log("ok: the field edits the query, the wheel keeps its shortcuts, and a path can be taken away or opened in a terminal")
 
 // The placeholder names every search sigil, so a new mode cannot hide.
-const placeholder = wheelSource.match(/visible: !root\.searching\n\s+text: root\.editingRing \? "[^"]+" : "([^"]+)"/)[1]
+const placeholder = wheelSource.match(/visible: !root\.query\n\s+text: ([^]*?)\n\s+color:/)[1].match(/"([^"]+)"$/)[1]
 for (const sigil of Object.keys(M.MODES)) assert.ok(placeholder.includes(sigil + " "), `the placeholder hides ${sigil}`)
 console.log("ok: the search placeholder names every search sigil")
 
@@ -354,7 +359,7 @@ console.log("ok: only the panel the wheel opened answers backspace with a return
 
 // Search takes every panel the live bar can open, whether or not it has a disc.
 const indexed = { staticRows: M.panelRows(M.OVERLAYS.concat(M.EXTRAS)),
-  styleRows: [], bindRows: [], settingRows: M.settingRows(M.SHORTCUT), menuItems: {},
+  styleRows: [], bindRows: [], settingRows: M.settingRows(M.SHORTCUT, false, [], M.SKIPPED), menuItems: {},
   focusOrder: [], appLibrary: null,
   shell: { panels: () => [
     { id: "omarchy.weather", name: "Weather", source: "omarchy.weather" },
@@ -393,17 +398,21 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
     "SUPER + X                 → \t\t"].join("\n")
   assert.deepEqual(M.bindRows(records).map(r => r.label), ["Omarchy menu", "Theme menu"],
     "the wheel's own bindings are rows")
-  const rows = M.withBindings(M.settingRows("SUPER + A"), M.bindRows(records), {})
+  const rows = M.withBindings(M.settingRows("SUPER + A", false, [], M.SKIPPED), M.bindRows(records), {})
   for (const query of ["wheely settings", "wheel", "preferences"])
-    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(), ["backdrop", "ring", "shortcut"], query)
+    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(),
+      ["backdrop", "folders", "ring", "shortcut", "skipped"], query)
   for (const query of ["wheely shortcut", "shortcut", "keybind"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
   for (const query of ["wheely ring", "ring", "slices", "pin"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "ring", query + " misses the ring row")
   for (const query of ["backdrop", "blur", "dim"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "backdrop", query + " misses the backdrop row")
-  assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE"), rows[0]), 0, "saving a key lost the row")
-  assert.deepEqual(M.settingRows("SUPER + A", true).map(r => r.trail), ["SUPER + A", "Custom", ""])
+  assert.equal(M.search(rows, "searched folders", 40, {})[0]?.setting, "folders")
+  assert.equal(M.search(rows, "skip", 40, {})[0]?.setting, "skipped")
+  assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE", false, [], M.SKIPPED), rows[0]), 0, "saving a key lost the row")
+  assert.deepEqual(M.settingRows("SUPER + A", true, ["/mnt"], ["a", "b"]).map(r => r.trail),
+    ["SUPER + A", "Custom", "", "Home + 1", "2"])
   assert.equal(rows[1].trail, "Bar")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
@@ -517,21 +526,19 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     { appId: "firefox.desktop", appIcon: "firefox", label: "Firefox", kind: M.KIND.app, keywords: "firefox" },
     { label: "Firefox", address: "0x1", kind: M.KIND.window, keywords: "firefox" },
     { label: "notes.md", path: "/home/test/notes.md" }, { label: "42", copy: "42" },
-    ...M.settingRows("SUPER + A")]
+    ...M.settingRows("SUPER + A", false, [], M.SKIPPED)]
   assert.deepEqual(index.map(r => M.pinnable(r)),
-    [true, true, true, true, true, false, false, false, false, false, false])
+    [true, true, true, true, true, false, false, false, false, false, false, false, false])
   assert.deepEqual(M.ringOf(index, ["app:firefox.desktop", "omarchy.clipboard", "gone", "setting:ring",
                                     "system", "omarchy.audio"]).map(r => r.label),
     ["Firefox", "Clipboard", "System", "Audio"])
   // The editor's search lists only what a ring can hold, and a sigil opens no other source there.
-  const binding = name => new Function("root", "MenuIndex", "return " + wheelSource
-    .match(new RegExp("readonly property \\w+ " + name + ": ([^]*?)\\n  (?:readonly )?property"))[1])
   const finder = { editingRing: true, query: "/fire", term: "fire", index, resultLimit: 40, uses: {} }
-  finder.mode = binding("mode")(finder, M)
-  assert.deepEqual(binding("results")(finder, M).map(r => r.appId || r.address), ["firefox.desktop"],
+  finder.mode = binding("mode", { root: finder, MenuIndex: M })
+  assert.deepEqual(binding("results", { root: finder, MenuIndex: M }).map(r => r.appId || r.address), ["firefox.desktop"],
     "the ring editor offered what a ring cannot hold")
   finder.editingRing = false; finder.mode = ""
-  assert.equal(binding("results")(finder, M).length, 2)
+  assert.equal(binding("results", { root: finder, MenuIndex: M }).length, 2)
 
   // The editor edits the ring as drawn, saving each change; the bar's ring is where a first edit starts.
   const saved = []
@@ -613,6 +620,72 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
   assert.deepEqual([ringed.editingRing, did], [false, []], "esc did not leave the editor, or closed the wheel")
 }
 console.log("ok: the ring takes what search finds, and its editor adds, moves, removes and goes back to the bar")
+
+// Until a list changes, `/` scans as it always has; folders outside home join that one fd, and a
+// skip with a slash anchors under home, the first folder, as fd does. Run against fd itself.
+{
+  const home = "/home/test"
+  assert.equal(M.scanCommand([], M.SKIPPED, home).join(" "),
+    "fd --hidden --max-depth 6 --exclude .cache --exclude .git --exclude node_modules . /home/test")
+  assert.equal(M.scanCommand(["/mnt"], ["~/Android"], home).join(" "), "fd --hidden --max-depth 6 --exclude /Android/ . /home/test /mnt")
+  const tree = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "wheel-scan-"))
+  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/p/node_modules/m", "home/1/2/3/4/5/6/deep", "mnt/a"])
+    fs.mkdirSync(path.dirname(path.join(tree, name)), { recursive: true }), fs.writeFileSync(path.join(tree, name), "")
+  const command = M.scanCommand([tree + "/mnt"], ["node_modules", "~/Android"], tree + "/home")
+  const found = require("node:child_process").execFileSync(command[0], command.slice(1),
+    { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })
+  assert.deepEqual(found.split("\n").filter(Boolean).map(p => p.slice(tree.length)).sort(),
+    ["/home/.claude/", "/home/.claude/CLAUDE.md", "/home/1/", "/home/1/2/", "/home/1/2/3/", "/home/1/2/3/4/",
+     "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/a"])
+  fs.rmSync(tree, { recursive: true })
+
+  // Typing suggests: folders under home to skip, from the scan, and subfolders outside home to search.
+  const files = M.parseFiles("/home/test/Android/\n/home/test/Android/README\n/mnt/android/\n")
+  assert.deepEqual(M.fileRows(files, "andr", 40, home, true).map(r => r.path), ["/home/test/Android/"])
+  assert.deepEqual(M.subfolderRows(["/home", "/media", "/mnt", "/home/test/x"], "/m", home).map(r => r.path), ["/media/", "/mnt/"])
+  assert.deepEqual(M.subfolderRows(["/home"], "/", home).concat(M.subfolderRows(["/home/test/x"], "/home/test/", home)), [],
+    "home, or a folder in or around it, was offered")
+  assert.deepEqual([M.listEntry("/home/test/Android/", home), M.listEntry("/mnt/share/", home)], ["~/Android", "/mnt/share"])
+
+  // Enter adds the suggestion picked, once; Del removes and the next entry takes the place; an emptied
+  // list is its default again. Each change is saved, and the rest of wheel.json stays.
+  const saved = []
+  const disk = { raw: '{ "slices": ["system"] }', text() { return this.raw }, setText(raw) { this.raw = raw; saved.push(JSON.parse(raw)) } }
+  const ls = { query: "", listing: "", savedFolders: null, savedSkipped: null, resultIndex: 0, resultLimit: 40, home, files,
+    subfolderPaths: ["/mnt"], get folders() { return this.savedFolders || [] }, get skipped() { return this.savedSkipped || M.SKIPPED },
+    get listed() { return this.listing === "skipped" ? this.skipped : this.folders },
+    get results() { return binding("results", { root: this, MenuIndex: M }) }, drops: 0, dropScan() { this.drops++ }, scanFiles() {} }
+  for (const name of ["edit", "addEntry", "removeEntry", "saveList"]) ls[name] = method(wheelSource, name, { root: ls, ringFile: disk, MenuIndex: M })
+  ls.query = "wheely"; ls.edit({ setting: "skipped" })
+  assert.deepEqual([ls.query, ls.results.map(r => r.label + r.trail)], ["", [".cacheanywhere", ".gitanywhere", "node_modulesanywhere"]])
+  ls.query = "andr"
+  assert.deepEqual(ls.results.map(r => r.path), ["/home/test/Android/"], "a skip was offered that is no folder under home")
+  ls.addEntry(ls.results[0])
+  ls.resultIndex = 1; ls.removeEntry()
+  assert.deepEqual([ls.results.map(r => r.label), ls.resultIndex, saved.at(-1)],
+    [[".cache", "node_modules", "~/Android"], 1, { slices: ["system"], skipped: [".cache", "node_modules", "~/Android"] }])
+  assert.equal(ls.drops, 2, "a saved list kept the old scan")
+  ls.edit({ setting: "folders" })
+  ls.query = "/m"; ls.addEntry(ls.results[0]); ls.query = "/m"; ls.addEntry(ls.results[0])
+  assert.deepEqual(saved.at(-1).folders, ["/mnt"], "a folder was added twice")
+  ls.resultIndex = 0; ls.removeEntry()
+  assert.equal("folders" in saved.at(-1), false, "an emptied list did not go back to its default")
+  // Typed into a list, `/` is a path, not file search; an untyped list still shows, and the empty folders list says why.
+  assert.equal(binding("mode", { root: { listing: "folders", query: "/mnt" }, MenuIndex: M }), "")
+  assert.equal(binding("searching", { root: { listing: "skipped", query: "" } }), true, "an empty list editor hid its list")
+  assert.equal(binding("emptyText", { root: { listing: "folders", query: "" } }), "Home is always searched")
+
+  // Del and Esc are the list's until something is typed.
+  const did = []
+  const listed = { listing: "folders", query: "/mn", queryAt: 0, results: [], resultIndex: 0, removeEntry: () => did.push("remove"),
+    get searching() { return binding("searching", { root: this }) } }
+  const listKey = keymap("plugins/xpo.wheel/MenuKeys.js", listed)
+  assert.equal(listKey("Key_Delete").accepted, false, "del left the field while typing")
+  listKey("Key_Escape")
+  listKey("Key_Delete"); listKey("Key_Escape")
+  assert.deepEqual([did, listed.listing], [["remove"], ""], "del or esc missed the list")
+}
+console.log("ok: file search scans as before until its lists change, and its lists suggest, add and remove")
 
 // The host closes peers without exposing its panel registries to the wheel.
 const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }

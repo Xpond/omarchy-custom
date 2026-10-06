@@ -164,9 +164,10 @@ function livePanels(live) {
   return out
 }
 
-function ringIds(raw) {
-  var cfg = parse(raw)
-  return (cfg.slices && cfg.slices.length) ? cfg.slices : null
+// A list wheel.json keeps, or null for its default: an empty list is the default too.
+function listIn(raw, key) {
+  var list = parse(raw)[key]
+  return list && list.length ? list : null
 }
 
 function barWidgets(raw) {
@@ -318,11 +319,11 @@ function ringOf(index, keys) {
   return out
 }
 
-// wheel.json with its slices replaced, or gone to follow the bar; anything else in it stays.
-function withSlices(raw, keys) {
+// wheel.json with one list replaced, or gone back to its default; anything else in it stays.
+function withList(raw, key, list) {
   var cfg = parse(raw)
-  if (keys) cfg.slices = keys
-  else delete cfg.slices
+  if (list) cfg[key] = list
+  else delete cfg[key]
   return JSON.stringify(cfg, null, 2) + "\n"
 }
 
@@ -453,13 +454,17 @@ function withBindings(rows, binds, items) {
 }
 
 // Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
-function settingRows(shortcut, customRing) {
+function settingRows(shortcut, customRing, folders, skipped) {
   return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
             keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
           { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
             setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" },
           { icon: "󰂵", label: "Backdrop", trail: "", kind: KIND.slice, setting: "backdrop",
-            keywords: "wheely settings preferences backdrop background blur dim darken frost glass scrim tint" }]
+            keywords: "wheely settings preferences backdrop background blur dim darken frost glass scrim tint" },
+          { icon: "󰥨", label: "Searched folders", trail: "Home" + (folders.length ? " + " + folders.length : ""),
+            kind: KIND.slice, setting: "folders", keywords: "wheely settings preferences file search searched folders outside" },
+          { icon: "󱧸", label: "Skipped folders", trail: String(skipped.length), kind: KIND.slice,
+            setting: "skipped", keywords: "wheely settings preferences file search skipped skip exclude ignore folders" }]
 }
 
 // The user's shell.toml with [menu] scrim-alpha set, read as the shell reads it; other lines stay.
@@ -582,6 +587,41 @@ function termOf(query) {
   return modeOf(q) ? q.slice(1) : q
 }
 
+// What `/` has always skipped, until the list is changed: a name skips that folder anywhere.
+var SKIPPED = [".cache", ".git", "node_modules"]
+
+// The scan `/` has always run, over the folders added outside home too. fd anchors a path only to
+// the first folder it is given, so a skip with a slash takes effect under home.
+function scanCommand(folders, skipped, home) {
+  var command = ["fd", "--hidden", "--max-depth", "6"]
+  for (var i = 0; i < skipped.length; i++) {
+    var skip = String(skipped[i])
+    if (skip.indexOf("/") < 0) command.push("--exclude", skip)
+    else if (skip.indexOf("~/") === 0) command.push("--exclude", skip.slice(1) + "/")
+  }
+  return command.concat([".", home], folders)
+}
+
+// A folder as a list writes it: from ~ when home holds it, without fd's closing slash.
+function listEntry(path, home) {
+  var p = String(path).replace(/\/$/, "")
+  return p.indexOf(home + "/") === 0 ? "~" + p.slice(home.length) : p
+}
+
+function listedRows(name, list) {
+  return list.map(function (entry) {
+    return { icon: name === "folders" ? "󰉋" : "󱧸", label: entry, trail: entry.indexOf("/") < 0 ? "anywhere" : "" }
+  })
+}
+
+// The subfolders a typed path starts, as a shell completes one; home and the folders holding it
+// are searched already.
+function subfolderRows(paths, typed, home) {
+  return paths.filter(function (p) {
+    return p.indexOf(typed) === 0 && (p + "/").indexOf(home + "/") !== 0 && home.indexOf(p + "/") !== 0
+  }).map(function (p) { return fileRow(p + "/", home) })
+}
+
 var NO_FILES = { paths: [], lower: [] }
 
 // fd marks directories with trailing slashes; fold case and find names once per scan.
@@ -622,8 +662,9 @@ function pathPayload(path) {
   return JSON.stringify(name ? { dir: dirOf(p), select: name } : { dir: dirOf(p) })
 }
 
-// Rank paths by name position and length; materialize rows only for winners.
-function fileRows(files, term, limit, home) {
+// Rank paths by name position and length; materialize rows only for winners. `homeFolders` keeps
+// only folders under home, the ones a skip can take.
+function fileRows(files, term, limit, home, homeFolders) {
   var src = files || NO_FILES
   var q = String(term || "").trim().toLowerCase()
   if (!q) return []
@@ -632,6 +673,7 @@ function fileRows(files, term, limit, home) {
   var buckets = [[], [], []]
   for (var i = 0; i < src.lower.length; i++) {
     var low = src.lower[i]
+    if (homeFolders && (low.charCodeAt(low.length - 1) !== 47 || src.paths[i].indexOf(home + "/") !== 0)) continue
     var matched = true
     for (var t = 0; t < terms.length; t++) {
       if (low.indexOf(terms[t]) === -1) { matched = false; break }
