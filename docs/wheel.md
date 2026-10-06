@@ -577,6 +577,9 @@ release of the press that opened the wheel fires a flick. Press and release reac
 shell as separate processes, so a closing tap's release can land before its press, and
 a release that fired or reopened would leave the wheel up.
 
+**Wheely ring** reads `Bar` while the ring follows the bar and `Custom` once it
+has been changed; Enter opens the ring editor (The ring).
+
 ## What it remembers
 
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
@@ -617,29 +620,38 @@ whether or not it has a disc. Omarchy's own panels come through its menu.
 Clones borrow their source's mark, Weather uses its widget's own glyph, and
 unknown panels a generic one.
 
-To choose the ring yourself, write `~/.config/omarchy/wheel.json`:
+To choose the ring yourself, open the **Wheely ring** setting: the ring becomes
+its own editor, starting from the bar's ring. Type to find anything, and Enter
+adds it after the selected slice, or last when none is. Del removes the selected
+slice, Shift+←/→ swaps it with its neighbour, across north too, and Esc is done.
+Ctrl+R, pressed twice, resets the ring to the bar's widgets, as removing the
+last slice does. Every change is saved as it is made, to
+`~/.config/omarchy/wheel.json`:
 
 ```json
 {
   "slices": [
     "omarchy.audio",
-    "omarchy.network",
+    "app:chromium",
     "omarchy.clipboard",
     "system",
-    "trigger.capture",
-    "style"
+    "trigger.capture"
   ]
 }
 ```
 
-Each id is either a panel — `omarchy.audio`, `network`, `bluetooth`, `monitor`,
-`clock`, `tailscale`, `agents`, `dropbox`, `power`, `clipboard` — or a menu id from
-`omarchy-menu.jsonc`. A menu id that has an action runs it; one that is a
-submenu drills the ring into it. Ids that name nothing are dropped. The file is
-watched, so the ring changes as you save; delete it to go back to the bar's
-widgets.
+A slice is the key its picks are counted under (What it remembers): a panel's
+plugin id, a menu id from `omarchy-menu.jsonc`, `app:` and a desktop id, or a
+theme, font or keybinding command. So the ring takes anything search finds,
+Weather, clones and third-party panels included, but no window, file or answer,
+whose key would not outlast it, and no setting. An app wears its own icon, as
+in search; a menu id with an action runs it, and a submenu drills the ring into
+it. A key that names nothing is dropped, and the editor saves the ring as drawn,
+so a slice that names nothing today, such as a widget taken off the bar, is gone
+after the next edit. The file is watched, so a hand edit shows as you save, but
+the editor writes it back without comments, keeping any other keys.
 
-Every icon in that catalogue is one the widget itself already draws. Tailscale
+Every icon in `PANELS` is one the widget itself already draws. Tailscale
 and Dropbox have no Nerd Font glyph — Omarchy renders each as a QML shape of
 its own — so those two carry an `iconFile` and the wheel loads that component
 off `omarchyPath`. There is no codepoint that stands in for a product's mark,

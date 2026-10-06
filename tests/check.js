@@ -323,7 +323,7 @@ assert.deepEqual([levels, copied], [["up", "up", "up"], ["dismissed"]])
 console.log("ok: the field edits the query, the wheel keeps its shortcuts, and a path can be taken away or opened in a terminal")
 
 // The placeholder names every search sigil, so a new mode cannot hide.
-const placeholder = wheelSource.match(/visible: !root\.searching\n\s+text: "([^"]+)"/)[1]
+const placeholder = wheelSource.match(/visible: !root\.searching\n\s+text: root\.editingRing \? "[^"]+" : "([^"]+)"/)[1]
 for (const sigil of Object.keys(M.MODES)) assert.ok(placeholder.includes(sigil + " "), `the placeholder hides ${sigil}`)
 console.log("ok: the search placeholder names every search sigil")
 
@@ -394,9 +394,15 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   assert.deepEqual(M.bindRows(records).map(r => r.label), ["Omarchy menu", "Theme menu"],
     "the wheel's own bindings are rows")
   const rows = M.withBindings(M.settingRows("SUPER + A"), M.bindRows(records), {})
-  for (const query of ["wheely shortcut", "wheely settings", "wheel", "shortcut", "keybind", "preferences"])
+  for (const query of ["wheely settings", "wheel", "preferences"])
+    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(), ["ring", "shortcut"], query)
+  for (const query of ["wheely shortcut", "shortcut", "keybind"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
+  for (const query of ["wheely ring", "ring", "slices", "pin"])
+    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "ring", query + " misses the ring row")
   assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE"), rows[0]), 0, "saving a key lost the row")
+  assert.deepEqual(M.settingRows("SUPER + A", true).map(r => r.trail), ["SUPER + A", "Custom"])
+  assert.equal(rows[1].trail, "Bar")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
   assert.equal(M.bindingAt(records, "SUPER + CTRL + SHIFT + SPACE"), "Theme menu", "another spelling hid a binding")
@@ -463,6 +469,112 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   assert.equal(setRow.edited, "shortcut")
 }
 console.log("ok: settings are rows, the wheel's own bindings are not, and the shortcut row records, judges and saves")
+
+// The ring holds what search finds, by the keys picks are counted under, so a hand-written list of
+// panel and menu ids still reads. A row with no key of its own (a window, a file, an answer) or a
+// setting cannot join it, and a key that names nothing is dropped.
+{
+  const index = [...M.panelRows(M.panels({ "omarchy.audio": true, "omarchy.network": true })),
+    { id: "system", node: "system", icon: "x", label: "System", kind: M.KIND.menu },
+    { appId: "firefox.desktop", appIcon: "firefox", label: "Firefox", kind: M.KIND.app, keywords: "firefox" },
+    { label: "Firefox", address: "0x1", kind: M.KIND.window, keywords: "firefox" },
+    { label: "notes.md", path: "/home/test/notes.md" }, { label: "42", copy: "42" },
+    ...M.settingRows("SUPER + A")]
+  assert.deepEqual(index.map(r => M.pinnable(r)),
+    [true, true, true, true, true, false, false, false, false, false])
+  assert.deepEqual(M.ringOf(index, ["app:firefox.desktop", "omarchy.clipboard", "gone", "setting:ring",
+                                    "system", "omarchy.audio"]).map(r => r.label),
+    ["Firefox", "Clipboard", "System", "Audio"])
+  // The editor's search lists only what a ring can hold, and a sigil opens no other source there.
+  const binding = name => new Function("root", "MenuIndex", "return " + wheelSource
+    .match(new RegExp("readonly property \\w+ " + name + ": ([^]*?)\\n  (?:readonly )?property"))[1])
+  const finder = { editingRing: true, query: "/fire", term: "fire", index, resultLimit: 40, uses: {} }
+  finder.mode = binding("mode")(finder, M)
+  assert.deepEqual(binding("results")(finder, M).map(r => r.appId || r.address), ["firefox.desktop"],
+    "the ring editor offered what a ring cannot hold")
+  finder.editingRing = false; finder.mode = ""
+  assert.equal(binding("results")(finder, M).length, 2)
+
+  // The editor edits the ring as drawn, saving each change; the bar's ring is where a first edit starts.
+  const saved = []
+  const disk = { raw: '{ "other": 1 }', text() { return this.raw }, setText(raw) { this.raw = raw; saved.push(raw) } }
+  const ed = { index, ringIds: null, selected: 0, query: "fire", path: ["system"], editingRing: false, resetAsked: true,
+    panels: M.panels({ "omarchy.audio": true, "omarchy.network": true }),
+    get ring() { return this.ringIds ? M.ringOf(this.index, this.ringIds) : this.panels },
+    get slices() { return this.ring }, get sliceCount() { return this.ring.length },
+    select(i) { this.selected = i }, enter(node) { this.path = []; this.query = ""; this.selected = -1 },
+    countUse() { throw new Error("adding to the ring counted a pick") },
+    dismiss() { throw new Error("the ring editor closed the wheel") } }
+  const scope = { root: ed, ringFile: disk, MenuIndex: M, Qt: {} }
+  for (const name of ["edit", "run", "pin", "unpin", "moveSlice", "resetRing", "saveRing"])
+    ed[name] = method(wheelSource, name, scope)
+  const ring = () => ed.ring.map(M.keyOf).join(" ") + " @" + ed.selected
+  const written = () => JSON.parse(saved.at(-1))
+
+  ed.edit({ setting: "ring" })
+  assert.deepEqual([ed.editingRing, ed.resetAsked, ed.path, ed.query], [true, false, [], ""])
+  assert.equal(ring(), "omarchy.audio omarchy.network omarchy.clipboard @-1", "the editor did not start from the bar")
+  ed.select(0); ed.query = "fire"
+  ed.run(index[4])
+  assert.equal(ring(), "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard @1",
+    "a pick did not land after the selected slice")
+  assert.deepEqual(written(), { other: 1, slices: ["omarchy.audio", "app:firefox.desktop", "omarchy.network",
+                                                 "omarchy.clipboard"] }, "the file lost what else it held")
+  assert.equal(ed.query, "", "a pick left the query up")
+  ed.select(3); ed.run(index[4])
+  assert.equal(ring() + " " + saved.length, "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard @1 1",
+    "a slice already on the ring was added twice")
+  ed.select(-1); ed.run(index[3])
+  assert.equal(ring(), "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard system @4",
+    "with nothing selected a pick did not go last")
+  ed.moveSlice(1)
+  assert.equal(ring(), "system app:firefox.desktop omarchy.network omarchy.clipboard omarchy.audio @0",
+    "past the last slice a move did not wrap to the first")
+  ed.moveSlice(-1); ed.moveSlice(-1)
+  assert.equal(ring(), "omarchy.audio app:firefox.desktop omarchy.network system omarchy.clipboard @3")
+  ed.unpin(); ed.unpin()
+  assert.equal(ring(), "omarchy.audio app:firefox.desktop omarchy.network @2", "del did not keep its place")
+  assert.deepEqual(written().slices, ["omarchy.audio", "app:firefox.desktop", "omarchy.network"])
+
+  // Ctrl+R asks once and acts on the second; an emptied ring follows the bar as well.
+  const writes = saved.length
+  ed.resetRing()
+  assert.equal(ed.resetAsked + " " + saved.length, "true " + writes, "ctrl+r acted on the first press")
+  ed.resetRing()
+  assert.deepEqual([ed.ringIds, ed.resetAsked, written()], [null, false, { other: 1 }])
+  ed.resetRing()
+  assert.equal(ed.resetAsked + " " + saved.length, "false " + (writes + 1), "the bar's ring asked to be reset")
+  ed.select(-1); ed.run(index[3]); ed.select(0)
+  ed.unpin(); ed.unpin(); ed.unpin(); ed.unpin()
+  assert.deepEqual([ed.ringIds, written()], [null, { other: 1 }], "an emptied ring did not follow the bar")
+}
+
+// In the ring editor Del, Shift+arrows and Esc belong to the ring until a query is typed, and then
+// to the field. Ctrl+R's question is taken back by any key but a modifier on its way to Ctrl+R.
+{
+  const did = []
+  const ringed = { editingRing: true, resetAsked: false, query: "", queryAt: 0,
+    get searching() { return this.query.length > 0 },
+    unpin: () => did.push("unpin"), moveSlice: step => did.push("move " + step),
+    resetRing() { did.push("reset") }, rotate: step => did.push("rotate " + step),
+    up: () => false, dismiss: () => did.push("dismiss") }
+  const ringKey = keymap("plugins/xpo.wheel/MenuKeys.js", ringed)
+  ringKey("Key_Delete"); ringKey("Key_Right", shift); ringKey("Key_Left", shift); ringKey("Key_Right")
+  assert.deepEqual(did.splice(0), ["unpin", "move 1", "move -1", "rotate 1"])
+  ringed.query = "fi"
+  for (const [key, modifiers] of [["Key_Delete", 0], ["Key_Left", shift], ["Key_Right", shift]])
+    assert.equal(ringKey(key, modifiers).accepted, false, key + " left the field while typing")
+  ringKey("Key_Escape")
+  assert.deepEqual([ringed.query, ringed.editingRing], ["", true], "esc on a query left the editor")
+  ringKey("Key_R", ctrl); ringed.resetAsked = true
+  ringKey("Key_Control", ctrl); ringKey("Key_R", ctrl)
+  assert.deepEqual([did.splice(0), ringed.resetAsked], [["reset", "reset"], true], "a modifier took the question back")
+  ringKey("Key_A", 0, "a")
+  assert.equal(ringed.resetAsked, false, "another key left ctrl+r armed")
+  ringKey("Key_Escape")
+  assert.deepEqual([ringed.editingRing, did], [false, []], "esc did not leave the editor, or closed the wheel")
+}
+console.log("ok: the ring takes what search finds, and its editor adds, moves, removes and goes back to the bar")
 
 // The host closes peers without exposing its panel registries to the wheel.
 const openPeers = { "xpo.wheel": true, "xpo.files": true, "omarchy.menu": true }

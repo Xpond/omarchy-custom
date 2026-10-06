@@ -5,6 +5,20 @@
 function onKey(wheel, event) {
   // A setting row being changed takes every key until Enter or Esc.
   if (wheel.editing) { wheel.record(event); event.accepted = true; return }
+  // The ring editor: Del and Shift+arrows change the ring, and Esc is done. Ctrl+R resets it when
+  // pressed again; any other key, a modifier on its way to a combo aside, takes the question back.
+  if (wheel.editingRing) {
+    var again = (event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_R
+    if (!again && shortcutOf(event) !== null) wheel.resetAsked = false
+    if (again) { wheel.resetRing(); event.accepted = true; return }
+    if (!wheel.searching) {
+      if (event.key === Qt.Key_Delete) { wheel.unpin(); event.accepted = true; return }
+      if (event.key === Qt.Key_Escape) { wheel.editingRing = false; event.accepted = true; return }
+      if ((event.modifiers & Qt.ShiftModifier) && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+        wheel.moveSlice(event.key === Qt.Key_Right ? 1 : -1); event.accepted = true; return
+      }
+    }
+  }
   if (event.modifiers & Qt.ControlModifier) {
     switch (event.key) {
     case Qt.Key_U:

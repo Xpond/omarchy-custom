@@ -85,11 +85,24 @@ Item {
 
         Text {
           anchors.centerIn: parent
-          visible: !modelData.iconFile
+          visible: (!modelData.appIcon || appImage.status === Image.Error) && !modelData.iconFile
           text: modelData.icon
           color: slice.glyphColor
           font.family: modelData.iconFont || Style.font.menuFamily
           font.pixelSize: slice.glyphSize
+        }
+        // A pinned app wears its own icon, as its search row does.
+        Image {
+          id: appImage
+          anchors.centerIn: parent
+          visible: !!modelData.appIcon && status !== Image.Error
+          width: slice.glyphSize
+          height: slice.glyphSize
+          source: modelData.appIcon ? wheel.appLibrary.iconSource(modelData.appIcon) : ""
+          sourceSize.width: slice.glyphSize
+          sourceSize.height: slice.glyphSize
+          fillMode: Image.PreserveAspectFit
+          asynchronous: true
         }
         PanelIcon {
           omarchyPath: wheel.omarchyPath

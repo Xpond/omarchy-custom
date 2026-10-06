@@ -304,18 +304,26 @@ function childrenOf(items, parent, cond) {
   return out
 }
 
-function ringOf(items, ids, cond) {
-  var byPlugin = {}
-  var catalogue = panels(null).concat(EXTRAS)
-  for (var i = 0; i < catalogue.length; i++) byPlugin[catalogue[i].plugin] = catalogue[i]
+// A ring holds what search finds and keeps a key of its own: no window, file, answer or setting.
+function pinnable(e) {
+  return !!keyOf(e) && !e.setting
+}
+
+// The ring's keys as the search rows they name, in order; a key that names nothing is dropped.
+function ringOf(index, keys) {
+  var byKey = {}
+  for (var i = 0; i < index.length; i++) if (pinnable(index[i])) byKey[keyOf(index[i])] = index[i]
   var out = []
-  for (var j = 0; j < ids.length; j++) {
-    var id = String(ids[j])
-    if (byPlugin[id]) { out.push(byPlugin[id]); continue }
-    var e = items[id]
-    if (e && shows(id, e, cond)) out.push(entryOf(id, e, cond))
-  }
+  for (var j = 0; j < keys.length; j++) if (byKey[keys[j]]) out.push(byKey[keys[j]])
   return out
+}
+
+// wheel.json with its slices replaced, or gone to follow the bar; anything else in it stays.
+function withSlices(raw, keys) {
+  var cfg = parse(raw)
+  if (keys) cfg.slices = keys
+  else delete cfg.slices
+  return JSON.stringify(cfg, null, 2) + "\n"
 }
 
 function ringSlices(items, path, cond, ring) {
@@ -445,9 +453,11 @@ function withBindings(rows, binds, items) {
 }
 
 // Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
-function settingRows(shortcut) {
+function settingRows(shortcut, customRing) {
   return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
-            keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" }]
+            keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
+          { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
+            setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" }]
 }
 
 var SHORTCUT = "SUPER + A"
