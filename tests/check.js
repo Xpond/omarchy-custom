@@ -395,13 +395,15 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
     "the wheel's own bindings are rows")
   const rows = M.withBindings(M.settingRows("SUPER + A"), M.bindRows(records), {})
   for (const query of ["wheely settings", "wheel", "preferences"])
-    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(), ["ring", "shortcut"], query)
+    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(), ["backdrop", "ring", "shortcut"], query)
   for (const query of ["wheely shortcut", "shortcut", "keybind"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
   for (const query of ["wheely ring", "ring", "slices", "pin"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "ring", query + " misses the ring row")
+  for (const query of ["backdrop", "blur", "dim"])
+    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "backdrop", query + " misses the backdrop row")
   assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE"), rows[0]), 0, "saving a key lost the row")
-  assert.deepEqual(M.settingRows("SUPER + A", true).map(r => r.trail), ["SUPER + A", "Custom"])
+  assert.deepEqual(M.settingRows("SUPER + A", true).map(r => r.trail), ["SUPER + A", "Custom", ""])
   assert.equal(rows[1].trail, "Bar")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
@@ -416,6 +418,42 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
        ["  ALT + SPACE \r\n", "ALT + SPACE"], ["SPACE\n", "SUPER + A"], ["", "SUPER + A"],
        ['super + b") os.execute("touch pwned\n', "SUPER + A"]])
     assert.equal(M.shortcutIn(saved), key, JSON.stringify(saved))
+
+  // The backdrop sets one key of the user's shell.toml, as the shell's own reader reads it, and keeps the rest.
+  const parseShell = method(fs.readFileSync((process.env.OMARCHY_PATH || "/usr/share/omarchy")
+    + "/shell/Commons/Color.qml", "utf8"), "parseShell", {})
+  for (const [raw, out] of [[undefined, "[menu]\nscrim-alpha = 0.3\n"],
+       ["[font]\nbase-size = 12\n", "[font]\nbase-size = 12\n\n[menu]\nscrim-alpha = 0.3\n"],
+       ["[menu] # mine\nscrim-alpha = 0.5\n[font]\nbase-size = 12", "[menu] # mine\nscrim-alpha = 0.3\n[font]\nbase-size = 12\n"],
+       ['[menu]\nbackground = "#000"\n\n[polkit]\nscrim-alpha = 0.9\n',
+        '[menu]\nbackground = "#000"\nscrim-alpha = 0.3\n\n[polkit]\nscrim-alpha = 0.9\n']]) {
+    assert.equal(M.withScrimAlpha(raw, 0.3), out, JSON.stringify(raw))
+    assert.deepEqual({ ...parseShell(out) }, { ...parseShell(raw), "menu.scrim-alpha": "0.3" }, "the shell reads " + out)
+  }
+
+  // Enter hands ←/→ the backdrop, snapped to a tenth; each step saves the dim, and the blur only when
+  // it turns at 0%, since that reloads Hyprland. Every key stays the row's until Enter or Esc.
+  const shellFile = { raw: "", text() { return this.raw }, setText(raw) { this.raw = raw } }
+  const blurFile = { raw: "", setText(raw) { this.raw += raw } }
+  const bd = { editing: "", drawn: 32, get backdrop() { return this.editing ? this.backdropDraft : this.drawn } }
+  for (const name of ["edit", "setBackdrop"])
+    bd[name] = method(wheelSource, name, { root: bd, shellFile, blurFile, MenuIndex: M })
+  const backdropKey = keymap("plugins/xpo.wheel/MenuKeys.js", bd)
+  const state = () => [bd.editValue, parseShell(shellFile.raw)["menu.scrim-alpha"], blurFile.raw]
+  bd.edit({ setting: "backdrop" })
+  backdropKey("Key_Right")
+  assert.deepEqual(state(), ["40%", "0.4", ""], "a step from 32")
+  for (let i = 0; i < 5; i++) backdropKey("Key_Left")
+  assert.deepEqual(state(), ["0%", "0", "off\n"], "0% is not clear")
+  backdropKey("Key_Right")
+  assert.deepEqual(state(), ["10%", "0.1", "off\non\n"], "10% is not blurred")
+  for (let i = 0; i < 10; i++) backdropKey("Key_Right")
+  assert.deepEqual(state(), ["100%", "1", "off\non\n"], "the backdrop passed opaque, or blur turned above 0%")
+  assert.equal(backdropKey("Key_A").accepted && bd.editing, "backdrop", "a key escaped the backdrop row")
+  backdropKey("Key_Return")
+  const entered = bd.editing
+  bd.edit({ setting: "backdrop" }); backdropKey("Key_Escape")
+  assert.deepEqual([entered, bd.editing], ["", ""], "enter or esc left the row taking keys")
 
   // Recording: a modifier alone waits, plain Esc gives up, plain Enter saves only a candidate,
   // and any other press is judged. shortcutOf's names are checked against real Qt in runtime.py.
@@ -481,7 +519,7 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     { label: "notes.md", path: "/home/test/notes.md" }, { label: "42", copy: "42" },
     ...M.settingRows("SUPER + A")]
   assert.deepEqual(index.map(r => M.pinnable(r)),
-    [true, true, true, true, true, false, false, false, false, false])
+    [true, true, true, true, true, false, false, false, false, false, false])
   assert.deepEqual(M.ringOf(index, ["app:firefox.desktop", "omarchy.clipboard", "gone", "setting:ring",
                                     "system", "omarchy.audio"]).map(r => r.label),
     ["Firefox", "Clipboard", "System", "Audio"])

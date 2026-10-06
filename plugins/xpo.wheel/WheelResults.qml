@@ -86,7 +86,8 @@ Item {
 
           readonly property real textBudget:
             Math.max(0, width - Style.font.iconLarge - spacing * 2 - chevron.width
-                        - (valueField.visible ? valueField.width + spacing : 0))
+                        - (valueField.visible ? valueField.width + spacing : 0)
+                        - (valueSlider.visible ? valueSlider.width + spacing : 0))
 
           Text {
             anchors.verticalCenter: parent.verticalCenter
@@ -161,7 +162,7 @@ Item {
           id: valueField
           anchors.verticalCenter: parent.verticalCenter
           anchors.right: resultRow.right
-          visible: !!modelData.setting && !resultCard.editing
+          visible: !!modelData.setting && !valueSlider.visible && !resultCard.editing
           width: valueText.implicitWidth + Style.spacing.controlPaddingX * 2
           height: valueText.implicitHeight + Style.spacing.xs * 2
           radius: height / 2
@@ -176,6 +177,22 @@ Item {
             font.family: Style.font.menuFamily
             font.pixelSize: Style.font.caption
           }
+        }
+
+        // The backdrop's is Omarchy's slider, moved by ←/→ only, so the pointer passes to the row.
+        PanelSlider {
+          id: valueSlider
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.right: resultRow.right
+          visible: modelData.setting === "backdrop"
+          enabled: false
+          width: Style.space(72)
+          bar: QtObject {
+            readonly property color foreground: resultCard.active ? Color.accent : Color.menu.text
+            readonly property color background: Color.menu.background
+          }
+          maximum: 100
+          value: wheel.backdrop
         }
 
         // An answer centers under its query and, like the query, overflows to the left.

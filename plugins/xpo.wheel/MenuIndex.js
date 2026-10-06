@@ -457,7 +457,24 @@ function settingRows(shortcut, customRing) {
   return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
             keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
           { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
-            setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" }]
+            setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" },
+          { icon: "󰂵", label: "Backdrop", trail: "", kind: KIND.slice, setting: "backdrop",
+            keywords: "wheely settings preferences backdrop background blur dim darken frost glass scrim tint" }]
+}
+
+// The user's shell.toml with [menu] scrim-alpha set, read as the shell reads it; other lines stay.
+function withScrimAlpha(raw, alpha) {
+  var ls = String(raw || "").replace(/\n$/, "").split("\n")
+  var line = "scrim-alpha = " + alpha, section = "", at = -1
+  for (var i = 0; i < ls.length; i++) {
+    var head = ls[i].match(/^\s*\[([A-Za-z0-9_-]+)\]\s*(#.*)?$/)
+    if (head) section = head[1]
+    if (section !== "menu") continue
+    if (/^\s*scrim-alpha\s*=/.test(ls[i])) { ls[i] = line; return ls.join("\n") + "\n" }
+    if (ls[i].trim()) at = i + 1
+  }
+  if (at >= 0) { ls.splice(at, 0, line); return ls.join("\n") + "\n" }
+  return (ls.join("\n").trim() ? ls.join("\n") + "\n\n" : "") + "[menu]\n" + line + "\n"
 }
 
 var SHORTCUT = "SUPER + A"
