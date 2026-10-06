@@ -63,6 +63,10 @@ Item {
                                                     MenuIndex.lines(root.fontText), root.currentFont)
   readonly property var bindRows: MenuIndex.bindRows(root.bindText)
   property string shortcut: MenuIndex.SHORTCUT
+  // The backdrop in percent as the shell draws it; while changed, the value the shell reads back next.
+  property int backdropDraft: 0
+  readonly property int backdrop: root.editing === "backdrop" ? root.backdropDraft
+    : Math.round(Color.menu.scrim.a * 100)
   readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
@@ -445,14 +449,15 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
-  // The ring row hands the home ring to its editor. The shortcut row records the next combo;
-  // Hyprland's bindings pause meanwhile, so a taken one arrives too.
+  // The ring row hands the home ring to its editor, and the backdrop row takes ←/→. The shortcut
+  // row records the next combo; Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
     if (e.setting === "ring") { root.enter(""); root.editingRing = true; root.resetAsked = false; return }
+    root.backdropDraft = root.backdrop
     root.editing = e.setting
     root.pending = ""
-    root.editValue = "Press a shortcut"
-    root.editNote = "esc cancels"
+    root.editValue = e.setting === "backdrop" ? root.backdrop + "%" : "Press a shortcut"
+    root.editNote = e.setting === "backdrop" ? "←→ adjusts" : "esc cancels"
   }
 
   // Plain Enter saves what was pressed, plain Esc gives up, and any other combo is the new candidate.
@@ -483,6 +488,15 @@ Item {
   function saveShortcut(combo) {
     root.shortcut = combo
     shortcutFile.setText(combo + "\n")
+  }
+
+  // Saved at once, so the backdrop behind the wheel shows it. Blur is on above 0%, and only turning
+  // it reloads Hyprland, which re-applies the layer rule to the open backdrop.
+  function setBackdrop(percent) {
+    if ((percent > 0) !== (root.backdrop > 0)) blurFile.setText(percent > 0 ? "on\n" : "off\n")
+    root.backdropDraft = percent
+    root.editValue = percent + "%"
+    shellFile.setText(MenuIndex.withScrimAlpha(shellFile.text(), percent / 100))
   }
 
   // A row joins the ring after the selected slice, or at the end; one already there is selected.
@@ -769,6 +783,26 @@ Item {
     onFileChanged: reload()
     onLoaded: root.shortcut = MenuIndex.shortcutIn(text())
     onLoadFailed: root.shortcut = MenuIndex.SHORTCUT
+    onSaved: hyprReload.running = true
+  }
+
+  // The shell watches this file and draws its [menu] scrim-alpha over the theme's. Re-read on change,
+  // so a write keeps what another writer just put here.
+  FileView {
+    id: shellFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/shell.toml"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+  }
+
+  // The backdrop's blur, as data the Hyprland block reads on reload.
+  FileView {
+    id: blurFile
+    path: Quickshell.env("HOME") + "/.config/omarchy/wheel-blur"
+    atomicWrites: true
+    printErrors: false
     onSaved: hyprReload.running = true
   }
 

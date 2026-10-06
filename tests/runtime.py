@@ -350,6 +350,35 @@ Scope {
     assert (home / ".config/omarchy/wheel-shortcut").read_text() == "rm -rf /\n"
     print("ok: saving reloads Hyprland once the key is written; edits by hand are read by the block's rule")
 
+    # The backdrop saves on every step, faster than key repeat: shell.toml ends on the last step and
+    # keeps what another writer put there first, and Hyprland reloads once the blur's turn is written.
+    home = base / "backdrop-home"
+    (home / ".config/omarchy").mkdir(parents=True)
+    (home / ".config/omarchy/shell.toml").write_text("[font]\nbase-size = 12\n")
+    run("backdrop-save", """
+  property int backdropDraft: 50
+  readonly property int backdrop: backdropDraft
+  property string editValue: ""
+  property int stage: 0
+  property var steps: [60, 70, 80, 90, 100, 80, 60, 40, 20, 0]
+  QtObject { id: bindList; property bool running: false }
+  Process { id: edit; command: ["sh", "-c", "printf '[font]\\\\nbase-size = 16\\\\n' > $HOME/.config/omarchy/shell.toml"] }
+""" + block(wheel, r"  FileView \{\n    id: shellFile") + "\n" + block(wheel, r"  FileView \{\n    id: blurFile") + "\n"
+        + reload.replace("wheel-shortcut", "wheel-blur") + "\n" + block(wheel, r"  function setBackdrop\(") + """
+  Timer { id: burst; interval: 5; repeat: true; onTriggered: root.steps.length ? root.setBackdrop(root.steps.shift()) : stop() }
+  Timer { interval: 150; running: true; repeat: true; onTriggered: {
+    if (burst.running) return
+    switch (root.stage++) {
+    case 0: edit.running = true; break
+    case 1: burst.start(); break
+    case 2: console.log("PASS"); Qt.quit()
+    }
+  } }
+""", {"HOME": str(home)})
+    assert (home / ".config/omarchy/shell.toml").read_text() == "[font]\nbase-size = 16\n\n[menu]\nscrim-alpha = 0\n"
+    assert (home / "reloads").read_text() == "off\n", "Hyprland reloaded other than after the blur's turn"
+    print("ok: the backdrop saves every step, keeps another writer's edit, and reloads Hyprland once blur turns")
+
     # The ring editor saves on every key, faster than key repeat when Shift+arrow is held: a write
     # reloaded behind a newer one must never put an older ring back. The rest of wheel.json stays.
     run("ring-save", '''

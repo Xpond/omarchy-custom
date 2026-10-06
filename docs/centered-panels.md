@@ -236,10 +236,10 @@ lines in a `.conf` file are **silently ignored** — no error, no warning,
 **`hyprctl keyword` cannot set layerrules** on this parser: *"keyword can't
 work with non-legacy parsers."* Edit the Lua and `hyprctl reload`.
 
-**`ignore_alpha` must sit below the scrim's own alpha.** Hyprland skips blur on
-regions it considers too transparent. At a 0.32 scrim a default threshold
-suppressed the blur entirely while the dim still rendered — which looks exactly
-like a broken scrim rather than a blur problem.
+**The scrim's rule has no `ignore_alpha`.** With one, Hyprland blurs only where
+the surface is more opaque than the threshold, so a lighter scrim loses its blur
+while the dim still renders — which looks exactly like a broken scrim. Without
+one, the blur covers the whole surface at any alpha.
 
 **Only the scrim surface is blurred.** Every other shell surface — the panels,
 `omarchy-wheel`, `omarchy-files`, `omarchy-clipboard` — draws a card over it
@@ -383,7 +383,8 @@ and look at it.
 | `panelScrimColor` | `Color.menu.scrim` | the one backdrop, behind panels, wheel, browser and clipboard alike |
 | `panelScrimHoldMs` | `150` | **must stay >= `closeFadeDuration`** or the backdrop drops out early |
 
-Installed blur strength comes from `config/hyprland.lua` (`size 4, passes 2`).
+Installed blur strength comes from `config/hyprland.lua` (`size 4, passes 2`);
+the wheel's **Backdrop** setting turns it off at 0% (`docs/wheel.md`, Settings).
 Put personal overrides after the managed block in your main Hyprland config.
 `passes` has the most effect; `passes 1` for a lighter frost.
 

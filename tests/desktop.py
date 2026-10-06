@@ -181,6 +181,13 @@ def check():
             subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"), key],
                            check=True, cwd=home, env=dict(os.environ, HOME=home))
             assert not (Path(home) / "pwned").exists()
+    # So is the blur file: "off" turns the backdrop's blur, and Hyprland's, off.
+    for saved in ("off\n", "on\n"):
+        with tempfile.TemporaryDirectory(prefix="omarchy-desktop-home-") as home:
+            (Path(home) / ".config/omarchy").mkdir(parents=True)
+            (Path(home) / ".config/omarchy/wheel-blur").write_text(saved)
+            subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"),
+                            "SUPER + A", saved.strip()], check=True, cwd=home, env=dict(os.environ, HOME=home))
     print("ok: shipped Lua installs press/release bindings on the saved key, render environment and shared blur")
 
 

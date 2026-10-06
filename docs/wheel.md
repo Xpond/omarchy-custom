@@ -580,6 +580,14 @@ a release that fired or reopened would leave the wheel up.
 **Wheely ring** reads `Bar` while the ring follows the bar and `Custom` once it
 has been changed; Enter opens the ring editor (The ring).
 
+**Backdrop** ends in Omarchy's own slider: how much the backdrop hides the desktop. Enter,
+then ←/→ step it by a tenth, saved at once so the backdrop behind the wheel shows it. 0% is
+a clear desktop; above it, each step darkens it over a blurred desktop. The tint is
+Omarchy's `[menu] scrim-alpha` in `~/.config/omarchy/shell.toml`, which its own menus draw
+too. The blur is `~/.config/omarchy/wheel-blur`, which the managed block reads like the
+shortcut's file (`off` turns it off, and Hyprland's own blur with it); only crossing 0%
+reloads Hyprland, which re-applies the layer rule to the open backdrop.
+
 ## What it remembers
 
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a

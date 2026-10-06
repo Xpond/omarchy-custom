@@ -3,7 +3,13 @@
 // Keep the key map pure enough to exercise without a running shell. The query
 // field types, deletes, moves and selects for itself; this is everything else.
 function onKey(wheel, event) {
-  // A setting row being changed takes every key until Enter or Esc.
+  // A setting row being changed takes every key until Enter or Esc; the backdrop's ←/→ step a tenth.
+  if (wheel.editing === "backdrop") {
+    var step = event.key === Qt.Key_Right ? 1 : event.key === Qt.Key_Left ? -1 : 0
+    if (step) wheel.setBackdrop(Math.max(0, Math.min(100, (Math.round(wheel.backdrop / 10) + step) * 10)))
+    else if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) wheel.editing = ""
+    event.accepted = true; return
+  }
   if (wheel.editing) { wheel.record(event); event.accepted = true; return }
   // The ring editor: Del and Shift+arrows change the ring, and Esc is done. Ctrl+R resets it when
   // pressed again; any other key, a modifier on its way to a combo aside, takes the question back.

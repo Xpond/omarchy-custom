@@ -1,12 +1,18 @@
 -- The compositor exports this before its startup callbacks launch Quickshell.
 hl.env("QSG_RENDER_LOOP", "threaded")
-hl.config({ decoration = { blur = { enabled = true, size = 4, passes = 2 } } })
 
--- Blur only the shared backdrop; blurring the overlays doubles the work.
+-- The wheel's backdrop row saves "off" here at 0%, as data; anything else keeps the backdrop blurred.
+local blur_file = io.open(os.getenv("HOME") .. "/.config/omarchy/wheel-blur")
+local backdrop_blur = not (blur_file and blur_file:read("*l") or ""):match("^%s*off%s*$")
+if blur_file then blur_file:close() end
+-- Omarchy leaves Hyprland's blur off; only the backdrop turns it on.
+if backdrop_blur then hl.config({ decoration = { blur = { enabled = true, size = 4, passes = 2 } } }) end
+
+-- Blur only the shared backdrop; blurring the overlays doubles the work. No ignore_alpha, so a light
+-- dim keeps its blur.
 hl.layer_rule({
   match = { namespace = "omarchy-panel-scrim" },
-  blur = true,
-  ignore_alpha = 0.05,
+  blur = backdrop_blur,
   no_anim = true,
   animation = "none",
 })
