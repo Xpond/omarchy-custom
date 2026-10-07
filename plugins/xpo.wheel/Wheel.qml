@@ -95,17 +95,20 @@ Item {
   property string listing: ""
   readonly property var listed: root.listing === "skipped" ? root.skipped : root.listing === "folders" ? root.folders : []
   readonly property var subfolderPaths: {
-    var out = []
-    for (var i = 0; i < subfolders.count; i++) out.push(subfolders.get(i, "filePath"))
+    var model = subfolders.item, out = []
+    for (var i = 0; model && i < model.count; i++) out.push(model.get(i, "filePath"))
     return out
   }
-  // The folder whose subfolders a path typed into the folders list would add.
-  FolderListModel {
+  // The folder whose subfolders a path typed into the folders list would add. Made only then:
+  // a model with no folder lists the shell's working directory, home, and watches it.
+  Loader {
     id: subfolders
-    folder: root.listing === "folders" && root.query.charAt(0) === "/"
-      ? "file://" + root.query.slice(0, root.query.lastIndexOf("/") + 1) : ""
-    showFiles: false
-    showHidden: true
+    active: root.listing === "folders" && root.query.charAt(0) === "/"
+    sourceComponent: FolderListModel {
+      folder: "file://" + root.query.slice(0, root.query.lastIndexOf("/") + 1)
+      showFiles: false
+      showHidden: true
+    }
   }
   // Hyprland's cached history goes stale; accumulate activeToplevel changes.
   property var focusOrder: []
@@ -529,7 +532,8 @@ Item {
     root.pending = ""
     root.editValue = combo || "Press a shortcut"
     if (!combo) root.editNote = "pick another key"
-    else if (!/^(SUPER|CTRL|ALT) \+ /.test(combo)) root.editNote = "add SUPER, CTRL or ALT"
+    // Hyprland takes a bound combo from every app, so it must hold SUPER, the key apps leave alone.
+    else if (combo.indexOf("SUPER + ") !== 0) root.editNote = "add SUPER"
     else if (combo === "SUPER + W") root.editNote = "closes the wheel"
     else if (combo === root.shortcut) root.editNote = "already set"
     else {
@@ -722,14 +726,14 @@ Item {
   component FileScan: Process {
     id: scan
     property int epoch: 0
-    property string found: ""
-    property bool done: false
+    // Parsed as it lands, so a late folder joins home's paths without parsing them again.
+    property var found: null
     // Ignore partial output from canceled scans.
     stdout: StdioCollector {
       onStreamFinished: {
         if (scan.epoch !== root.scanEpoch) return
-        scan.found = text; scan.done = true
-        if (homeScan.done) root.files = MenuIndex.parseFiles(homeScan.found + folderScan.found)
+        scan.found = MenuIndex.parseFiles(text)
+        if (homeScan.found) root.files = MenuIndex.joinFiles(homeScan.found, folderScan.found)
       }
     }
     onExited: if (epoch !== root.scanEpoch) Qt.callLater(root.scanFiles)
@@ -738,10 +742,11 @@ Item {
   FileScan { id: folderScan; command: MenuIndex.scanCommand(root.folders, root.skipped, root.home) }
 
   property int scanEpoch: 0
+  // The skip list suggests home's folders alone, so only a search scans the added folders.
   function scanFiles() {
     if (!root.opened || root.mode !== "file" && root.listing !== "skipped") return
-    if (!homeScan.done && !homeScan.running) { homeScan.epoch = root.scanEpoch; homeScan.running = true }
-    if (root.folders.length && !folderScan.done && !folderScan.running) {
+    if (!homeScan.found && !homeScan.running) { homeScan.epoch = root.scanEpoch; homeScan.running = true }
+    if (root.mode === "file" && root.folders.length && !folderScan.found && !folderScan.running) {
       folderScan.epoch = root.scanEpoch; folderScan.running = true
     }
   }
@@ -749,8 +754,7 @@ Item {
   function dropScan() {
     root.scanEpoch++
     homeScan.running = folderScan.running = false
-    homeScan.done = folderScan.done = false
-    homeScan.found = folderScan.found = ""
+    homeScan.found = folderScan.found = null
     root.files = null
   }
   onModeChanged: root.scanFiles()
