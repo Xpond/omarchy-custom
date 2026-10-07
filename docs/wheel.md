@@ -551,7 +551,9 @@ Settings are search rows. `wheely settings` lists every one, and each answers to
 own words (`wheely shortcut`, `keybind`). A setting row ends in its value, drawn as a
 control in Omarchy's control fill and border, the way its panel rows end in a switch;
 every other row ends in plain text, so a setting cannot pass for a result. Enter on
-one changes it in place: the wheel stays up, and the row says what is happening.
+one changes it in place: the wheel stays up, and the row says what is happening. Every
+setting wears the wheel's own ring of dots, an icon nothing in Omarchy uses, so its row
+reads as a Wheely setting among other results.
 
 **Wheely shortcut** is the key that opens the wheel, `SUPER + A` until you choose
 another. Enter starts recording, and the row takes every key. The field shows the combo

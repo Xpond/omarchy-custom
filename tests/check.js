@@ -443,6 +443,8 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   assert.deepEqual(M.settingRows("SUPER + A", true, ["/mnt"], ["a", "b"], 57, false).map(r => r.trail),
     ["SUPER + A", "Custom", "", "Off", "Home + 1", "2", "57", "57"])
   assert.equal(rows[1].trail, "Bar")
+  assert.deepEqual(rows.filter(r => r.icon === M.SETTING_ICON).map(r => r.setting),
+    ["shortcut", "ring", "backdrop", "panels", "folders", "skipped", "forget"], "a setting row lost its icon, or history wore it")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
   assert.equal(M.bindingAt(records, "SUPER + CTRL + SHIFT + SPACE"), "Theme menu", "another spelling hid a binding")
