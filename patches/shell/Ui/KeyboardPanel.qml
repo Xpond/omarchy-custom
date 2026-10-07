@@ -77,11 +77,14 @@ PanelWindow {
     else root.open = false
   }
 
+  // The wheel's Centered panels setting; off, a panel opens beside its widget with no backdrop.
+  readonly property bool centered: Color.shellValues["wheely.panels"] !== "native"
+
   // Count mapped panel surfaces for the shared bar scrim.
   property bool surfaceCounted: false
 
   function syncSurfaceCount() {
-    var onScreen = backingWindowVisible && open
+    var onScreen = backingWindowVisible && open && centered
     if (onScreen === surfaceCounted) return
     surfaceCounted = onScreen
     if (bar && typeof bar.panelSurfaceVisible === "function") bar.panelSurfaceVisible(onScreen)
@@ -229,7 +232,7 @@ PanelWindow {
   readonly property real barW: anchorWindow ? anchorWindow.width : screenW
   readonly property real barH: anchorWindow ? anchorWindow.height : 0
   readonly property point cardOrigin: {
-    if (screenW > 0 && screenH > 0) {
+    if (centered && screenW > 0 && screenH > 0) {
       return Qt.point(Math.round(screenW / 2 - contentWidth / 2),
                       Math.round(screenH / 2 - contentHeight / 2))
     }

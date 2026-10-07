@@ -592,6 +592,11 @@ too. The blur is `~/.config/omarchy/wheel-blur`, which the managed block reads l
 shortcut's file (`off` turns it off, and Hyprland's own blur with it); only crossing 0%
 reloads Hyprland, which re-applies the layer rule to the open backdrop.
 
+**Centered panels** reads `On` until it is turned off: Enter flips it. Off, every bar panel
+opens beside its bar widget with no backdrop, whether the bar or the wheel opened it. It is
+`[wheely] panels = native` in `~/.config/omarchy/shell.toml`, which the shell already
+watches; each panel reads it through `Color.shellValues` as it opens (centered-panels.md).
+
 **Searched folders** and **Skipped folders** change what `/` searches; until they do, it is
 what it always was: home, hidden folders included, six levels deep, skipping every folder
 named `.cache`, `.git` or `node_modules`. Searched folders adds folders outside home
@@ -607,6 +612,10 @@ folder outside home is skipped only by name.
 undone, so Enter only asks: the field reads `Forget 57 picks`, Enter again forgets them,
 on disk too, and Esc keeps them; other keys wait.
 
+**Wheely history** answers to `history` rather than `settings`. Enter lists what you have
+picked in the results, the latest first, files included; Enter on one runs it, and it comes
+back to the top. Typing leaves history for search, where picks rank anyway, and Esc is done.
+
 ## What it remembers
 
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
@@ -620,13 +629,16 @@ name starts with `br`, however often Files is picked.
 Windows are deliberately uncounted -- their address is new on every launch, so
 counting them would grow the file without bound, and they already sort on live
 focus order. `check.js` holds both invariants: every counted row has a key,
-and no two share one.
+and no two share one. Opening a setting row is no pick either, so the count on
+Wheely history and Forget picks is exactly what history lists.
 
 The counts live in `~/.local/state/omarchy/wheel-uses.json`, written through on
 each pick rather than batched at exit -- the wheel is a plugin in a shell that
-gets restarted, so no orderly shutdown is guaranteed to arrive. The **Forget
-picks** setting empties it. There is no decay: what you reach for through a wheel is
-stable for months, and a half-life is a second knob to be wrong about.
+gets restarted, so no orderly shutdown is guaranteed to arrive. A pick moves
+its key last, so the file reads oldest to newest and **Wheely history** needs no
+clock. The **Forget picks** setting empties it. There is no decay: what you
+reach for through a wheel is stable for months, and a half-life is a second knob
+to be wrong about.
 
 ## The ring
 

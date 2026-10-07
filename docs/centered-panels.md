@@ -2,7 +2,9 @@
 
 Makes Omarchy's bar panels (Display, Audio, Network, Power…) open centered on
 screen over a blurred desktop, instead of tucked against the bar edge beside
-their widget.
+their widget. The wheel's **Centered panels** setting turns it off: with
+`[wheely] panels = native` in `~/.config/omarchy/shell.toml`, `KeyboardPanel`
+places the card beside its widget as stock does and holds no backdrop.
 
 **Working:** centering, blur, Ctrl+Left/Right panel switching, the
 panel-to-panel handoff, and the open/close animation.
@@ -66,7 +68,7 @@ Eight package-owned QML files plus Hyprland config.
 
 | File | Change |
 |---|---|
-| `Ui/KeyboardPanel.qml` | centred placement in `cardOrigin`; `slideX`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
+| `Ui/KeyboardPanel.qml` | centred placement in `cardOrigin`, unless `[wheely] panels` is `native`; `slideX`/`originScale` transform; entry/exit animations; reports surface visibility to the bar |
 | `Ui/PanelKeyCatcher.qml` | Ctrl+Left/Right → `tabRequested`; Backspace asks `xpo.wheel back` |
 | `plugins/bar/Bar.qml` | `PanelScrim` — the shared blurred backdrop; `lastSwitchDirection`; `visiblePanelSurfaces` counter |
 | `plugins/clipboard/Clipboard.qml` | Backspace past an empty filter asks `xpo.wheel back` — it rolls its own key handler instead of using `PanelKeyCatcher`; drops its own scrim for the shared one |
