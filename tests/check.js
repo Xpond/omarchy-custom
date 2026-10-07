@@ -217,7 +217,7 @@ assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not 
 assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
   "Files.qml does not hand its operations object to the list")
 
-const wheel = { root: { home: "/home/test", countUse() {}, dismiss() {}, slices: [], copy: text => calls.push(text), shell: {
+const wheel = { root: { home: "/home/test", countUse() {}, dismiss() { this.queued() }, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
 } }, Qt: { callLater: fn => fn() }, MenuIndex: M, Quickshell: { execDetached: argv => calls.push([...argv]) },
@@ -334,7 +334,9 @@ dial.results.push({ path: "/home/test/My Dir/" })
 dial.resultIndex = 0; dialKey("Key_Return", ctrl)
 assert.deepEqual([terminals, entered.map(e => e.appId)], [[], ["firefox"]], "ctrl+enter on an app is not enter")
 dial.resultIndex = 1; dialKey("Key_Return", ctrl)
-dial.resultIndex = 2; dialKey("Key_Enter", ctrl)
+assert.deepEqual(terminals, [], "the terminal opened before the wheel unmapped")
+dial.queued()
+dial.resultIndex = 2; dialKey("Key_Enter", ctrl); dial.queued()
 assert.deepEqual(terminals, [["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test"],
                              ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"]])
 assert.equal(entered.length, 1, "a path row also ran as enter")
@@ -860,6 +862,19 @@ runPick({ plugin: "off-ring" })
 assert.equal(ran.launchedAt, -1, "a pick that is on no ring writes down nothing")
 console.log("ok: running a slice records which slice it was")
 
+// A pick waits for the unmap, as its target gets no keyboard while the wheel holds it. A panel or
+// the browser takes the backdrop over, so only they skip the fade.
+const left = []
+ran.dismiss = now => left.push(now)
+ran.home = "/home/test"
+for (const e of [{ plugin: "a" }, { path: "/home/test/a.md" }, { appId: "firefox" }, { address: "0x1" },
+                 { path: "/mnt/a.pdf" }, { action: "true" }]) {
+  ran.queued = null; runPick(e)
+  assert.equal(typeof ran.queued, "function", "a pick ran before the wheel unmapped")
+}
+assert.deepEqual(left, [true, true, false, false, false, false])
+console.log("ok: a pick waits for the unmap, and only a panel or the browser skips the fade")
+
 // A step back hands the ring over the way it was left. Without this the wheel
 // comes up with selected at -1 while the comet still rests on the slice that
 // launched, so the ring looks selected and the arrows do not step from it --
@@ -937,6 +952,10 @@ for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) 
   assert.match(read(f), /onOpenedChanged:[\s\S]*?panelSurfaceVisible\(root\.opened\)/,
     f + " does not drive the bar scrim from its open state")
 }
+// The wheel lets go as its fade starts, as the panels do; at unmap, the bar's hold kept the backdrop after it.
+assert.match(read("plugins/xpo.wheel/Wheel.qml"),
+  /id: unmap[^}]*onRunningChanged:.*panelSurfaceVisible\(root\.opened && !unmap\.running\)/,
+  "the wheel keeps the backdrop through its fade")
 console.log("ok: neither plugin paints a scrim; both count on the bar's")
 
 // Every third-party plugin gets a facade. A namespace must never grant the
