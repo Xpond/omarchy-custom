@@ -10,6 +10,13 @@ function onKey(wheel, event) {
     else if (event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) wheel.editing = ""
     event.accepted = true; return
   }
+  // Forgetting picks asks again: Enter forgets them, Esc keeps them.
+  if (wheel.editing === "forget") {
+    var enter = event.key === Qt.Key_Return || event.key === Qt.Key_Enter
+    if (enter) wheel.forgetPicks()
+    if (enter || event.key === Qt.Key_Escape) wheel.editing = ""
+    event.accepted = true; return
+  }
   if (wheel.editing) { wheel.record(event); event.accepted = true; return }
   // The ring editor: Del and Shift+arrows change the ring, and Esc is done. Ctrl+R resets it when
   // pressed again; any other key, a modifier on its way to a combo aside, takes the question back.

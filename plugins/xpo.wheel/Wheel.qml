@@ -73,7 +73,8 @@ Item {
   property var savedSkipped: null
   readonly property var folders: root.savedFolders || []
   readonly property var skipped: root.savedSkipped || MenuIndex.SKIPPED
-  readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds, root.folders, root.skipped)
+  readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds, root.folders, root.skipped,
+                                                        Object.keys(root.uses).length)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
   property string editValue: ""
@@ -119,7 +120,7 @@ Item {
     : root.listing === "skipped" ? MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true)
     : root.listing ? MenuIndex.subfolderRows(root.subfolderPaths, root.query, root.home)
     : root.mode === "file"
-    ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home)
+    ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home, false, root.uses)
     : root.mode === "calc" ? Calc.rows(root.term)
     : MenuIndex.search(root.editingRing ? root.index.filter(MenuIndex.pinnable) : root.index,
                        root.term, root.resultLimit, root.uses)
@@ -479,6 +480,11 @@ Item {
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
+  function forgetPicks() {
+    root.uses = ({})
+    usesFile.setText("{}\n")
+  }
+
   // The ring row hands the home ring to its editor, and the backdrop row takes ←/→. The shortcut
   // row records the next combo; Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
@@ -487,8 +493,10 @@ Item {
     root.backdropDraft = root.backdrop
     root.editing = e.setting
     root.pending = ""
-    root.editValue = e.setting === "backdrop" ? root.backdrop + "%" : "Press a shortcut"
-    root.editNote = e.setting === "backdrop" ? "←→ adjusts" : "esc cancels"
+    root.editValue = e.setting === "backdrop" ? root.backdrop + "%"
+      : e.setting === "forget" ? "Forget " + e.trail + " picks" : "Press a shortcut"
+    root.editNote = e.setting === "backdrop" ? "←→ adjusts"
+      : e.setting === "forget" ? "enter forgets · esc keeps" : "esc cancels"
   }
 
   // Plain Enter saves what was pressed, plain Esc gives up, and any other combo is the new candidate.

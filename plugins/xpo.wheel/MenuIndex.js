@@ -35,6 +35,7 @@ var KIND = { slice: 0, window: 1, app: 2, style: 3, menu: 4, bind: 5 }
 // Prefer stable ids for use counts; windows already sort by live focus.
 function keyOf(e) {
   if (e.setting) return "setting:" + e.setting
+  if (e.path) return "file:" + e.path
   if (e.plugin) return e.plugin
   if (e.id) return e.id
   if (e.appId) return "app:" + e.appId
@@ -307,7 +308,7 @@ function childrenOf(items, parent, cond) {
 
 // A ring holds what search finds and keeps a key of its own: no window, file, answer or setting.
 function pinnable(e) {
-  return !!keyOf(e) && !e.setting
+  return !!keyOf(e) && !e.setting && !e.path
 }
 
 // The ring's keys as the search rows they name, in order; a key that names nothing is dropped.
@@ -454,7 +455,7 @@ function withBindings(rows, binds, items) {
 }
 
 // Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
-function settingRows(shortcut, customRing, folders, skipped) {
+function settingRows(shortcut, customRing, folders, skipped, picks) {
   return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
             keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
           { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
@@ -464,7 +465,9 @@ function settingRows(shortcut, customRing, folders, skipped) {
           { icon: "󰥨", label: "Searched folders", trail: "Home" + (folders.length ? " + " + folders.length : ""),
             kind: KIND.slice, setting: "folders", keywords: "wheely settings preferences file search searched folders outside" },
           { icon: "󱧸", label: "Skipped folders", trail: String(skipped.length), kind: KIND.slice,
-            setting: "skipped", keywords: "wheely settings preferences file search skipped skip exclude ignore folders" }]
+            setting: "skipped", keywords: "wheely settings preferences file search skipped skip exclude ignore folders" },
+          { icon: "󰋚", label: "Forget picks", trail: String(picks), kind: KIND.slice, setting: "forget",
+            keywords: "wheely settings preferences forget clear picks history remembered ranking uses" }]
 }
 
 // The user's shell.toml with [menu] scrim-alpha set, read as the shell reads it; other lines stay.
@@ -561,12 +564,12 @@ function search(index, query, limit, uses) {
     hits.push({ rank: rank, exact: text.squashed === squashed ? 0 : 1,
                 uses: -(uses[keyOf(e)] || 0), len: e.label.length, entry: e })
   }
-  // An exact label beats a more-used one it prefixes: "lock" locks before it lists designs.
+  // Among equal matches, picked rows come first, most picked first.
   hits.sort(function (a, b) {
     return a.rank - b.rank
+        || a.uses - b.uses
         || a.entry.kind - b.entry.kind
         || a.exact - b.exact
-        || a.uses - b.uses
         || (a.entry.recency || 0) - (b.entry.recency || 0)
         || a.len - b.len
   })
@@ -662,15 +665,18 @@ function pathPayload(path) {
   return JSON.stringify(name ? { dir: dirOf(p), select: name } : { dir: dirOf(p) })
 }
 
-// Rank paths by name position and length; materialize rows only for winners. `homeFolders` keeps
-// only folders under home, the ones a skip can take.
-function fileRows(files, term, limit, home, homeFolders) {
+// Rank paths by name position, then picks, then length; materialize rows only for winners.
+// `homeFolders` keeps only folders under home, the ones a skip can take.
+function fileRows(files, term, limit, home, homeFolders, uses) {
   var src = files || NO_FILES
   var q = String(term || "").trim().toLowerCase()
   if (!q) return []
   var terms = q.split(/\s+/)
   // Later ties cannot enter the first `limit` results.
-  var buckets = [[], [], []]
+  var buckets = [[], [], []], picked = [[], [], []]
+  // Picks by bare path, so a scanned path needs no key string of its own.
+  var picks = {}
+  for (var key in uses) if (key.indexOf("file:") === 0) picks[key.slice(5)] = uses[key]
   for (var i = 0; i < src.lower.length; i++) {
     var low = src.lower[i]
     if (homeFolders && (low.charCodeAt(low.length - 1) !== 47 || src.paths[i].indexOf(home + "/") !== 0)) continue
@@ -686,6 +692,7 @@ function fileRows(files, term, limit, home, homeFolders) {
     var at = low.indexOf(q, start)
     if (at + q.length > end) at = -1
     var rank = at === start ? 0 : (at !== -1 ? 1 : 2)
+    if (picks[src.paths[i]]) { picked[rank].push(i); continue }
     var lengths = buckets[rank]
     var ties = lengths[end - start]
     if (!ties) ties = lengths[end - start] = []
@@ -693,8 +700,11 @@ function fileRows(files, term, limit, home, homeFolders) {
   }
   var out = []
   for (var r = 0; r < buckets.length; r++) {
-    for (var len = 0; len < buckets[r].length; len++) {
-      var entries = buckets[r][len] || []
+    // Picked paths lead their rank, most picked first.
+    var groups = [picked[r].sort(function (a, b) { return picks[src.paths[b]] - picks[src.paths[a]] || a - b })]
+      .concat(buckets[r])
+    for (var len = 0; len < groups.length; len++) {
+      var entries = groups[len] || []
       for (var j = 0; j < entries.length; j++) {
         if (out.length >= limit) return out
         out.push(fileRow(src.paths[entries[j]], home))
