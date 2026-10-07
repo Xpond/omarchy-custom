@@ -311,13 +311,35 @@ function pinnable(e) {
   return !!keyOf(e) && !e.setting && !e.path
 }
 
-// The ring's keys as the search rows they name, in order; a key that names nothing is dropped.
-function ringOf(index, keys) {
+function pinnableByKey(index) {
   var byKey = {}
   for (var i = 0; i < index.length; i++) if (pinnable(index[i])) byKey[keyOf(index[i])] = index[i]
+  return byKey
+}
+
+// The ring's keys as the search rows they name, in order; a key that names nothing is dropped.
+function ringOf(index, keys) {
+  var byKey = pinnableByKey(index)
   var out = []
   for (var j = 0; j < keys.length; j++) if (byKey[keys[j]]) out.push(byKey[keys[j]])
   return out
+}
+
+// A pick moves its key last, so the uses file reads oldest to newest and history needs no clock.
+function withPick(uses, key) {
+  var out = {}
+  for (var k in uses) if (k !== key) out[k] = uses[k]
+  out[key] = (uses[key] || 0) + 1
+  return out
+}
+
+// Picks newest first: a file by its path, anything else as search finds it. Settings, and keys
+// that name nothing today, are left out.
+function historyRows(index, uses, home) {
+  var byKey = pinnableByKey(index)
+  return Object.keys(uses).reverse().map(function (k) {
+    return k.indexOf("file:") === 0 ? fileRow(k.slice(5), home) : byKey[k]
+  }).filter(Boolean)
 }
 
 // wheel.json with one list replaced, or gone back to its default; anything else in it stays.
@@ -455,34 +477,39 @@ function withBindings(rows, binds, items) {
 }
 
 // Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
-function settingRows(shortcut, customRing, folders, skipped, picks) {
+// Wheely history rides along, answering to `history` rather than `settings`.
+function settingRows(shortcut, customRing, folders, skipped, picks, centered) {
   return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
             keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
           { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
             setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" },
           { icon: "󰂵", label: "Backdrop", trail: "", kind: KIND.slice, setting: "backdrop",
             keywords: "wheely settings preferences backdrop background blur dim darken frost glass scrim tint" },
+          { icon: "󰕮", label: "Centered panels", trail: centered ? "On" : "Off", kind: KIND.slice, setting: "panels",
+            keywords: "wheely settings preferences centered center middle panels popups native bar position" },
           { icon: "󰥨", label: "Searched folders", trail: "Home" + (folders.length ? " + " + folders.length : ""),
             kind: KIND.slice, setting: "folders", keywords: "wheely settings preferences file search searched folders outside" },
           { icon: "󱧸", label: "Skipped folders", trail: String(skipped.length), kind: KIND.slice,
             setting: "skipped", keywords: "wheely settings preferences file search skipped skip exclude ignore folders" },
           { icon: "󰋚", label: "Forget picks", trail: String(picks), kind: KIND.slice, setting: "forget",
-            keywords: "wheely settings preferences forget clear picks history remembered ranking uses" }]
+            keywords: "wheely settings preferences forget clear picks history remembered ranking uses" },
+          { icon: "󰅐", label: "Wheely history", trail: String(picks), kind: KIND.slice, setting: "history",
+            keywords: "wheely history recent picks used opened launched" }]
 }
 
-// The user's shell.toml with [menu] scrim-alpha set, read as the shell reads it; other lines stay.
-function withScrimAlpha(raw, alpha) {
+// The user's shell.toml with one [section] key set, read as the shell reads it; other lines stay.
+function withShellValue(raw, name, key, value) {
   var ls = String(raw || "").replace(/\n$/, "").split("\n")
-  var line = "scrim-alpha = " + alpha, section = "", at = -1
+  var line = key + " = " + value, section = "", at = -1
   for (var i = 0; i < ls.length; i++) {
     var head = ls[i].match(/^\s*\[([A-Za-z0-9_-]+)\]\s*(#.*)?$/)
     if (head) section = head[1]
-    if (section !== "menu") continue
-    if (/^\s*scrim-alpha\s*=/.test(ls[i])) { ls[i] = line; return ls.join("\n") + "\n" }
+    if (section !== name) continue
+    if (new RegExp("^\\s*" + key + "\\s*=").test(ls[i])) { ls[i] = line; return ls.join("\n") + "\n" }
     if (ls[i].trim()) at = i + 1
   }
   if (at >= 0) { ls.splice(at, 0, line); return ls.join("\n") + "\n" }
-  return (ls.join("\n").trim() ? ls.join("\n") + "\n\n" : "") + "[menu]\n" + line + "\n"
+  return (ls.join("\n").trim() ? ls.join("\n") + "\n\n" : "") + "[" + name + "]\n" + line + "\n"
 }
 
 var SHORTCUT = "SUPER + A"

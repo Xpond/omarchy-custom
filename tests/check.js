@@ -104,6 +104,13 @@ assert.equal(M.search(lockRows.concat([localSend]), "loc", 40, { "system.lock": 
 const brave = { label: "Brave", appId: "brave", kind: M.KIND.app, keywords: "Brave" }
 const filesPanel = { label: "Files", plugin: "xpo.files", kind: M.KIND.slice, keywords: "Files browser" }
 assert.deepEqual(M.search([filesPanel, brave], "br", 40, { "xpo.files": 105 }).map(e => e.label), ["Brave", "Files"])
+// A pick moves its key last, through the file too; history lists picks newest first, a file by its
+// path, and leaves out settings and keys that name nothing today.
+let picks = {}
+for (const k of ["system.lock", "file:/home/test/a.txt", "setting:ring", "gone", "system.lock"]) picks = M.withPick(picks, k)
+assert.deepEqual(Object.entries(JSON.parse(JSON.stringify(picks))),
+  [["file:/home/test/a.txt", 1], ["setting:ring", 1], ["gone", 1], ["system.lock", 2]])
+assert.deepEqual(M.historyRows(lockRows, picks, "/home/test").map(r => r.label), ["Lock", "a.txt"])
 assert.deepEqual(M.search(lockRows, "rally", 40, {}), [])
 assert.deepEqual(M.childrenOf(lockMenu, "style.lockscreen", M.NO_CONDITIONS).map(e => [e.label, e.action]),
   [["Rally", "omarchy-lock-design set 'rally'"], ["Wallpaper", "omarchy-lock-design set 'wallpaper'"]])
@@ -412,10 +419,12 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
     "SUPER + X                 → \t\t"].join("\n")
   assert.deepEqual(M.bindRows(records).map(r => r.label), ["Omarchy menu", "Theme menu"],
     "the wheel's own bindings are rows")
-  const rows = M.withBindings(M.settingRows("SUPER + A", false, [], M.SKIPPED, 0), M.bindRows(records), {})
+  const rows = M.withBindings(M.settingRows("SUPER + A", false, [], M.SKIPPED, 0, true), M.bindRows(records), {})
   for (const query of ["wheely settings", "wheel", "preferences"])
-    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).sort(),
-      ["backdrop", "folders", "forget", "ring", "shortcut", "skipped"], query)
+    assert.deepEqual(M.search(rows, query, 40, {}).map(r => r.setting).filter(s => s !== "history").sort(),
+      ["backdrop", "folders", "forget", "panels", "ring", "shortcut", "skipped"], query)
+  assert.deepEqual(M.search(rows, "wheely settings", 40, {}).filter(r => r.setting === "history"), [],
+    "history passed for a setting")
   for (const query of ["wheely shortcut", "shortcut", "keybind"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
   for (const query of ["wheely ring", "ring", "slices", "pin"])
@@ -424,11 +433,15 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "backdrop", query + " misses the backdrop row")
   assert.equal(M.search(rows, "searched folders", 40, {})[0]?.setting, "folders")
   assert.equal(M.search(rows, "skip", 40, {})[0]?.setting, "skipped")
-  for (const query of ["forget", "clear picks", "history"])
+  for (const query of ["forget", "clear picks"])
     assert.equal(M.search(rows, query, 40, {})[0]?.setting, "forget", query + " misses the forget row")
-  assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE", false, [], M.SKIPPED, 0), rows[0]), 0, "saving a key lost the row")
-  assert.deepEqual(M.settingRows("SUPER + A", true, ["/mnt"], ["a", "b"], 57).map(r => r.trail),
-    ["SUPER + A", "Custom", "", "Home + 1", "2", "57"])
+  for (const query of ["centered panels", "panels", "center"])
+    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "panels", query + " misses the panels row")
+  for (const query of ["history", "wheely history", "recent"])
+    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "history", query + " misses the history row")
+  assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE", false, [], M.SKIPPED, 0, true), rows[0]), 0, "saving a key lost the row")
+  assert.deepEqual(M.settingRows("SUPER + A", true, ["/mnt"], ["a", "b"], 57, false).map(r => r.trail),
+    ["SUPER + A", "Custom", "", "Off", "Home + 1", "2", "57", "57"])
   assert.equal(rows[1].trail, "Bar")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
@@ -452,7 +465,7 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
        ["[menu] # mine\nscrim-alpha = 0.5\n[font]\nbase-size = 12", "[menu] # mine\nscrim-alpha = 0.3\n[font]\nbase-size = 12\n"],
        ['[menu]\nbackground = "#000"\n\n[polkit]\nscrim-alpha = 0.9\n',
         '[menu]\nbackground = "#000"\nscrim-alpha = 0.3\n\n[polkit]\nscrim-alpha = 0.9\n']]) {
-    assert.equal(M.withScrimAlpha(raw, 0.3), out, JSON.stringify(raw))
+    assert.equal(M.withShellValue(raw, "menu", "scrim-alpha", 0.3), out, JSON.stringify(raw))
     assert.deepEqual({ ...parseShell(out) }, { ...parseShell(raw), "menu.scrim-alpha": "0.3" }, "the shell reads " + out)
   }
 
@@ -490,10 +503,32 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
     "a key other than Enter or Esc left the question")
   forgetKey("Key_Escape")
   assert.deepEqual([fg.editing, Object.keys(fg.uses).length, usesFile.raw], ["", 2, ""], "esc forgot the picks")
-  assert.equal(binding("settingRows", { root: { ...fg, folders: [], skipped: [] }, MenuIndex: M }).at(-1).trail, "2",
+  assert.equal(binding("settingRows", { root: { ...fg, folders: [], skipped: [] }, MenuIndex: M })
+    .find(r => r.setting === "forget").trail, "2",
     "the forget row miscounted the picks")
   fg.edit({ setting: "forget" }); forgetKey("Key_Return")
   assert.deepEqual([fg.editing, Object.keys(fg.uses).length, usesFile.raw], ["", 0, "{}\n"], "enter kept the picks")
+  // A pick lands last in the file too, which is where history reads its order.
+  const cu = { uses: { a: 1, b: 1 } }
+  cu.countUse = method(wheelSource, "countUse", { root: cu, usesFile, MenuIndex: M })
+  cu.countUse({ id: "a" })
+  cu.countUse({ setting: "history" })
+  assert.equal(usesFile.raw, '{"b":1,"a":2}\n', "a pick kept its place in the file, or a setting counted")
+
+  // Centered panels flips [wheely] panels in shell.toml, which the shell's reader hands every panel;
+  // until it is flipped there is no key, and panels center as they always have.
+  const panelsFile = { raw: "[menu]\nscrim-alpha = 0.5\n", text() { return this.raw }, setText(raw) { this.raw = raw } }
+  const pn = { panelsCentered: true }
+  pn.edit = method(wheelSource, "edit", { root: pn, shellFile: panelsFile, MenuIndex: M })
+  pn.edit({ setting: "panels" })
+  assert.deepEqual({ ...parseShell(panelsFile.raw) }, { "menu.scrim-alpha": "0.5", "wheely.panels": "native" })
+  pn.panelsCentered = false; pn.edit({ setting: "panels" })
+  assert.equal(parseShell(panelsFile.raw)["wheely.panels"], "centered")
+  const panelRule = 'Color.shellValues["wheely.panels"] !== "native"'
+  const keyboardPanel = read("patches/shell/Ui/KeyboardPanel.qml")
+  assert.ok(wheelSource.includes(panelRule) && keyboardPanel.includes(panelRule), "the panels read another key than the wheel writes")
+  assert.ok(keyboardPanel.includes("if (centered && screenW > 0") && keyboardPanel.includes("backingWindowVisible && open && centered"),
+    "a panel centers or takes the backdrop with the setting off")
 
   // Recording: a modifier alone waits, plain Esc gives up, plain Enter saves only a candidate,
   // and any other press is judged. shortcutOf's names are checked against real Qt in runtime.py.
@@ -557,9 +592,9 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     { appId: "firefox.desktop", appIcon: "firefox", label: "Firefox", kind: M.KIND.app, keywords: "firefox" },
     { label: "Firefox", address: "0x1", kind: M.KIND.window, keywords: "firefox" },
     { label: "notes.md", path: "/home/test/notes.md" }, { label: "42", copy: "42" },
-    ...M.settingRows("SUPER + A", false, [], M.SKIPPED, 0)]
+    ...M.settingRows("SUPER + A", false, [], M.SKIPPED, 0, true)]
   assert.deepEqual(index.map(r => M.pinnable(r)),
-    [true, true, true, true, true, false, false, false, false, false, false, false, false, false])
+    [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false])
   assert.deepEqual(M.ringOf(index, ["app:firefox.desktop", "omarchy.clipboard", "gone", "setting:ring",
                                     "system", "omarchy.audio"]).map(r => r.label),
     ["Firefox", "Clipboard", "System", "Audio"])
@@ -709,6 +744,16 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
   assert.equal(binding("mode", { root: { listing: "folders", query: "/mnt" }, MenuIndex: M }), "")
   assert.equal(binding("searching", { root: { listing: "skipped", query: "" } }), true, "an empty list editor hid its list")
   assert.equal(binding("emptyText", { root: { listing: "folders", query: "" } }), "Home is always searched")
+  // History lists picks newest first in the results; Del has no list to remove from, an empty history
+  // says so, and a submenu picked from it leaves the list rather than being added to one.
+  const hist = { listing: "history", query: "", mode: "", index: lockRows, uses: picks, home: "/home/test" }
+  assert.deepEqual(binding("results", { root: hist, MenuIndex: M }).map(r => r.label), ["Lock", "a.txt"])
+  assert.deepEqual([binding("listed", { root: hist }), binding("emptyText", { root: hist })], [[], "Nothing picked yet"])
+  const added = []
+  const hr = { listing: "history", editingRing: false, path: [], countUse() {}, addEntry(e) { added.push(e) } }
+  for (const name of ["run", "enter"]) hr[name] = method(wheelSource, name, { root: hr, spin: { restart() {} } })
+  hr.run({ node: "system", label: "System" })
+  assert.deepEqual([added.length, hr.listing, hr.path.join(".")], [0, "", "system"], "a submenu from history was added, or kept the list")
 
   // Del and Esc are the list's until something is typed.
   const did = []

@@ -141,6 +141,27 @@ Scope {
   } }
 ''')
 
+    # History opens from its own search, so the query clears before the list shows; typing then
+    # leaves history for search, while a folder list keeps its typing. The real handlers are the fixture.
+    run("history-open", '''
+  property string query: "history"
+  property string listing: ""
+  property int resultIndex: 3
+  property int resultTop: 0
+''' + block(wheel, r"  onQueryChanged: \{") + "\n" + block(wheel, r"  function edit\(") + '''
+  Timer { interval: 1; running: true; onTriggered: {
+    root.edit({ setting: "history" })
+    if (root.listing + "|" + root.query !== "history|") {
+      console.error("FAIL history did not open from its own search", root.listing, root.query); Qt.exit(1); return
+    }
+    root.query = "l"
+    if (root.listing !== "") { console.error("FAIL typing stayed in history"); Qt.exit(1); return }
+    root.query = ""; root.listing = "folders"; root.query = "/m"
+    if (root.listing !== "folders") { console.error("FAIL typing left a folder list"); Qt.exit(1); return }
+    console.log("PASS"); Qt.quit()
+  } }
+''')
+
     # A check asked for while one runs has to run once that one ends, with the newer script, and
     # an answer that comes back unchanged must rebuild nothing.
     run("conditions-recheck", '''

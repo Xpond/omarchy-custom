@@ -73,8 +73,10 @@ Item {
   property var savedSkipped: null
   readonly property var folders: root.savedFolders || []
   readonly property var skipped: root.savedSkipped || MenuIndex.SKIPPED
+  // Off, every panel opens beside its bar widget; the shell reads [wheely] panels from shell.toml.
+  readonly property bool panelsCentered: Color.shellValues["wheely.panels"] !== "native"
   readonly property var settingRows: MenuIndex.settingRows(root.shortcut, !!root.ringIds, root.folders, root.skipped,
-                                                        Object.keys(root.uses).length)
+                                                        Object.keys(root.uses).length, root.panelsCentered)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
   property string editValue: ""
@@ -89,7 +91,7 @@ Item {
     : "del removes · shift+←→ reorders\n" + (root.ringIds ? "ctrl+r resets · " : "") + "esc done"
   // The list a setting row shows in the results; typing suggests what to add to it.
   property string listing: ""
-  readonly property var listed: root.listing === "skipped" ? root.skipped : root.folders
+  readonly property var listed: root.listing === "skipped" ? root.skipped : root.listing === "folders" ? root.folders : []
   readonly property var subfolderPaths: {
     var out = []
     for (var i = 0; i < subfolders.count; i++) out.push(subfolders.get(i, "filePath"))
@@ -116,7 +118,8 @@ Item {
   property var files: null
   readonly property int resultLimit: 40
   readonly property int resultCap: 8
-  readonly property var results: root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
+  readonly property var results: root.listing === "history" ? MenuIndex.historyRows(root.index, root.uses, root.home)
+    : root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
     : root.listing === "skipped" ? MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true)
     : root.listing ? MenuIndex.subfolderRows(root.subfolderPaths, root.query, root.home)
     : root.mode === "file"
@@ -139,6 +142,7 @@ Item {
   }
   readonly property string emptyText: root.mode === "calc" ? (root.term ? "No answer" : "Type to calculate")
     : root.listing === "folders" && !root.query ? "Home is always searched"
+    : root.listing === "history" ? "Nothing picked yet"
     : root.mode !== "file" && root.listing !== "skipped" ? "No match"
     : !root.files ? "Scanning\u2026"
     : !root.term ? "Type to find files\nctrl+y copy path\nctrl+enter terminal"
@@ -419,6 +423,7 @@ Item {
   function enter(node) {
     root.path = node ? String(node).split(".") : []
     root.query = ""
+    root.listing = ""
     root.selected = -1
     root.armed = false
     root.justOpened = false
@@ -446,7 +451,7 @@ Item {
   function run(e) {
     if (!e) return
     if (root.editingRing) { root.pin(e); return }
-    if (root.listing) { root.addEntry(e); return }
+    if (root.listing && root.listing !== "history") { root.addEntry(e); return }
     root.countUse(e)
     if (e.node) { root.enter(e.node); return }
     if (e.setting) { root.edit(e); return }
@@ -470,13 +475,11 @@ Item {
     })
   }
 
-  // Persist each pick; shell shutdown has no reliable flush point.
+  // Persist each pick; shell shutdown has no reliable flush point. Opening a setting is no pick.
   function countUse(e) {
     var key = MenuIndex.keyOf(e)
-    if (!key) return
-    var bump = {}
-    bump[key] = (root.uses[key] || 0) + 1
-    root.uses = MenuIndex.merge(root.uses, bump)
+    if (!key || e.setting) return
+    root.uses = MenuIndex.withPick(root.uses, key)
     usesFile.setText(JSON.stringify(root.uses) + "\n")
   }
 
@@ -489,7 +492,13 @@ Item {
   // row records the next combo; Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
     if (e.setting === "ring") { root.enter(""); root.editingRing = true; root.resetAsked = false; return }
-    if (e.setting === "folders" || e.setting === "skipped") { root.listing = e.setting; root.query = ""; return }
+    if (e.setting === "folders" || e.setting === "skipped" || e.setting === "history") {
+      root.query = ""; root.listing = e.setting; return
+    }
+    if (e.setting === "panels") {
+      shellFile.setText(MenuIndex.withShellValue(shellFile.text(), "wheely", "panels", root.panelsCentered ? "native" : "centered"))
+      return
+    }
     root.backdropDraft = root.backdrop
     root.editing = e.setting
     root.pending = ""
@@ -535,7 +544,7 @@ Item {
     if ((percent > 0) !== (root.backdrop > 0)) blurFile.setText(percent > 0 ? "on\n" : "off\n")
     root.backdropDraft = percent
     root.editValue = percent + "%"
-    shellFile.setText(MenuIndex.withScrimAlpha(shellFile.text(), percent / 100))
+    shellFile.setText(MenuIndex.withShellValue(shellFile.text(), "menu", "scrim-alpha", percent / 100))
   }
 
   // A row joins the ring after the selected slice, or at the end; one already there is selected.
@@ -674,8 +683,10 @@ Item {
     root.select((from + step + n) % n)
   }
 
+  // Typing in history leaves it for search, where picks rank anyway.
   onQueryChanged: {
     root.resultIndex = 0; root.resultTop = 0
+    if (root.listing === "history") root.listing = ""
   }
 
   property var previousResults: []
@@ -857,7 +868,7 @@ Item {
     onSaved: hyprReload.running = true
   }
 
-  // The shell watches this file and draws its [menu] scrim-alpha over the theme's. Re-read on change,
+  // The shell watches this file: its [menu] scrim-alpha over the theme's, and [wheely] panels. Re-read on change,
   // so a write keeps what another writer just put here.
   FileView {
     id: shellFile
@@ -1038,7 +1049,8 @@ Item {
           horizontalAlignment: Text.AlignHCenter
           elide: Text.ElideLeft
           // A submenu's crumb, or what the ring editor's keys do.
-          text: root.editingRing ? root.ringHint : root.listing ? "del removes · esc done" : "‹  " + root.crumb
+          text: root.editingRing ? root.ringHint : root.listing === "history" ? "esc done"
+            : root.listing ? "del removes · esc done" : "‹  " + root.crumb
           color: Color.menu.text
           opacity: root.editingRing || root.listing && !root.query || root.path.length && !root.searching ? 0.7 : 0
           Behavior on opacity { NumberAnimation { duration: root.fadeDuration } }
@@ -1073,7 +1085,8 @@ Item {
           Text {
             anchors.centerIn: parent
             visible: !root.query
-            text: root.listing === "folders" ? "Add a folder from /" : root.listing ? "Find a folder to skip"
+            text: root.listing === "folders" ? "Add a folder from /" : root.listing === "history" ? "Recent picks"
+              : root.listing ? "Find a folder to skip"
               : root.editingRing ? "Add to ring" : "Search · / files · = calc"
             color: Color.menu.text
             opacity: 0.45
