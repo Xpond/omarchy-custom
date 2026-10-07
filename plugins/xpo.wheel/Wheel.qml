@@ -30,6 +30,8 @@ Item {
   property string launched: ""
   // Home-ring slice to restore when returning from a launched panel.
   property int launchedAt: -1
+  // What a pick does, run the tick after the wheel unmaps, since its target gets no keyboard before.
+  property var queued: null
 
   property string query: ""
   property alias queryAt: searchInput.cursorPosition
@@ -353,6 +355,7 @@ Item {
     root.path = []
     root.launched = ""
     root.launchedAt = -1
+    root.queued = null
     root.editing = ""
     root.editingRing = false
     root.listing = ""
@@ -379,6 +382,8 @@ Item {
     id: unmap
     interval: root.fadeDuration
     onTriggered: root.opened = false
+    // The backdrop goes as the fade starts, and comes back if a press cancels it, so it leaves with the wheel.
+    onRunningChanged: if (root.shell) root.shell.panelSurfaceVisible(root.opened && !unmap.running)
   }
 
   function dismiss(immediate) {
@@ -457,23 +462,24 @@ Item {
     if (e.node) { root.enter(e.node); return }
     if (e.setting) { root.edit(e); return }
     root.launchedAt = root.slices.indexOf(e)
-    root.dismiss(true)
-    // Unmap this layer before the target requests keyboard focus.
-    Qt.callLater(function () {
+    // The browser keeps to home, so a path outside it opens the way the browser opens a file.
+    var browse = !!e.path && e.path.indexOf(root.home + "/") === 0
+    root.queued = function () {
       if (e.plugin && root.shell) { root.shell.toggle(e.plugin, "{}"); root.launched = e.plugin }
       // Omarchy 4 requires the Lua dispatcher form for window focus.
       else if (e.address) Hyprland.dispatch("hl.dsp.focus({ window = \"address:" + e.address + "\" })")
       else if (e.dispatch) Hyprland.dispatch(e.dispatch)
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
-      // The browser keeps to home, so a path outside it opens the way the browser opens a file.
-      else if (e.path && e.path.indexOf(root.home + "/") !== 0) Quickshell.execDetached(["omarchy-open-path", e.path])
+      else if (e.path && !browse) Quickshell.execDetached(["omarchy-open-path", e.path])
       else if (e.path && root.shell) {
         root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
         root.launched = "xpo.files"
       }
       else if (e.copy) root.copy(e.copy)
       else if (e.action) Util.execDetached(e.action)
-    })
+    }
+    // A panel or the browser takes the backdrop over at once; anything else fades out with it, as Esc does.
+    root.dismiss(!!e.plugin || browse)
   }
 
   // Persist each pick; shell shutdown has no reliable flush point. Opening a setting is no pick.
@@ -635,14 +641,14 @@ Item {
     return true
   }
 
-  // A terminal in the highlighted path's folder; the wheel unmaps first, as in run().
+  // A terminal in the highlighted path's folder, once the wheel has faded out, as in run().
   function terminal() {
     var hit = root.searching ? root.results[root.resultIndex] : null
     if (!hit || !hit.path) return false
-    root.dismiss(true)
-    Qt.callLater(function () {
+    root.queued = function () {
       Quickshell.execDetached(["uwsm-app", "--", "xdg-terminal-exec", "--dir=" + MenuIndex.dirOf(hit.path)])
-    })
+    }
+    root.dismiss()
     return true
   }
 
@@ -755,6 +761,8 @@ Item {
       root.dropScan()
       root.daylight = 0
       root.editing = ""
+      // A tick later, so the unmap reaches Hyprland first.
+      if (root.queued) { Qt.callLater(root.queued); root.queued = null }
     }
   }
 

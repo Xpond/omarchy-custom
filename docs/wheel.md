@@ -228,10 +228,15 @@ the ring-to-results swap.
 `visible` follows `opened`, so dropping it unmaps the layer surface the same
 frame it asks for the fade. `close()` drops `shown` to run the fade and a timer
 releases the surface once it has finished. Firing a slice
-keeps the instant unmap: the target panel grabs the keyboard on the next tick
-and a layer surface still holding an exclusive grab hands it a window without
-focus, so `close(true)` skips the fade. Only cancelling gets it. Reopening
-mid-fade cancels the pending unmap and counts as a fresh open.
+that opens a panel or the browser keeps the instant unmap: the target grabs the
+keyboard on the next tick and a layer surface still holding an exclusive grab
+hands it a window without focus, so `close(true)` skips the fade. Any other pick
+(an app, a window, a command) fades out as a cancel does, with the backdrop, and
+waits in `queued` for the tick after the unmap. Hyprland refuses to focus a
+window while the grab stands: dispatched the tick after dropping the grab, the
+focus never moved (0 of 5), and the tick after an unmap it always did (5 of 5).
+Reopening mid-fade cancels the pending unmap and the pick waiting on it, and
+counts as a fresh open.
 
 Typing swaps the ring for the results by fading rather than switching
 `visible`: the ring draws back to 0.94 while the stack grows from
@@ -300,7 +305,9 @@ Use `omarchy restart shell`.
 **The wheel does not own its backdrop.** The wash and the blur behind the ring
 are one scrim surface owned by the bar, which the centered panels, the browser
 and the clipboard hold a count on too. The wheel takes that count when it opens
-and drops it when it unmaps (`panelSurfaceVisible`). Drawing a scrim on the
+and drops it as its fade starts (`panelSurfaceVisible`), so the bar's 150 ms
+hold ends the backdrop with the 130 ms fade; dropping it at unmap left the
+backdrop up 150 ms after the wheel. Drawing a scrim on the
 wheel instead unmaps the blur along with the wheel, and the desktop snaps sharp
 for the frames in between. See `docs/centered-panels.md` for the scrim itself.
 
