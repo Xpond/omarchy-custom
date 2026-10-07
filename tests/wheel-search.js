@@ -64,8 +64,8 @@ function reference(rows, query, limit, uses) {
     const inside = terms.some(t => !words.some(w => w.startsWith(t)))
     const rank = entry.kind === M.KIND.window && !inside || label.startsWith(squashed) ? 0
       : labelWords.includes(" " + spaced) ? 1 : 2
-    return { entry, order: [rank, entry.kind, label === squashed ? 0 : 1,
-      -(uses[M.keyOf(entry)] || 0), entry.recency || 0, entry.label.length, i] }
+    return { entry, order: [rank, -(uses[M.keyOf(entry)] || 0), entry.kind, label === squashed ? 0 : 1,
+      entry.recency || 0, entry.label.length, i] }
   }).filter(Boolean).sort((a, b) => {
     for (let i = 0; i < a.order.length; i++) if (a.order[i] !== b.order[i]) return a.order[i] - b.order[i]
     return 0

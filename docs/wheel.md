@@ -484,9 +484,10 @@ App and window text accepts substrings: `calc` finds `Omacalc (Development)` eve
 without calculator keywords. Other rows still require each query term to start a
 word, keeping menu searches narrow. Rows then
 sort on six keys: **rank** (label-prefix, then a label word, then a hit
-anywhere else — breadcrumb, alias, app id), **kind** (slice, window, app,
-theme/font, menu, keybinding), an **exact label** (so "lock" puts Lock before
-Lockscreen Designs, however often that is used), **uses**, **recency**, and
+anywhere else — breadcrumb, alias, app id), **uses** (among equal matches,
+the most picked first), **kind** (slice, window, app, theme/font, menu,
+keybinding), an **exact label** (so "lock" puts Lock before
+Lockscreen Designs until the designs are picked more), **recency**, and
 finally **label length**, which floats
 "Screenshot" over "Stop Screenrecording".
 
@@ -499,8 +500,9 @@ Quickshell, fails on a warning it doesn't expect (`tests/qslog.py`).
 
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
-which is every row that could be read. Closing cancels the scan and rejects
-whatever it was about to say; reopening starts a fresh one. `Enter` on a path
+which is every row that could be read. A file opened from the wheel before
+leads its rank, most opened first, but never climbs into a better one. Closing
+cancels the scan and rejects whatever it was about to say; reopening starts a fresh one. `Enter` on a path
 opens the browser there, whether or not the browser was already up. The browser
 keeps to home, so a path from a folder outside it (Settings) opens the way the
 browser opens a file, through `omarchy-open-path`.
@@ -601,16 +603,19 @@ is its default again. A skip with a slash is that folder under home; one without
 folder of that name. fd anchors a path only to the first folder it is given, home, so a
 folder outside home is skipped only by name.
 
+**Forget picks** ends in how many rows are remembered (What it remembers). It cannot be
+undone, so Enter only asks: the field reads `Forget 57 picks`, Enter again forgets them,
+on disk too, and Esc keeps them; other keys wait.
+
 ## What it remembers
 
 Every pick is counted, keyed by `MenuIndex.keyOf` -- a panel's plugin id, a
 menu entry's dotted id, `app:` plus a desktop id, or a theme/font or
-keybinding command, so a binding keeps its count when its keys change --
-and the count is a sort key in `search()` ranked under `kind`. So habit breaks
-ties *inside* a kind (which of forty themes, which of the "Toggle"
-rows) and never reorders the kinds themselves: that an app beats a menu row
-offering to install it is a fact about the query, while a use count is only a
-guess.
+keybinding command, so a binding keeps its count when its keys change, or
+`file:` plus a path -- and the count sorts right under how well a row matches.
+So `loc` puts a picked Lock over a never-picked LocalSend, while `br` keeps
+Files, which matches only through its "browser" keyword, under every row whose
+name starts with `br`, however often Files is picked.
 
 Windows are deliberately uncounted -- their address is new on every launch, so
 counting them would grow the file without bound, and they already sort on live
@@ -619,8 +624,8 @@ and no two share one.
 
 The counts live in `~/.local/state/omarchy/wheel-uses.json`, written through on
 each pick rather than batched at exit -- the wheel is a plugin in a shell that
-gets restarted, so no orderly shutdown is guaranteed to arrive. Delete the file
-to forget everything. There is no decay: what you reach for through a wheel is
+gets restarted, so no orderly shutdown is guaranteed to arrive. The **Forget
+picks** setting empties it. There is no decay: what you reach for through a wheel is
 stable for months, and a half-life is a second knob to be wrong about.
 
 ## The ring

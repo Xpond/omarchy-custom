@@ -113,7 +113,7 @@ check(M.pathPayload(`${home}/a/b.txt`) === JSON.stringify({ dir: `${home}/a`, se
 check(M.pathPayload(`${home}/a/`) === JSON.stringify({ dir: `${home}/a` }),
       "a directory payload names itself and selects nothing", M.pathPayload(`${home}/a/`))
 
-check(M.keyOf(M.fileRow(`${home}/a.txt`, home)) === "", "files are not counted")
+check(M.keyOf(M.fileRow(`${home}/a.txt`, home)) === `file:${home}/a.txt`, "a file is counted by its path")
 
 for (const [label, cfg] of [["shipped", `${omarchy}/config/omarchy/shell.json`],
                             ["this machine", `${home}/.config/omarchy/shell.json`]]) {
