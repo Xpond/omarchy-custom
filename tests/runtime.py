@@ -36,6 +36,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     def run(name, body, extra=None):
         qml = base / (name + ".qml")
         qml.write_text('''import QtQuick
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import "FilesIndex.js" as FilesIndex
@@ -97,11 +98,29 @@ Scope {
   } }
 """)
 
-    # The skip list's suggestions are the scan's folders, so showing it scans as `/` does.
-    run("scan-skip-list", scan("0.05") + """
+    # The skip list's suggestions are home's scanned folders, so showing it scans home as `/` does,
+    # and leaves the added folders unscanned.
+    run("scan-skip-list", scan("0.05", "0.05", '["/x"]') + """
   Component.onCompleted: root.listing = "skipped"
   Timer { interval: 400; running: true; onTriggered: {
-    if (!root.files) { console.error("FAIL the skip list did not scan"); Qt.exit(1) }
+    if (root.paths() !== '["/epoch-0/home"]') { console.error("FAIL the skip list scanned", root.paths()); Qt.exit(1) }
+    else { console.log("PASS"); Qt.quit() }
+  } }
+""")
+
+    # Subfolders are listed only while a path is typed into the folders list: a model with no
+    # folder lists the working directory and watches it.
+    run("subfolders-on-demand", """
+  property string listing: ""
+  property string query: ""
+""" + block(wheel, r"  readonly property var subfolderPaths:") + "\n"
+        + block(wheel, r"  Loader \{\n    id: subfolders") + """
+  Timer { interval: 300; running: true; onTriggered: {
+    if (subfolders.item || root.subfolderPaths.length) { console.error("FAIL listed", root.subfolderPaths); Qt.exit(1) }
+    root.listing = "folders"; root.query = "/us"
+  } }
+  Timer { interval: 900; running: true; onTriggered: {
+    if (root.subfolderPaths.indexOf("/usr") < 0) { console.error("FAIL /", root.subfolderPaths); Qt.exit(1) }
     else { console.log("PASS"); Qt.quit() }
   } }
 """)

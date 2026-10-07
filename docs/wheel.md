@@ -65,7 +65,8 @@ The query is a Qt `TextInput`, which types, deletes, moves and selects on its
 own; `MenuKeys.js` sees every key before it does.
 
 Until you type, the field reads `Search · / files · = calc`, and a lone `/`
-names the two keys a path answers to, `Ctrl+Y` and `Ctrl+Enter`.
+lists the files you have picked or, until there are any, names the two keys a
+path answers to, `Ctrl+Y` and `Ctrl+Enter`.
 `tests/check.js` fails when a sigil joins `MODES` without a word in that
 placeholder.
 
@@ -512,7 +513,10 @@ leads its rank, most opened first, but never climbs into a better one. A bare
 `/` lists those files, latest first, while the scan runs. Home and the folders
 added outside it scan apart, so a slow folder, such as a network share still
 mounting, holds back only its own paths: home's show as soon as they land, and
-the folders' join them. Closing cancels both scans and rejects whatever they were
+the folders' join them. Each scan is parsed as it lands, so the join reads only
+the folders' paths: parsing home's again froze the wheel for 74 ms over 82k
+paths. The Skipped folders list suggests home's folders alone, so it scans home
+alone. Closing cancels both scans and rejects whatever they were
 about to say; reopening starts fresh ones. `Enter` on a path
 opens the browser there, whether or not the browser was already up. The browser
 keeps to home, so a path from a folder outside it (Settings) opens the way the
@@ -566,8 +570,9 @@ reads as a Wheely setting among other results.
 another. Enter starts recording, and the row takes every key. The field shows the combo
 pressed, where a value is typed, and the row, with its whole width, says what saving
 would do: `enter saves`, `replaces Omarchy menu` when another binding holds it (the
-wheel's own do not count), or why it cannot be had (`add SUPER, CTRL or ALT`, `closes
-the wheel`, `pick another key` for a key with no name here, such as a shifted symbol).
+wheel's own do not count), or why it cannot be had (`add SUPER`, `closes the wheel`, `pick
+another key` for a key with no name here, such as a shifted symbol). SUPER is required
+because Hyprland takes a bound combo from every app, and apps leave SUPER alone.
 One row cannot hold both: a long combo lost its key. Plain Enter saves; plain Esc gives
 up, and the query comes back.
 
@@ -616,6 +621,8 @@ named `.cache`, `.git` or `node_modules`. Searched folders adds folders outside 
 (`Home + 1`), scanned beside home. Enter on either puts its list in the results: typing suggests
 what to add, folders under home to skip as `/` would find them, or the subfolders of a path
 typed from `/`, and Enter adds the one picked; Del removes the picked entry, and Esc is done.
+The subfolders come from a `FolderListModel` made only while a path is typed: Qt's model with
+no folder lists the process's working directory, the shell's home, and watches it.
 Both are saved to `wheel.json` beside the ring (`"folders"`, `"skipped"`), and an emptied list
 is its default again. A skip with a slash is that folder under home; one without is every
 folder of that name. fd anchors a path only to the first folder it is given, home, so a
@@ -643,7 +650,8 @@ Windows are deliberately uncounted -- their address is new on every launch, so
 counting them would grow the file without bound, and they already sort on live
 focus order. `check.js` holds both invariants: every counted row has a key,
 and no two share one. Opening a setting row is no pick either, so the count on
-Wheely history and Forget picks is exactly what history lists.
+Wheely history and Forget picks is what history lists, along with any pick whose
+row has since gone, such as an app you removed.
 
 The counts live in `~/.local/state/omarchy/wheel-uses.json`, written through on
 each pick rather than batched at exit -- the wheel is a plugin in a shell that

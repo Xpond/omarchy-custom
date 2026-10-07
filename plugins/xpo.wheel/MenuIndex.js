@@ -670,6 +670,13 @@ function parseFiles(raw) {
   return { paths: paths, lower: lower, starts: starts }
 }
 
+// Home's parsed paths, then the added folders' once they land.
+function joinFiles(home, folders) {
+  if (!folders) return home
+  return { paths: home.paths.concat(folders.paths), lower: home.lower.concat(folders.lower),
+           starts: home.starts.concat(folders.starts) }
+}
+
 function fileRow(path, home) {
   var isDir = path.charAt(path.length - 1) === "/"
   var bare = isDir ? path.slice(0, -1) : path

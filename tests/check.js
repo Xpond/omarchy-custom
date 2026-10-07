@@ -86,6 +86,9 @@ for (const query of ["a", "e", "wheel", "a beta"])
   for (const limit of [1, 8, 40, 5001])
     assert.deepEqual(M.fileRows(files, query, limit, "/home/test", false, fileUses), reference(files, query, limit, fileUses))
 assert.deepEqual(M.fileRows(null, "a", 40, "/home/test"), [])
+// Scans parsed apart and joined are the scans parsed together, so a late folder parses only itself.
+assert.deepEqual(M.joinFiles(M.parseFiles(paths.slice(0, 3000).join("\n")), M.parseFiles(paths.slice(3000).join("\n"))), files)
+assert.equal(M.joinFiles(files, null), files)
 const app = M.liveRows({ apps: [{ entry: { id: "broken", icon: "/missing.png" } }],
   windows: [] })[0]
 assert.ok(app.icon)
@@ -550,8 +553,11 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   edit({ setting: "shortcut" })
   assert.equal(press(null), "Press a shortcut | esc cancels | ", "a modifier alone was judged")
   assert.equal(press(""), "Press a shortcut | pick another key | ")
-  assert.equal(press("SHIFT + B", 0, Q.ShiftModifier), "SHIFT + B | add SUPER, CTRL or ALT | ")
-  assert.equal(press("F13", 0, 0), "F13 | add SUPER, CTRL or ALT | ")
+  assert.equal(press("SHIFT + B", 0, Q.ShiftModifier), "SHIFT + B | add SUPER | ")
+  assert.equal(press("F13", 0, 0), "F13 | add SUPER | ")
+  // CTRL or ALT alone is refused too: Hyprland would take the combo from every app.
+  assert.equal(press("CTRL + C", 0, Q.ControlModifier), "CTRL + C | add SUPER | ")
+  assert.equal(press("ALT + SPACE", 0, Q.AltModifier), "ALT + SPACE | add SUPER | ")
   assert.equal(press("SUPER + W"), "SUPER + W | closes the wheel | ")
   assert.equal(press("SUPER + A"), "SUPER + A | already set | ")
   assert.equal(press("SUPER + SPACE"), "SUPER + SPACE | replaces Omarchy menu | SUPER + SPACE")
