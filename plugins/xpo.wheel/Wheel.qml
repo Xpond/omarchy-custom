@@ -122,8 +122,9 @@ Item {
     : root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
     : root.listing === "skipped" ? MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true)
     : root.listing ? MenuIndex.subfolderRows(root.subfolderPaths, root.query, root.home)
-    : root.mode === "file"
-    ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home, false, root.uses)
+    // A bare `/` lists the files picked before, latest first, while the scan runs.
+    : root.mode === "file" && !root.term ? MenuIndex.historyRows([], root.uses, root.home)
+    : root.mode === "file" ? MenuIndex.fileRows(root.files, root.term, root.resultLimit, root.home, false, root.uses)
     : root.mode === "calc" ? Calc.rows(root.term)
     : MenuIndex.search(root.editingRing ? root.index.filter(MenuIndex.pinnable) : root.index,
                        root.term, root.resultLimit, root.uses)
@@ -710,28 +711,40 @@ Item {
     root.focusOrder = next
   }
 
-  // Scan lazily per open; cap depth to avoid large cache and SDK trees.
-  Process {
-    id: fileScan
-    command: MenuIndex.scanCommand(root.folders, root.skipped, root.home)
+  // Scan lazily per open; cap depth to avoid large cache and SDK trees. Home and the added folders
+  // scan apart, so a slow folder, such as a share still mounting, holds back only its own paths.
+  component FileScan: Process {
+    id: scan
     property int epoch: 0
+    property string found: ""
+    property bool done: false
     // Ignore partial output from canceled scans.
     stdout: StdioCollector {
-      onStreamFinished: if (fileScan.epoch === root.scanEpoch) root.files = MenuIndex.parseFiles(text)
+      onStreamFinished: {
+        if (scan.epoch !== root.scanEpoch) return
+        scan.found = text; scan.done = true
+        if (homeScan.done) root.files = MenuIndex.parseFiles(homeScan.found + folderScan.found)
+      }
     }
     onExited: if (epoch !== root.scanEpoch) Qt.callLater(root.scanFiles)
   }
+  FileScan { id: homeScan; command: MenuIndex.scanCommand([root.home], root.skipped, root.home) }
+  FileScan { id: folderScan; command: MenuIndex.scanCommand(root.folders, root.skipped, root.home) }
 
   property int scanEpoch: 0
   function scanFiles() {
-    if (!root.opened || root.mode !== "file" && root.listing !== "skipped" || root.files || fileScan.running) return
-    fileScan.epoch = root.scanEpoch
-    fileScan.running = true
+    if (!root.opened || root.mode !== "file" && root.listing !== "skipped") return
+    if (!homeScan.done && !homeScan.running) { homeScan.epoch = root.scanEpoch; homeScan.running = true }
+    if (root.folders.length && !folderScan.done && !folderScan.running) {
+      folderScan.epoch = root.scanEpoch; folderScan.running = true
+    }
   }
   // Closing, or changing a list, drops the scan; the next search scans again.
   function dropScan() {
     root.scanEpoch++
-    fileScan.running = false
+    homeScan.running = folderScan.running = false
+    homeScan.done = folderScan.done = false
+    homeScan.found = folderScan.found = ""
     root.files = null
   }
   onModeChanged: root.scanFiles()
