@@ -476,22 +476,25 @@ function withBindings(rows, binds, items) {
   return out
 }
 
+// Every wheel setting wears the wheel's own ring of dots, which nothing in Omarchy wears.
+var SETTING_ICON = "󱥸"
+
 // Wheel settings are search rows: `wheely settings` lists them, and each is changed in place.
 // Wheely history rides along, answering to `history` rather than `settings`.
 function settingRows(shortcut, customRing, folders, skipped, picks, centered) {
-  return [{ icon: "", label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
+  return [{ icon: SETTING_ICON, label: "Wheely shortcut", trail: shortcut, kind: KIND.slice, setting: "shortcut",
             keywords: "wheely settings preferences shortcut keybinding keybind hotkey key launch open" },
-          { icon: "󱥸", label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
+          { icon: SETTING_ICON, label: "Wheely ring", trail: customRing ? "Custom" : "Bar", kind: KIND.slice,
             setting: "ring", keywords: "wheely settings preferences ring slices discs pin unpin order favorites" },
-          { icon: "󰂵", label: "Backdrop", trail: "", kind: KIND.slice, setting: "backdrop",
+          { icon: SETTING_ICON, label: "Backdrop", trail: "", kind: KIND.slice, setting: "backdrop",
             keywords: "wheely settings preferences backdrop background blur dim darken frost glass scrim tint" },
-          { icon: "󰕮", label: "Centered panels", trail: centered ? "On" : "Off", kind: KIND.slice, setting: "panels",
+          { icon: SETTING_ICON, label: "Centered panels", trail: centered ? "On" : "Off", kind: KIND.slice, setting: "panels",
             keywords: "wheely settings preferences centered center middle panels popups native bar position" },
-          { icon: "󰥨", label: "Searched folders", trail: "Home" + (folders.length ? " + " + folders.length : ""),
+          { icon: SETTING_ICON, label: "Searched folders", trail: "Home" + (folders.length ? " + " + folders.length : ""),
             kind: KIND.slice, setting: "folders", keywords: "wheely settings preferences file search searched folders outside" },
-          { icon: "󱧸", label: "Skipped folders", trail: String(skipped.length), kind: KIND.slice,
+          { icon: SETTING_ICON, label: "Skipped folders", trail: String(skipped.length), kind: KIND.slice,
             setting: "skipped", keywords: "wheely settings preferences file search skipped skip exclude ignore folders" },
-          { icon: "󰋚", label: "Forget picks", trail: String(picks), kind: KIND.slice, setting: "forget",
+          { icon: SETTING_ICON, label: "Forget picks", trail: String(picks), kind: KIND.slice, setting: "forget",
             keywords: "wheely settings preferences forget clear picks history remembered ranking uses" },
           { icon: "󰅐", label: "Wheely history", trail: String(picks), kind: KIND.slice, setting: "history",
             keywords: "wheely history recent picks used opened launched" }]
