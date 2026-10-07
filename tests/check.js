@@ -605,6 +605,10 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     "the ring editor offered what a ring cannot hold")
   finder.editingRing = false; finder.mode = ""
   assert.equal(binding("results", { root: finder, MenuIndex: M }).length, 2)
+  // A bare `/` lists the files picked before, latest first, and nothing else.
+  const bare = { listing: "", mode: "file", term: "", resultLimit: 40, home: "/home/test",
+    uses: { "file:/home/test/a": 1, "system.lock": 3, "file:/home/test/b/": 1 } }
+  assert.deepEqual(binding("results", { root: bare, MenuIndex: M }).map(r => r.path), ["/home/test/b/", "/home/test/a"])
   // `/` search hands the wheel's picks over: a file opened before leads a shorter name.
   const picker = { listing: "", mode: "file", term: "a", resultLimit: 40, home: "/home/test",
     files: M.parseFiles("/home/test/ab\n/home/test/abc\n"), uses: { "file:/home/test/abc": 1 } }
@@ -691,19 +695,20 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
 }
 console.log("ok: the ring takes what search finds, and its editor adds, moves, removes and goes back to the bar")
 
-// Until a list changes, `/` scans as it always has; folders outside home join that one fd, and a
-// skip with a slash anchors under home, the first folder, as fd does. Run against fd itself.
+// Until a list changes, `/` scans home as it always has; folders outside home get a scan of their own,
+// and a skip with a slash anchors under home, so only home's scan takes it. Run against fd itself.
 {
   const home = "/home/test"
-  assert.equal(M.scanCommand([], M.SKIPPED, home).join(" "),
+  assert.equal(M.scanCommand([home], M.SKIPPED, home).join(" "),
     "fd --hidden --max-depth 6 --exclude .cache --exclude .git --exclude node_modules . /home/test")
-  assert.equal(M.scanCommand(["/mnt"], ["~/Android"], home).join(" "), "fd --hidden --max-depth 6 --exclude /Android/ . /home/test /mnt")
+  assert.equal(M.scanCommand([home], ["~/Android"], home).join(" "), "fd --hidden --max-depth 6 --exclude /Android/ . /home/test")
+  assert.equal(M.scanCommand(["/mnt"], ["~/Android", ".git"], home).join(" "), "fd --hidden --max-depth 6 --exclude .git . /mnt")
   const tree = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "wheel-scan-"))
   for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/p/node_modules/m", "home/1/2/3/4/5/6/deep", "mnt/a"])
     fs.mkdirSync(path.dirname(path.join(tree, name)), { recursive: true }), fs.writeFileSync(path.join(tree, name), "")
-  const command = M.scanCommand([tree + "/mnt"], ["node_modules", "~/Android"], tree + "/home")
-  const found = require("node:child_process").execFileSync(command[0], command.slice(1),
-    { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })
+  const found = [[tree + "/home"], [tree + "/mnt"]].map(roots => M.scanCommand(roots, ["node_modules", "~/Android"], tree + "/home"))
+    .map(command => require("node:child_process").execFileSync(command[0], command.slice(1),
+      { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })).join("")
   assert.deepEqual(found.split("\n").filter(Boolean).map(p => p.slice(tree.length)).sort(),
     ["/home/.claude/", "/home/.claude/CLAUDE.md", "/home/1/", "/home/1/2/", "/home/1/2/3/", "/home/1/2/3/4/",
      "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/a"])

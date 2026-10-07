@@ -620,16 +620,16 @@ function termOf(query) {
 // What `/` has always skipped, until the list is changed: a name skips that folder anywhere.
 var SKIPPED = [".cache", ".git", "node_modules"]
 
-// The scan `/` has always run, over the folders added outside home too. fd anchors a path only to
-// the first folder it is given, so a skip with a slash takes effect under home.
-function scanCommand(folders, skipped, home) {
+// The scan `/` has always run over home, and a second over the folders added outside it. fd anchors
+// a path only to the first folder it is given, so a skip with a slash goes to home's scan alone.
+function scanCommand(roots, skipped, home) {
   var command = ["fd", "--hidden", "--max-depth", "6"]
   for (var i = 0; i < skipped.length; i++) {
     var skip = String(skipped[i])
     if (skip.indexOf("/") < 0) command.push("--exclude", skip)
-    else if (skip.indexOf("~/") === 0) command.push("--exclude", skip.slice(1) + "/")
+    else if (roots[0] === home && skip.indexOf("~/") === 0) command.push("--exclude", skip.slice(1) + "/")
   }
-  return command.concat([".", home], folders)
+  return command.concat(["."], roots)
 }
 
 // A folder as a list writes it: from ~ when home holds it, without fd's closing slash.

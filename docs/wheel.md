@@ -501,8 +501,12 @@ Quickshell, fails on a warning it doesn't expect (`tests/qslog.py`).
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
 which is every row that could be read. A file opened from the wheel before
-leads its rank, most opened first, but never climbs into a better one. Closing
-cancels the scan and rejects whatever it was about to say; reopening starts a fresh one. `Enter` on a path
+leads its rank, most opened first, but never climbs into a better one. A bare
+`/` lists those files, latest first, while the scan runs. Home and the folders
+added outside it scan apart, so a slow folder, such as a network share still
+mounting, holds back only its own paths: home's show as soon as they land, and
+the folders' join them. Closing cancels both scans and rejects whatever they were
+about to say; reopening starts fresh ones. `Enter` on a path
 opens the browser there, whether or not the browser was already up. The browser
 keeps to home, so a path from a folder outside it (Settings) opens the way the
 browser opens a file, through `omarchy-open-path`.
@@ -600,7 +604,7 @@ watches; each panel reads it through `Color.shellValues` as it opens (centered-p
 **Searched folders** and **Skipped folders** change what `/` searches; until they do, it is
 what it always was: home, hidden folders included, six levels deep, skipping every folder
 named `.cache`, `.git` or `node_modules`. Searched folders adds folders outside home
-(`Home + 1`) to the same scan. Enter on either puts its list in the results: typing suggests
+(`Home + 1`), scanned beside home. Enter on either puts its list in the results: typing suggests
 what to add, folders under home to skip as `/` would find them, or the subfolders of a path
 typed from `/`, and Enter adds the one picked; Del removes the picked entry, and Esc is done.
 Both are saved to `wheel.json` beside the ring (`"folders"`, `"skipped"`), and an emptied list
