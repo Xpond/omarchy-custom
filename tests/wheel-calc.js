@@ -1,9 +1,7 @@
 // The wheel's calculator: answers, precedence, and the input that has none.
 const assert = require("node:assert/strict")
-const fs = require("node:fs")
-const path = require("node:path")
-const source = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/Calc.js"), "utf8")
-const C = new Function(source.replace(/^\.pragma library/m, "") + "\nreturn { evaluate, rows }")()
+const { library } = require("./qml.js")
+const C = library("plugins/xpo.wheel/Calc.js")
 
 // Each answer is one row, and Enter copies exactly what it shows.
 for (const [text, want] of [

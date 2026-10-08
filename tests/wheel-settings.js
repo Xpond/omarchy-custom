@@ -126,7 +126,7 @@ const { M, wheelSource, binding, derive } = require("./wheel-source.js")
   derive(rec, "refused", "pending", "taken", "editValue", "editNote")
   const edit = method(wheelSource, "edit", { root: rec })
   const record = method(wheelSource, "record",
-    { root: rec, Qt: Q, MenuIndex: M, MenuKeys: { shortcutOf: event => event.combo } })
+    { root: rec, Qt: Q, MenuKeys: { shortcutOf: event => event.combo } })
   const press = (combo, key = 0, modifiers = Q.MetaModifier) => {
     record({ combo, key, modifiers })
     return rec.editValue + " | " + rec.editNote + " | " + rec.pending
@@ -169,7 +169,7 @@ const { M, wheelSource, binding, derive } = require("./wheel-source.js")
   // Enter on a setting row starts changing it; the wheel stays up.
   const setRow = { countUse() {}, dismiss() { throw new Error("a setting row closed the wheel") },
                    slices: [], edited: "", edit(e) { this.edited = e.setting } }
-  method(wheelSource, "run", { root: setRow, Qt: {}, unmap: { running: false }, MenuIndex: M })(rows[0])
+  method(wheelSource, "run", { root: setRow, unmap: { running: false }, MenuIndex: M })(rows[0])
   assert.equal(setRow.edited, "shortcut")
 }
 console.log("ok: settings are rows, the wheel's own bindings are not, and the shortcut row records, judges and saves")

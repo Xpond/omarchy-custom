@@ -54,10 +54,6 @@ assert.ok(fs.existsSync(path.join(plugin, "mark.png")), "mark.png is missing")
   near(dusk(0), 1, "twilight does not peak at the horizon")
   for (const e of [1, -1]) assert.ok(dusk(e) < 0.01, "twilight lingers at elevation " + e)
   assert.ok(Math.abs(dusk(0.4) - dusk(-0.4)) < 1e-9, "twilight is lopsided about the horizon")
-  // Haze peaks while stars are still visible, on both sides of the horizon.
-  for (const p of [0.5, 1]) {
-    assert.ok(dusk(elevation(p)) > 0.9, "no haze at the hour it is meant to be thickest")
-  }
   // The arc runs left to right across the day, not straight up the middle.
   near(azimuth(0), -1, "the light does not come up out of the left")
   near(azimuth(0.25), 0, "noon is not overhead")

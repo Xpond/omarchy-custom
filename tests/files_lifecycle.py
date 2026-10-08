@@ -1,30 +1,9 @@
-#!/usr/bin/env python3
-"""Closed file panels must not restart previews when their directory changes,
-and popping out into a window must keep the preview it had."""
-import os
-from pathlib import Path
-import re
-import shutil
-import subprocess
-import tempfile
-import qslog
+"""Closed file panels must not restart previews when their directory changes, and popping out
+into a window must keep the preview it had. Rows follow every change to the directory, query and order."""
 
-repo = Path(__file__).resolve().parents[1]
-source = (repo / "plugins/xpo.files/Files.qml").read_text()
-selection = re.search(r"^  onSelChanged: .*", source, re.M)[0]
-shown = re.search(r"^  readonly property bool shown: .*", source, re.M)[0]
-lifecycle = re.search(r"^  onShownChanged: \{.*?^  }", source, re.M | re.S)[0]
-pop_out = re.search(r"^  function popOut\(\) \{.*?^  }", source, re.M | re.S)[0]
-settle = re.search(r"^  Timer \{\n    id: settle.*?^  }", source, re.M | re.S)[0]
-ordering = "\n".join(re.findall(r"^  readonly property var (?:orderedEntries|rows): .*", source, re.M))
-with tempfile.TemporaryDirectory(prefix="files-lifecycle-") as temporary:
-    base = Path(temporary)
-    shutil.copyfile(repo / "plugins/xpo.files/FilesIndex.js", base / "FilesIndex.js")
-    (base / "shell.qml").write_text('''import QtQuick
-import Quickshell
-import "FilesIndex.js" as FilesIndex
-Scope {
-  id: root
+
+def check(files, run, block, line):
+    run("files-lifecycle", '''
   property bool opened: false
   property bool windowed: false
   property var shell: null
@@ -42,7 +21,10 @@ Scope {
   function check(ok, message) {
     if (!ok) { console.error("FAIL", message); Qt.exit(1) }
   }
-''' + "\n".join([shown, ordering, selection, lifecycle, settle, pop_out]) + '''
+''' + line(files, r"^  readonly property bool shown: .*") + line(files, r"^  readonly property var orderedEntries: .*")
+        + line(files, r"^  readonly property var rows: .*") + line(files, r"^  onSelChanged: .*")
+        + "\n".join(block(files, pattern) for pattern in [r"^  onShownChanged: \{", r"^  Timer \{\n    id: settle",
+                                                          r"^  function popOut\(\) \{"]) + '''
   Component.onCompleted: {
     entries = [{ name: "zAlpha", size: 9, isDir: false },
                { name: "alpha", size: 2, isDir: false }]
@@ -99,12 +81,4 @@ Scope {
       console.log("PASS"); Qt.quit()
     }
   } }
-}''')
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="generic",
-               XDG_RUNTIME_DIR=str(base / "runtime"), XDG_CACHE_HOME=str(base / "cache"))
-    result = subprocess.run(["quickshell", "--no-color", "-p", str(base / "shell.qml")],
-                            env=env, capture_output=True, text=True, timeout=5)
-    log = result.stdout + result.stderr
-    assert result.returncode == 0 and "PASS" in log, log
-    qslog.check(log)
-    print("ok: hidden preview suppression, visible updates, reopen, pending close and the window")
+''')

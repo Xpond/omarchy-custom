@@ -15,13 +15,11 @@ assert.equal(M.search(lockRows.concat([localSend]), "loc", 40, { "system.lock": 
 const brave = { label: "Brave", appId: "brave", kind: M.KIND.app, keywords: "Brave" }
 const filesPanel = { label: "Files", plugin: "xpo.files", kind: M.KIND.slice, keywords: "Files browser" }
 assert.deepEqual(M.search([filesPanel, brave], "br", 40, { "xpo.files": 105 }).map(e => e.label), ["Brave", "Files"])
-// A pick moves its key last, through the file too; history lists picks newest first, a file by its
-// path, and leaves out settings and keys that name nothing today.
+// A pick moves its key last, through the file too.
 let picks = {}
 for (const k of ["system.lock", "file:/home/test/a.txt", "setting:ring", "gone", "system.lock"]) picks = M.withPick(picks, k)
 assert.deepEqual(Object.entries(JSON.parse(JSON.stringify(picks))),
   [["file:/home/test/a.txt", 1], ["setting:ring", 1], ["gone", 1], ["system.lock", 2]])
-assert.deepEqual(M.historyRows(lockRows, picks, "/home/test").map(r => r.label), ["Lock", "a.txt"])
 assert.deepEqual(M.search(lockRows, "rally", 40, {}), [])
 assert.deepEqual(M.childrenOf(lockMenu, "style.lockscreen", M.NO_CONDITIONS).map(e => [e.label, e.action]),
   [["Rally", "omarchy-lock-design set 'rally'"], ["Wallpaper", "omarchy-lock-design set 'wallpaper'"]])
@@ -86,9 +84,11 @@ assert.equal(indexed.index.length, indexed.staticRows.length + indexed.settingRo
 console.log("ok: every panel the bar can open is searchable, on the ring or not")
 
 {
-  // History lists picks newest first in the results; Del has no list to remove from, an empty history
-  // says so, and a submenu picked from it leaves the list rather than being added to one.
-  const hist = { listing: "history", query: "", mode: "", index: lockRows, uses: picks, home: "/home/test" }
+  // History lists picks newest first in the results, a file by its path, and leaves out keys that name
+  // nothing today and settings, which older wheels counted as picks; Del has no list to remove from, an
+  // empty history says so, and a submenu picked from it leaves the list rather than being added to one.
+  const hist = { listing: "history", query: "", mode: "", uses: picks, home: "/home/test",
+    index: lockRows.concat(M.settingRows(M.SHORTCUT, false, [], M.SKIPPED)) }
   assert.deepEqual(binding("results", { root: hist, MenuIndex: M }).map(r => r.label), ["Lock", "a.txt"])
   assert.deepEqual([binding("listed", { root: hist }), binding("emptyText", { root: hist })], [[], "Nothing picked yet"])
   const added = []

@@ -5,7 +5,6 @@ const path = require("node:path")
 const vm = require("node:vm")
 const read = file => fs.readFileSync(path.join(__dirname, "../patches/shell/plugins/lock", file), "utf8")
 const source = read("Service.qml"), view = read("LockView.qml")
-const delay = Number(source.match(/id: idleBlankTimer[^]*?interval: (\d+)/)[1])
 const trigger = "(function() {" + source.match(/id: idleBlankTimer[^]*?onTriggered: \{([^]*?)^    }/m)[1] + "})()"
 const wakeExit = source.match(/id: wakeProcess[^]*?onExited: (.+)/)[1]
 const blankExit = source.match(/id: blankProcess[^]*?onExited: (.+)/)[1]
@@ -14,7 +13,7 @@ const scope = { Date: { now: () => now }, lockRequested: true, waking: false, un
   authenticatingPassword: false, lastInput: 0, wakeUntil: 0, logEvent() {},
   wakeProcess: { running: false }, blankProcess: { running: false },
   unlockTimer: { starts: 0, restart() { this.starts++ } },
-  idleBlankTimer: { interval: delay, armedAt: 0, restart() { blankAt = now + this.interval }, stop() { blankAt = 0 } } }
+  idleBlankTimer: { restart() { blankAt = now + this.interval }, stop() { blankAt = 0 } } }
 const display = { loadBackground: true, driving: false, tell(name) { if (name === "play") plays++ } }
 Object.defineProperty(display, "blanked", { get: () => hidden })
 vm.createContext(display)

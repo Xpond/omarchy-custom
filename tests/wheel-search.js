@@ -1,10 +1,7 @@
 // Search parity across cached queries, rebuilt sources, and changing usage/recency.
 const assert = require("node:assert/strict")
-const fs = require("node:fs")
-const path = require("node:path")
-const source = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/MenuIndex.js"), "utf8")
-const names = [...source.matchAll(/^(?:function (\w+)|var (\w+) =)/gm)].map(m => m[1] || m[2])
-const M = new Function(source.replace(/^\.pragma library/m, "") + "\nreturn {" + names.join(",") + "}")()
+const { method } = require("./qml.js")
+const { M, wheelSource } = require("./wheel-source.js")
 
 // Issue #1: a launcher without calculator keywords must still match "calc" inside its name.
 const calculatorApps = [
@@ -109,15 +106,12 @@ for (const renamed of [false, true]) {
 }
 
 // Exercise the production refresh path after its live inputs change in place.
-const wheel = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/Wheel.qml"), "utf8")
 const desktop = { id: "org.example.editor", name: "Old Editor" }
 const top = { title: "Old Document", address: "123", wayland: { appId: desktop.id } }
 const root = { staticRows: [], styleRows: [], settingRows: [], focusOrder: [], menuItems: {},
   bindRows: M.bindRows("SUPER + N → New thing\texec\tnew action\n"),
   appLibrary: { sortedEntries: () => [{ entry: desktop }] } }
-const rebuild = new Function("root", "MenuIndex", "Hyprland",
-  wheel.match(/^  function rebuildIndex\([^]*?^  }/m)[0] + "\nreturn rebuildIndex")(
-    root, M, { toplevels: { values: [top] } })
+const rebuild = method(wheelSource, "rebuildIndex", { root, MenuIndex: M, Hyprland: { toplevels: { values: [top] } } })
 rebuild()
 const previous = M.search(root.index, "old", 40, {})
 assert.equal(previous.length, 2)

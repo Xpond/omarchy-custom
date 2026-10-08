@@ -9,9 +9,11 @@ function library(name) {
   const names = [...src.matchAll(/^(?:function (\w+)|var (\w+) =)/gm)].map(m => m[1] || m[2])
   return new Function(src + "\nreturn {" + names.join(",") + "}")()
 }
+// A function ends on its own line or at the next brace closing at its indent.
 function method(source, name, scope) {
+  const start = "^  function " + name + "\\("
   vm.createContext(scope)
-  vm.runInContext(source.match(new RegExp("^  function " + name + "\\([^]*?^  }", "m"))[0], scope)
+  vm.runInContext(source.match(new RegExp(start + "[^\\n]*\\} *$|" + start + "[^]*?^  }", "m"))[0], scope)
   return scope[name]
 }
 // A key map is a library like any other. It needs only a Qt whose names compare

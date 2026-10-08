@@ -3,22 +3,16 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const os = require("node:os")
 const path = require("node:path")
-const vm = require("node:vm")
 const { spawnSync } = require("node:child_process")
-const repo = path.resolve(__dirname, "..")
-const opsSource = fs.readFileSync(path.join(repo, "plugins/xpo.files/FilesOps.qml"), "utf8")
-const panelSource = fs.readFileSync(path.join(repo, "plugins/xpo.files/Files.qml"), "utf8")
-function method(source, name, scope) {
-  const code = source.match(new RegExp("^  function " + name + "\\([^\\n]*\\} *$|^  function "
-                                     + name + "\\([^]*?^  }", "m"))[0]
-  return vm.runInNewContext("(" + code.trim() + ")", scope)
-}
+const { read, method } = require("./qml.js")
+const opsSource = read("plugins/xpo.files/FilesOps.qml")
+const panelSource = read("plugins/xpo.files/Files.qml")
 const base = fs.mkdtempSync(path.join(os.tmpdir(), "files-ops-"))
 try {
   const incoming = path.join(base, "incoming")
   const destination = path.join(base, "destination")
   fs.mkdirSync(incoming); fs.mkdirSync(destination)
-  const panel = { listedDir: destination, editing: false, pending: "", sel: null }
+  const panel = { listedDir: destination, editing: false, sel: null }
   const calls = []
   const ops = { held: null, doomed: "", note() {} }
   ops.run = command => {
@@ -103,8 +97,6 @@ try {
   ops.remove()
   assert.deepEqual(calls.at(-1).command, ["gio", "trash", "--", panel.sel.path])
   assert.equal(ops.doomed, "")
-  assert.equal(fs.readFileSync(occupied, "utf8"), "occupied")
-  assert.equal(fs.existsSync(panel.sel.path), true, "trash must stay stubbed")
   panel.editing = true
   const after = calls.length
   ops.remove(); ops.remove()

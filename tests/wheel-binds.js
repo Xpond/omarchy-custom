@@ -1,10 +1,7 @@
 // Keybindings as wheel rows: Omarchy's records, the rows they join, and the rest.
 const assert = require("node:assert/strict")
-const fs = require("node:fs")
-const path = require("node:path")
-const source = fs.readFileSync(path.join(__dirname, "../plugins/xpo.wheel/MenuIndex.js"), "utf8")
-const names = [...source.matchAll(/^(?:function (\w+)|var (\w+) =)/gm)].map(m => m[1] || m[2])
-const M = new Function(source.replace(/^\.pragma library/m, "") + "\nreturn {" + names.join(",") + "}")()
+const { library } = require("./qml.js")
+const M = library("plugins/xpo.wheel/MenuIndex.js")
 
 // Records as omarchy-menu-keybindings writes them: padded keys, an arrow, then tab-separated fields.
 const record = (keys, label, kind, arg) => `${keys.padEnd(35)} → ${label}\t${kind}\t${arg}`

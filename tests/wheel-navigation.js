@@ -33,7 +33,7 @@ console.log("ok: only the panel the wheel opened answers backspace with a return
 const ran = { countUse() {}, dismiss() {}, launchedAt: null,
   slices: [{ plugin: "a" }, { plugin: "b" }, { plugin: "c" }] }
 const runPick = method(wheelSource, "run",
-  { root: ran, Qt: { callLater() {} }, unmap: { running: false }, MenuIndex: M })
+  { root: ran, unmap: { running: false }, MenuIndex: M })
 runPick(ran.slices[2])
 assert.equal(ran.launchedAt, 2, "the slice that was run is written down")
 runPick({ plugin: "off-ring" })

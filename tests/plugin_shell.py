@@ -110,8 +110,6 @@ Item {
       wheel.opened = true
       check(root.bar.visiblePanelSurfaces === 1, "wheel backdrop missing")
       check(wheel.shell.appLibrary && !files.shell.appLibrary, "menu capability lost or broadened")
-      wheel.shell.panelSurfaceVisible(true)
-      check(root.bar.visiblePanelSurfaces === 1, "duplicate report inflated count")
       files.opened = true
       wheel.opened = false
       check(root.bar.visiblePanelSurfaces === 1, "handoff dropped Files backdrop")

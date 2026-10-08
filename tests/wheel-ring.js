@@ -44,7 +44,7 @@ const shift = 1 << 25, ctrl = 1 << 26
     select(i) { this.selected = i }, enter(node) { this.path = []; this.query = ""; this.selected = -1 },
     countUse() { throw new Error("adding to the ring counted a pick") },
     dismiss() { throw new Error("the ring editor closed the wheel") } }
-  const scope = { root: ed, ringFile: disk, MenuIndex: M, Qt: {}, unmap: { running: false } }
+  const scope = { root: ed, ringFile: disk, MenuIndex: M, unmap: { running: false } }
   for (const name of ["edit", "run", "pin", "unpin", "moveSlice", "resetRing", "saveRing"])
     ed[name] = method(wheelSource, name, scope)
   derive(ed, "ringKeys")

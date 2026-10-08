@@ -1,9 +1,7 @@
 // Ranking and preview equivalence. Run: node tests/files-performance.js
 const assert = require("node:assert/strict")
-const fs = require("node:fs")
-const path = require("node:path")
-const source = fs.readFileSync(path.join(__dirname, "../plugins/xpo.files/FilesIndex.js"), "utf8")
-const F = new Function(source.replace(/^\.pragma library/m, "") + "\nreturn { ordered, matching, head, snapshot, columns }")()
+const { library } = require("./qml.js")
+const F = library("plugins/xpo.files/FilesIndex.js")
 
 // Independent stable-sort reference, including missing dates and tied metadata.
 const entries = Array.from({ length: 2000 }, (_, i) => ({

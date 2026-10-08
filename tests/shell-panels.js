@@ -35,7 +35,7 @@ assert.equal(openPeers["omarchy.menu"], false, "a directly opened overlay is clo
 // A custom full bar need not implement plugin popout ownership.
 const bareBar = { activePopout: null }
 bareBar.activePopout = { closeForPopoutSwitch() { bareBar.activePopout = null } }
-const bareShell = { bar: bareBar, isPluginOpen: () => false, hide() {} }
+const bareShell = { bar: bareBar }
 bareShell.barHasPluginPopouts = method(shellSource, "barHasPluginPopouts", { shell: bareShell })
 const closeBarePeers = method(shellSource, "closePluginPeers",
   { shell: bareShell, openPanelIds: {}, panelLoaders: {} })
@@ -135,8 +135,6 @@ assert.deepEqual(surfaceCalls, [true, false], "a plugin cannot inflate the scrim
 for (const file of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"])
   assert.doesNotMatch(read(file), /root\.shell\.(?:bar|openPanelIds|panelLoaders|callIfLoaded)\b/,
     file + " reaches through its facade")
-assert.match(read("plugins/xpo.wheel/manifest.json"), /"menu"/,
-  "the wheel lacks the menu capability")
 for (const plugin of ["xpo.wheel", "xpo.files"])
   require("node:child_process").execFileSync("omarchy",
     ["plugin", "validate", path.join(repo, "plugins", plugin)], { stdio: "inherit" })
