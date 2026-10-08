@@ -7,7 +7,6 @@ def check(wheel, run, block):
   property bool armed: false
   property bool justOpened: false
   property string query: ""
-  property int queryAt: 0
   readonly property bool searching: query.length > 0
   property int selected: -1
   property int resultIndex: 0

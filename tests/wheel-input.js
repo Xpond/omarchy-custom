@@ -14,7 +14,7 @@ const edit = (query, at) => { dial.query = query; dial.queryAt = at }
 const field = { selectionStart: 0, selectionEnd: 0, get cursorPosition() { return dial.queryAt },
   remove(from, to) { if (from < to) edit(dial.query.slice(0, from) + dial.query.slice(to), from) },
   insert(at, text) { edit(dial.query.slice(0, at) + text + dial.query.slice(at), at + text.length) } }
-dial.paste = method(wheelSource, "paste", { root: dial, searchInput: field,
+dial.paste = method(wheelSource, "paste", { searchInput: field,
   Quickshell: { clipboardText: "pasted  text" } })
 dial.copy = method(wheelSource, "copy", { Quickshell: { execDetached: c => copied.push(c.at(-1)) } })
 dial.takePath = method(wheelSource, "takePath", { root: dial })
@@ -59,7 +59,7 @@ assert.deepEqual(copied, ["/home/test/notes.md", "dismissed"])
 // Ctrl+Enter opens a terminal in a path's folder, and on any other row is Enter.
 const terminals = [], entered = []
 dial.run = e => entered.push(e)
-dial.terminal = method(wheelSource, "terminal", { root: dial, Qt: { callLater: fn => fn() }, MenuIndex: M,
+dial.terminal = method(wheelSource, "terminal", { root: dial, MenuIndex: M,
   Quickshell: { execDetached: argv => terminals.push([...argv]) } })
 dial.results.push({ path: "/home/test/My Dir/" })
 dial.resultIndex = 0; dialKey("Key_Return", ctrl)

@@ -5,8 +5,7 @@ const M = library("plugins/xpo.wheel/MenuIndex.js")
 
 const source = read("plugins/xpo.files/Files.qml")
 const calls = []
-const root = { editing: true, dirty: true, saving: null, opened: true,
-  note: t => calls.push(t), enter: d => calls.push(d), home: "/home/test",
+const root = { editing: true, dirty: true, saving: null, opened: true, enter: d => calls.push(d),
   focusedScreen: () => null, claimPending() {}, leaveEdit() { this.editing = false } }
 const scope = { root, ops: { note: t => calls.push(t) },
   preview: { focusEditor: () => calls.push("editor focus") },
@@ -37,8 +36,7 @@ console.log("ok: navigation preserves dirty/pending edits; self-close does not r
 const popped = []
 const win = { opened: true, windowed: false, editing: false, filter: "", naming: "",
   dir: "/home/test/here", shell: { hide: id => popped.push("hide " + id) },
-  raise: () => popped.push("raise"), enter(d) { this.dir = d }, claimPending() {},
-  focusedScreen: () => null }
+  raise: () => popped.push("raise"), enter(d) { this.dir = d }, claimPending() {} }
 const winScope = { root: win, keys: { forceActiveFocus() {} }, Qt: { callLater: fn => fn() } }
 win.popOut = method(source, "popOut", winScope)
 win.close = method(source, "close", winScope)
@@ -77,7 +75,7 @@ assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
 const wheel = { root: { home: "/home/test", countUse() {}, dismiss() { this.queued() }, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
-} }, Qt: { callLater: fn => fn() }, unmap: { running: false }, MenuIndex: M,
+} }, unmap: { running: false }, MenuIndex: M,
   Quickshell: { execDetached: argv => calls.push([...argv]) },
   Hyprland: { dispatch: expression => calls.push(["dispatch", expression]) } }
 const runRow = method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)

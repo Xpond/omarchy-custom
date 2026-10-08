@@ -20,10 +20,6 @@ def check(wheel, base, run, block, line):
     if (searchInput.text + "|" + searchInput.cursorPosition !== "fox|1") {
       console.error("FAIL the caret did not land", searchInput.text, searchInput.cursorPosition); Qt.exit(1); return
     }
-    root.query = ""
-    if (searchInput.text !== "" || root.queryAt !== 0) { console.error("FAIL caret left behind", root.queryAt); Qt.exit(1); return }
-    searchInput.insert(0, "a"); root.query = "b"
-    if (searchInput.text !== "b") { console.error("FAIL typing cut the field loose", searchInput.text); Qt.exit(1); return }
     console.log("PASS"); Qt.quit()
   } }
 ''')

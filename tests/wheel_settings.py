@@ -72,7 +72,6 @@ def check(wheel, base, env, run, block, line):
     run("backdrop-save", """
   property int backdropDraft: 50
   readonly property int backdrop: backdropDraft
-  property string editValue: ""
   property int stage: 0
   property var steps: [60, 70, 80, 90, 100, 80, 60, 40, 20, 0]
   QtObject { id: bindList; property bool running: false }

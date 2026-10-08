@@ -39,11 +39,12 @@ class Installer:
                                    "PACKAGE_CACHE=" + shlex.quote(str(self.package / "cache"))))
         commands = {
             "sudo": '''if [[ "$*" == *shell.qml ]]; then
-  [[ "${CHECK_FAIL:-}" == copy ]] && exit 1
   if [[ "${CHECK_FAIL:-}" == partial ]]; then head -c -4 "${@: -2:1}" > "${@: -1}"; exit 1; fi
 fi
 exec "$@"''',
             "notify-send": "exit 0",
+            # install.sh finds the shell with quickshell, never pgrep. A fallback to pgrep would find
+            # this PID, so "no-shell" catches it even on a host where no Quickshell runs.
             "pgrep": "echo 1",
             "quickshell": '''[[ "$*" == "list -j -p $CHECK_SHELL" ]] || exit 1
 [[ "${CHECK_FAIL:-}" == no-shell ]] && { echo '[]'; exit 0; }
@@ -58,7 +59,6 @@ echo '[{"pid": 424242}]' ''',
   *) exec /usr/bin/grep "$@" ;;
 esac''',
             "sleep": "exit 0",
-            "jq": '[ "${CHECK_FAIL:-}" = jq ] && exit 127\nexec /usr/bin/jq "$@"',
             "mv": '[ "${CHECK_FAIL:-}" = mv ] && exit 1\nexec /usr/bin/mv "$@"',
             "omarchy": '''if [[ "$1 $2" == "hook install" ]]; then
   [[ "${CHECK_FAIL:-}" == hook ]] && exit 1

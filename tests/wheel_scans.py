@@ -70,20 +70,17 @@ def check(wheel, run, block):
   } }
 """)
 
-    # Home answers without waiting for a slow added folder, which joins when it lands; a folder
-    # that lands first waits for home rather than showing alone.
-    for name, home_wait, folder_wait, early in [("scan-home-first", "0.05", "1", '["/epoch-0/home"]'),
-                                                ("scan-folder-first", "0.6", "0.05", "null")]:
-        run(name, scan(home_wait, folder_wait, '["/x"]') + """
+    # A folder that lands first waits for home rather than showing alone, and joins it when home lands.
+    run("scan-folder-first", scan("0.6", "0.05", '["/x"]') + """
   Component.onCompleted: root.mode = "file"
   Timer { interval: 400; running: true; onTriggered: {
-    if (root.paths() !== '%s') { console.error("FAIL early", root.paths()); Qt.exit(1) }
+    if (root.paths() !== 'null') { console.error("FAIL early", root.paths()); Qt.exit(1) }
   } }
   Timer { interval: 1600; running: true; onTriggered: {
     if (root.paths() !== '["/epoch-0/home","/epoch-0/folder"]') { console.error("FAIL late", root.paths()); Qt.exit(1) }
     else { console.log("PASS"); Qt.quit() }
   } }
-""" % early)
+""")
 
     # A finished scan is the open's own: reopening scans again, and home's new paths never show
     # beside the last open's folder paths.

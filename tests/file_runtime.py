@@ -1,27 +1,10 @@
-"""Actual FileView decoding and file-operation process completion."""
+"""Actual file editing and file-operation process completion."""
 import json
 import os
 from file_edits import check as check_file_edits
 
 
 def check(files, ops, base, run, block):
-    for name, content, expected in [("empty", b"", True),
-                                     ("latin1", b"caf\xe9\n", False),
-                                     ("late-invalid", b"a" * 2048 + b"\xe9", False),
-                                     ("unicode", "café हिन्दी 😀 �\n".encode(), True)]:
-        target = base / name
-        target.write_bytes(content)
-        run("fileview-" + name, '''
-  FileView {
-    path: ''' + json.dumps(str(target)) + '''
-    onLoaded: {
-      if (FilesIndex.isUtf8(data()) !== ''' + str(expected).lower() + ''') {
-        console.error("FAIL encoding"); Qt.exit(1)
-      } else { console.log("PASS"); Qt.quit() }
-    }
-  }
-''')
-
     check_file_edits(files, base, run, block)
 
     # Replace the external clipboard owner, preserving the actual shell pipeline

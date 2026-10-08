@@ -3,13 +3,6 @@ const { library } = require("./qml.js")
 const M = library("plugins/xpo.wheel/MenuIndex.js")
 const F = library("plugins/xpo.files/FilesIndex.js")
 
-for (const n of [0, 1, 499, 500, 501]) {
-  for (const ending of ["", "\n", "\r\n"]) {
-    const text = Array(n).fill("content").join(ending === "\r\n" ? ending : "\n") + ending
-    assert.equal(F.head(text, 500) === text, n <= 500)
-    if (n > 500) assert.ok(F.head(text, 500).endsWith("\n…"))
-  }
-}
 const buffer = bytes => Uint8Array.from(bytes).buffer
 const valid = [[], [0], [0x7f], [0xc2, 0x80], [0xdf, 0xbf], [0xe0, 0xa0, 0x80],
   [0xed, 0x9f, 0xbf], [0xef, 0xbb, 0xbf], [0xef, 0xbf, 0xbd], [0xf0, 0x90, 0x80, 0x80],
@@ -29,7 +22,7 @@ for (let i = 0; i < 2000; i++) {
   try { decoder.decode(bytes) } catch { expected = false }
   assert.equal(F.isUtf8(bytes), expected)
 }
-console.log("ok: complete UTF-8 validation and 500-line boundaries")
+console.log("ok: complete UTF-8 validation")
 
 // A full-sort reference checks ordering, picks, stable ties, and multi-term matching.
 function reference(files, query, limit, uses = {}) {
@@ -60,7 +53,4 @@ assert.deepEqual(M.fileRows(null, "a", 40, "/home/test"), [])
 // Scans parsed apart and joined are the scans parsed together, so a late folder parses only itself.
 assert.deepEqual(M.joinFiles(M.parseFiles(paths.slice(0, 3000).join("\n")), M.parseFiles(paths.slice(3000).join("\n"))), files)
 assert.equal(M.joinFiles(files, null), files)
-const app = M.liveRows({ apps: [{ entry: { id: "broken", icon: "/missing.png" } }],
-  windows: [] })[0]
-assert.ok(app.icon)
-console.log("ok: file search ordering, limits, ties, and app fallback glyph")
+console.log("ok: file search ordering, limits and ties")

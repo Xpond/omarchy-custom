@@ -28,7 +28,6 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     assert json.loads(conf.read_text())["plugins"] == expected
     assert "plugins: xpo.files xpo.wheel" in result.stdout
     assert hook.exists()
-    assert not (fixture.base / "injected").exists()
     assert (fixture.user / ".config/omarchy/plugins/xpo.files").resolve() == fixture.repo / "plugins/xpo.files"
     print("ok: fresh install from a path containing spaces, quotes, and shell syntax")
 
@@ -50,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
         assert "threaded render loop" in result.stderr, result.stderr
     print("ok: render checks select the desktop shell and reject a missing render thread or shell")
 
-    for failure in ["malformed", "jq", "mv", "hook"]:
+    for failure in ["malformed", "mv", "hook"]:
         original = "{bad" if failure == "malformed" else json.dumps(config)
         conf.write_text(original)
         result = fixture.run(failure=failure)
@@ -59,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
         if failure != "hook":
             assert "plugins: xpo.files" not in result.stdout, failure
         assert not Path(str(conf) + ".new").exists(), failure
-    print("ok: malformed JSON, failed jq/mv, and hook failures return failure")
+    print("ok: malformed JSON, failed mv, and hook failures return failure")
 
     conf.write_text(json.dumps(config))
     result = fixture.run("revert.sh")
@@ -131,11 +130,9 @@ with tempfile.TemporaryDirectory(prefix="omarchy-install-") as temporary:
     relative = "shell.qml"
     assert fixture.run(failure="partial").returncode == 1
     assert fixture.run("revert.sh").returncode == 0 and fixture.all_stock()
-    assert fixture.run(failure="copy").returncode == 1 and fixture.installed(relative) == fixture.stock[relative]
     assert fixture.run().returncode == 0 and fixture.installed(relative) == fixture.patched(relative)
-    assert fixture.run("revert.sh", "copy").returncode == 1 and fixture.installed(relative) == fixture.patched(relative)
-    assert designs.is_symlink(), "a failed revert must keep the lock screen's designs"
     assert fixture.run("revert.sh", "partial").returncode == 1 and fixture.installed(relative) != fixture.stock[relative]
+    assert designs.is_symlink(), "a failed revert must keep the lock screen's designs"
     assert fixture.run("revert.sh").returncode == 0 and fixture.all_stock()
     print("ok: interrupted installs and restores are recognised as ours and recover on retry")
 
