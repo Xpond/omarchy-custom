@@ -725,9 +725,13 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
      "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/Android/", "/mnt/Android/x"])
   fs.rmSync(tree, { recursive: true })
 
-  // Typing suggests: folders under home to skip, from the scan, and subfolders outside home to search.
-  const files = M.parseFiles("/home/test/Android/\n/home/test/Android/README\n/mnt/android/\n")
+  // Typing suggests: names and folders under home to skip, from the scan, and subfolders outside home to
+  // search. A name starts with what is typed, and is offered once however many folders share it.
+  const files = M.parseFiles(["/home/test/Android/", "/home/test/Android/README", "/mnt/android/", "/home/test/p/target/",
+    "/home/test/q/target/", "/home/test/targets/", "/home/test/star/", "/home/test/target.txt", "/mnt/target/"].join("\n"))
   assert.deepEqual(M.fileRows(files, "andr", 40, home, true).map(r => r.path), ["/home/test/Android/"])
+  assert.deepEqual(M.nameRows(files, "tar", 40, home).map(r => r.label + " " + r.trail), ["target anywhere", "targets anywhere"])
+  assert.deepEqual(M.nameRows(files, "andr", 40, home).map(r => r.label), ["Android"], "a name from outside home was offered")
   assert.deepEqual(M.subfolderRows(["/home", "/media", "/mnt", "/home/test/x"], "/m", home).map(r => r.path), ["/media/", "/mnt/"])
   assert.deepEqual(M.subfolderRows(["/home"], "/", home).concat(M.subfolderRows(["/home/test/x"], "/home/test/", home)), [],
     "home, or a folder in or around it, was offered")
@@ -745,12 +749,14 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
   ls.query = "wheely"; ls.edit({ setting: "skipped" })
   assert.deepEqual([ls.query, ls.results.map(r => r.label + r.trail)], ["", [".cacheanywhere", ".gitanywhere", "node_modulesanywhere"]])
   ls.query = "andr"
-  assert.deepEqual(ls.results.map(r => r.path), ["/home/test/Android/"], "a skip was offered that is no folder under home")
-  ls.addEntry(ls.results[0])
+  assert.deepEqual(ls.results.map(r => r.label + " " + (r.path || r.trail)), ["Android anywhere", "Android /home/test/Android/"],
+    "a skip was offered that is no folder under home")
+  ls.addEntry(ls.results[1]); ls.query = "tar"; ls.addEntry(ls.results[0])
   ls.resultIndex = 1; ls.removeEntry()
   assert.deepEqual([ls.results.map(r => r.label), ls.resultIndex, saved.at(-1)],
-    [[".cache", "node_modules", "~/Android"], 1, { slices: ["system"], skipped: [".cache", "node_modules", "~/Android"] }])
-  assert.equal(ls.drops, 2, "a saved list kept the old scan")
+    [[".cache", "node_modules", "~/Android", "target"], 1,
+     { slices: ["system"], skipped: [".cache", "node_modules", "~/Android", "target"] }])
+  assert.equal(ls.drops, 3, "a saved list kept the old scan")
   ls.edit({ setting: "folders" })
   ls.query = "/m"; ls.addEntry(ls.results[0]); ls.query = "/m"; ls.addEntry(ls.results[0])
   assert.deepEqual(saved.at(-1).folders, ["/mnt"], "a folder was added twice")
