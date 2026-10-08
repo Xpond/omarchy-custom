@@ -236,8 +236,10 @@ hands it a window without focus, so `close(true)` skips the fade. Any other pick
 waits in `queued` for the tick after the unmap. Hyprland refuses to focus a
 window while the grab stands: dispatched the tick after dropping the grab, the
 focus never moved (0 of 5), and the tick after an unmap it always did (5 of 5).
-Reopening mid-fade cancels the pending unmap and the pick waiting on it, and
-counts as a fresh open.
+A click during the fade runs nothing. A press of the wheel's key during the fade
+does nothing either: it may be the closing tap's own press, landing after its
+release. Reopening mid-fade cancels the pending unmap and the pick waiting on it,
+and counts as a fresh open.
 
 Typing swaps the ring for the results by fading rather than switching
 `visible`: the ring draws back to 0.94 while the stack grows from
@@ -705,9 +707,9 @@ theme, font or keybinding command. So the ring takes anything search finds,
 Weather, clones and third-party panels included, but no window, file or answer,
 whose key would not outlast it, and no setting. An app wears its own icon, as
 in search; a menu id with an action runs it, and a submenu drills the ring into
-it. A key that names nothing is dropped, and the editor saves the ring as drawn,
-so a slice that names nothing today, such as a widget taken off the bar, is gone
-after the next edit. The file is watched, so a hand edit shows as you save, but
+it. A key that names nothing today, such as a menu entry whose condition is
+false or a widget taken off the bar, is not drawn, but the editor keeps it in its
+place, so it comes back when it names something again. The file is watched, so a hand edit shows as you save, but
 the editor writes it back without comments, keeping any other keys.
 
 Every icon in `PANELS` is one the widget itself already draws. Tailscale

@@ -223,7 +223,8 @@ assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
 const wheel = { root: { home: "/home/test", countUse() {}, dismiss() { this.queued() }, slices: [], copy: text => calls.push(text), shell: {
   summon: (id, payload) => calls.push([id, JSON.parse(payload)]),
   toggle() { throw new Error("navigation must summon") }
-} }, Qt: { callLater: fn => fn() }, MenuIndex: M, Quickshell: { execDetached: argv => calls.push([...argv]) },
+} }, Qt: { callLater: fn => fn() }, unmap: { running: false }, MenuIndex: M,
+  Quickshell: { execDetached: argv => calls.push([...argv]) },
   Hyprland: { dispatch: expression => calls.push(["dispatch", expression]) } }
 const runRow = method(read("plugins/xpo.wheel/Wheel.qml"), "run", wheel)
 runRow({ path: "/home/test/new.txt" })
@@ -278,6 +279,9 @@ const wheelSource = read("plugins/xpo.wheel/Wheel.qml")
 // A readonly binding of Wheel.qml, evaluated over the names given.
 const binding = (name, scope) => new Function(...Object.keys(scope), "return " + wheelSource
   .match(new RegExp("readonly property \\w+ " + name + ": ([^]*?)\\n  (?:readonly )?property"))[1])(...Object.values(scope))
+// Those bindings as getters on a stand-in, so it reads them as the wheel does.
+const derive = (root, ...names) => names.forEach(name =>
+  Object.defineProperty(root, name, { get: () => binding(name, { root, MenuIndex: M }) }))
 const dial = { query: "", queryAt: 0, results: [], resultIndex: 0,
   get searching() { return this.query.length > 0 },
   dismiss: () => copied.push("dismissed"), showResult() {}, moveResult(step) { this.resultIndex += step } }
@@ -588,7 +592,7 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   // Enter on a setting row starts changing it; the wheel stays up.
   const setRow = { countUse() {}, dismiss() { throw new Error("a setting row closed the wheel") },
                    slices: [], edited: "", edit(e) { this.edited = e.setting } }
-  method(wheelSource, "run", { root: setRow, Qt: {}, MenuIndex: M })(rows[0])
+  method(wheelSource, "run", { root: setRow, Qt: {}, unmap: { running: false }, MenuIndex: M })(rows[0])
   assert.equal(setRow.edited, "shortcut")
 }
 console.log("ok: settings are rows, the wheel's own bindings are not, and the shortcut row records, judges and saves")
@@ -634,9 +638,10 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     select(i) { this.selected = i }, enter(node) { this.path = []; this.query = ""; this.selected = -1 },
     countUse() { throw new Error("adding to the ring counted a pick") },
     dismiss() { throw new Error("the ring editor closed the wheel") } }
-  const scope = { root: ed, ringFile: disk, MenuIndex: M, Qt: {} }
+  const scope = { root: ed, ringFile: disk, MenuIndex: M, Qt: {}, unmap: { running: false } }
   for (const name of ["edit", "run", "pin", "unpin", "moveSlice", "resetRing", "saveRing"])
     ed[name] = method(wheelSource, name, scope)
+  derive(ed, "ringKeys")
   const ring = () => ed.ring.map(M.keyOf).join(" ") + " @" + ed.selected
   const written = () => JSON.parse(saved.at(-1))
 
@@ -676,6 +681,14 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
   ed.select(-1); ed.run(index[3]); ed.select(0)
   ed.unpin(); ed.unpin(); ed.unpin(); ed.unpin()
   assert.deepEqual([ed.ringIds, written()], [null, { other: 1 }], "an emptied ring did not follow the bar")
+
+  // A slice hidden for now, by a condition or a row not loaded yet, keeps its place through every
+  // edit; once nothing is drawn, the ring follows the bar.
+  ed.ringIds = ["omarchy.audio", "hidden", "omarchy.network"]; ed.select(0)
+  ed.moveSlice(1); ed.select(-1); ed.run(index[3]); ed.unpin()
+  assert.deepEqual(written().slices, ["omarchy.network", "hidden", "omarchy.audio"], "an edit dropped a hidden slice")
+  ed.unpin(); ed.unpin()
+  assert.equal(ed.ringIds, null, "a ring that draws nothing did not follow the bar")
 }
 
 // In the ring editor Del, Shift+arrows and Esc belong to the ring until a query is typed, and then
@@ -766,7 +779,7 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
   assert.deepEqual([binding("listed", { root: hist }), binding("emptyText", { root: hist })], [[], "Nothing picked yet"])
   const added = []
   const hr = { listing: "history", editingRing: false, path: [], countUse() {}, addEntry(e) { added.push(e) } }
-  for (const name of ["run", "enter"]) hr[name] = method(wheelSource, name, { root: hr, spin: { restart() {} } })
+  for (const name of ["run", "enter"]) hr[name] = method(wheelSource, name, { root: hr, spin: { restart() {} }, unmap: { running: false } })
   hr.run({ node: "system", label: "System" })
   assert.deepEqual([added.length, hr.listing, hr.path.join(".")], [0, "", "system"], "a submenu from history was added, or kept the list")
 
@@ -861,7 +874,7 @@ console.log("ok: the wheel replaces an open panel instead of stacking above it")
 const ran = { countUse() {}, dismiss() {}, launchedAt: null,
   slices: [{ plugin: "a" }, { plugin: "b" }, { plugin: "c" }] }
 const runPick = method(wheelSource, "run",
-  { root: ran, Qt: { callLater() {} }, MenuIndex: M })
+  { root: ran, Qt: { callLater() {} }, unmap: { running: false }, MenuIndex: M })
 runPick(ran.slices[2])
 assert.equal(ran.launchedAt, 2, "the slice that was run is written down")
 runPick({ plugin: "off-ring" })
