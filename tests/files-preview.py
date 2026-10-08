@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -53,6 +54,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-preview-") as temporary:
     (base / "Commons").symlink_to(shell / "Commons")
     shutil.copyfile(plugin / "FilesIndex.js", base / "FilesIndex.js")
     styled = (plugin / "FilesPreview.qml").read_text().replace("Style.font.subtitle", "panel.codePx")
+    styled = styled.replace("  id: root", "  id: root\n  readonly property real testBodyX: content.mapToItem(root, content.children[0].width + content.spacing, 0).x")
     handler = styled[styled.index("        onLineLaidOut:"):styled.index("      }\n    }\n  }\n\n  Rectangle")]
     rich = styled.replace("panel.showsCode ? Text.StyledText", "panel.showsCode ? Text.RichText")
     assert rich != styled and handler
@@ -115,6 +117,7 @@ Scope {
         ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : j.rich) + '</pre>'
     after.previewBody = j.stage === "plain" ? FilesIndex.styledCode(text) : j.styled
     Qt.callLater(function () {
+      console.log("BODY", j.file, Math.ceil(styled.testBodyX))
       rich.grabToImage(function (a) {
         a.saveToFile("out/" + j.file + "-rich.png")
         styled.grabToImage(function (b) { b.saveToFile("out/" + j.file + "-styled.png"); Qt.callLater(next) })
@@ -133,12 +136,12 @@ Scope {
 }
 ''')
     (base / "out").mkdir()
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_FORCE_STDERR_LOGGING="1",
-               QML_XHR_ALLOW_FILE_READ="1", XDG_RUNTIME_DIR=str(base / "runtime"))
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="generic", QT_FORCE_STDERR_LOGGING="1",
+               QML_XHR_ALLOW_FILE_READ="1", XDG_RUNTIME_DIR=str(base / "runtime"), XDG_CACHE_HOME=str(base / "cache"))
     result = subprocess.run(["quickshell", "--no-color", "-p", str(base / "shell.qml")], cwd=base,
                             env=env, capture_output=True, text=True, timeout=900)
     log = result.stdout + result.stderr
-    assert "PASS" in log, log
+    assert result.returncode == 0 and "PASS" in log, log
     qslog.check(log)
 
     pairs = sorted(p.name[:-len("-rich.png")] for p in (base / "out").glob("*-rich.png"))
@@ -146,12 +149,18 @@ Scope {
     # compare alone reports 0 for images of different sizes.
     size = lambda p: subprocess.check_output(["magick", "identify", "-format", "%wx%h", p], text=True)
     failed = []
+    body_x = dict(re.findall(r"BODY (\S+) (\d+)", log))
     for name in pairs:
         a, b = (base / "out" / (name + suffix) for suffix in ("-rich.png", "-styled.png"))
         diff = subprocess.run(["magick", "compare", "-metric", "AE", a, b, "null:"],
                               capture_output=True, text=True).stderr.split()[0]
         if size(a) != size(b) or diff != "0":
             failed.append("%s: %s vs %s, %s pixels differ" % (name, size(a), size(b), diff))
+        if name.startswith(("one.txt-", "markup.js-", "fallback.txt-")):
+            for image in (a, b):
+                ink = subprocess.check_output(["magick", image, "-crop", f"1000x1000+{body_x[name]}+0",
+                                               "-alpha", "extract", "-format", "%[fx:mean]", "info:"])
+                assert float(ink) > 0, name + ": preview text is invisible"
     assert not failed, "\n".join(failed)
     print("ok: %d code previews, plain and coloured at three sizes, match the rich text pixel for pixel"
           % len(pairs))

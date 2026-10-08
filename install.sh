@@ -126,17 +126,17 @@ fi
 
 omarchy restart shell || { alert "Could not restart Omarchy shell"; exit 1; }
 
-# Verify the render thread itself; legacy Lua config can be accepted but inert.
+# Verify this shell's render thread; other Quickshell configs may have no windows.
 render_ok=0
 for _ in $(seq 20); do
-  pid=$(pgrep -x quickshell | head -1)
+  pid=$(quickshell list -j -p "$SHELL_DIR" | jq -r '.[0].pid // empty')
   if [[ -n $pid ]] && grep -qs QSGRenderThread /proc/"$pid"/task/*/comm; then
     render_ok=1; break
   fi
   sleep 0.5
 done
 
-(( render_ok )) || alert "Not on the threaded render loop — animations will judder" \
+(( render_ok )) || alert "Could not verify Omarchy shell's threaded render loop" \
   'Check the managed block at the end of ~/.config/hypr/hyprland.lua;' \
   'Then: hyprctl reload && omarchy restart shell'
 

@@ -35,8 +35,9 @@ def patch(name, old, new):
     (output / name).write_text(source.replace(old, new))
 patch("LockView.qml", "  id: root", "  id: root\n  property alias testScene: scene.item")
 patch("lock/rally/Scene.qml", "  property Item host", "  property Item host\n  property alias testCar: car")
+patch("lock/rally/Car.qml", "  id: car", "  id: car\n  readonly property bool testDriving: go.running")
 
-stages = [{"name": "parked"}, {"name": "departed", "drive": 1}]
+stages = [{"name": "parked"}, {"name": "unlocking-rally", "unlock": 1}, {"name": "departed"}]
 # Last, since they unload the car: other designs at runtime, then one that is missing.
 stages += [{"name": "design-tunnel", "design": "tunnel"}, {"name": "design-mycelium", "design": "mycelium"},
            {"name": "design-shore", "design": "shore"}, {"name": "design-meadow", "design": "meadow"},
@@ -57,6 +58,7 @@ Window {
   function prepare() {
     var s = stages[stage]
     if (s.design) {
+      lock.driving = false
       waitingForColony = s.design === "mycelium"
       preparationStarted = Date.now()
       lock.design = s.design; lock.showDesign()
@@ -68,16 +70,14 @@ Window {
       return
     }
     // The shortest release, mycelium's, comes 550ms after the password is accepted.
-    if (s.unlock) { lock.driving = true; capture.interval = 500; capture.restart(); return }
-    if (s.drive) {
-      car.drive = s.drive
-      // The body's shapes stay parked; its pose moves them.
-      var right = -Infinity
-      car.parts.forEach(part => part.screen.forEach(p => {
-        right = Math.max(right, part.axle === undefined ? car.bodyPose.times(Qt.vector3d(p[0], p[1], 0)).x : p[0])
-      }))
-      console.log("EXIT", car.mapToItem(lock, right, 0).x)
+    if (s.unlock) {
+      lock.driving = true
+      if (s.name === "unlocking-rally" && !car.testDriving) {
+        console.error("FAIL host did not start drive-off"); Qt.exit(1); return
+      }
+      capture.interval = 500; capture.restart(); return
     }
+    capture.interval = s.name === "departed" ? car.driveTime + 100 : 450
     capture.restart()
   }
   // After every onCompleted, so the host has loaded its design.
@@ -90,6 +90,19 @@ Window {
       capture.interval = waitingForColony ? 20 : 1500
       capture.restart()
       return
+    }
+    // A delayed capture may see the animation already complete; its start was checked synchronously.
+    if (stages[stage].name === "unlocking-rally" && (car.drive <= 0 || lock.fieldOpacity !== 0)) {
+      console.error("FAIL loaded-design unlock", car.drive, lock.fieldOpacity); Qt.exit(1); return
+    }
+    if (stages[stage].name === "departed") {
+      // The host must have started the scene's actual drive-off animation.
+      if (car.drive !== 1) { console.error("FAIL host drive-off", car.drive); Qt.exit(1); return }
+      var right = -Infinity
+      car.parts.forEach(part => part.screen.forEach(p => {
+        right = Math.max(right, part.axle === undefined ? car.bodyPose.times(Qt.vector3d(p[0], p[1], 0)).x : p[0])
+      }))
+      console.log("EXIT", car.mapToItem(lock, right, 0).x)
     }
     lock.grabToImage(function(result) {
       if (!result.saveToFile(OUTPUT + "/" + stages[stage].name + ".png")) {
@@ -144,8 +157,8 @@ assert sea[2] > sea[0] + 5 and sand[0] > sand[2] + 40, f"switching to the shore 
 assert pixel("design-wallpaper", 960, 300) != "080a0f", "switching to the wallpaper design showed nothing"
 assert lit("design-meadow", "1920x880+0+0") > 0.005, "switching to the meadow design grew no flowers"
 assert pixel("design-missing", 960, 300) == "080a0f", "a missing design must leave the plain background"
-# Once the password is accepted the field clears ahead of the design, before the shortest release:
-# only the plain background is left where it was.
+# The field clears during host-triggered unlock; missing designs clear to plain background.
+assert pixel("unlocking-rally", 960, 938) != pixel("parked", 960, 938), "loaded design retains the field edge"
 field = subprocess.check_output(["magick", output / "unlocking.png", "-crop", "520x180+700+880",
                                  "-unique-colors", "-format", "%w", "info:"])
 assert field == b"1", "the password field outlasts the unlock"
