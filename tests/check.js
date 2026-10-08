@@ -714,9 +714,10 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
   assert.equal(M.scanCommand([home], M.SKIPPED, home).join(" "),
     "fd --hidden --max-depth 6 --exclude .cache --exclude .git --exclude node_modules . /home/test")
   const tree = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "wheel-scan-"))
-  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/p/node_modules/m", "home/1/2/3/4/5/6/deep", "mnt/Android/x"])
+  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/Music [old]/x", "home/p/node_modules/m",
+                      "home/1/2/3/4/5/6/deep", "mnt/Android/x"])
     fs.mkdirSync(path.dirname(path.join(tree, name)), { recursive: true }), fs.writeFileSync(path.join(tree, name), "")
-  const found = [[tree + "/home"], [tree + "/mnt"]].map(roots => M.scanCommand(roots, ["node_modules", "~/Android"], tree + "/home"))
+  const found = [[tree + "/home"], [tree + "/mnt"]].map(roots => M.scanCommand(roots, ["node_modules", "~/Android", "~/Music [old]"], tree + "/home"))
     .map(command => require("node:child_process").execFileSync(command[0], command.slice(1),
       { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })).join("")
   assert.deepEqual(found.split("\n").filter(Boolean).map(p => p.slice(tree.length)).sort(),
