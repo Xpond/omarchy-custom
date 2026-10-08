@@ -60,6 +60,9 @@ Item {
   // A chosen ring is keys into search; otherwise it follows the bar.
   property var ringIds: null
   readonly property var ring: root.ringIds ? MenuIndex.ringOf(root.index, root.ringIds) : root.panels
+  // What the ring editor edits, by key: a slice hidden for now, by a condition or a row not loaded
+  // yet, is not drawn but keeps its place.
+  readonly property var ringKeys: root.ringIds || root.panels.map(MenuIndex.keyOf)
   readonly property var staticRows: MenuIndex.panelRows(MenuIndex.OVERLAYS.concat(MenuIndex.EXTRAS))
     .concat(MenuIndex.menuRows(root.menuItems, root.conditions))
   readonly property var styleRows: MenuIndex.styles(MenuIndex.lines(root.themeText), root.currentTheme,
@@ -457,8 +460,9 @@ Item {
     return true
   }
 
+  // A click during the close fade runs nothing: the pick that started it is the one that runs.
   function run(e) {
-    if (!e) return
+    if (!e || unmap.running) return
     if (root.editingRing) { root.pin(e); return }
     if (root.listing && root.listing !== "history") { root.addEntry(e); return }
     root.countUse(e)
@@ -560,24 +564,22 @@ Item {
 
   // A row joins the ring after the selected slice, or at the end; one already there is selected.
   function pin(e) {
-    var keys = root.ring.map(MenuIndex.keyOf)
-    var at = keys.indexOf(MenuIndex.keyOf(e))
-    if (at < 0) {
-      at = root.selected >= 0 ? root.selected + 1 : keys.length
-      keys.splice(at, 0, MenuIndex.keyOf(e))
-      root.saveRing(keys)
+    var keys = root.ringKeys, key = MenuIndex.keyOf(e)
+    if (keys.indexOf(key) < 0) {
+      var at = root.selected >= 0 ? keys.indexOf(MenuIndex.keyOf(root.ring[root.selected])) + 1 : keys.length
+      root.saveRing(keys.slice(0, at).concat([key], keys.slice(at)))
     }
     root.query = ""
-    root.select(at)
+    root.select(root.ring.map(MenuIndex.keyOf).indexOf(key))
   }
 
-  // The next slice takes the removed one's place, so Del can clear a run of them.
+  // The next slice takes the removed one's place, so Del can clear a run of them; with the last
+  // one drawn gone, the ring follows the bar.
   function unpin() {
     var at = root.selected
     if (at < 0) return
-    var keys = root.ring.map(MenuIndex.keyOf)
-    keys.splice(at, 1)
-    root.saveRing(keys)
+    var gone = MenuIndex.keyOf(root.ring[at])
+    root.saveRing(root.sliceCount > 1 ? root.ringKeys.filter(function (k) { return k !== gone }) : null)
     root.select(Math.min(at, root.sliceCount - 1))
   }
 
@@ -585,12 +587,9 @@ Item {
   function moveSlice(step) {
     var n = root.sliceCount
     if (root.selected < 0 || n < 2) return
-    var keys = root.ring.map(MenuIndex.keyOf)
     var to = (root.selected + step + n) % n
-    var key = keys[root.selected]
-    keys[root.selected] = keys[to]
-    keys[to] = key
-    root.saveRing(keys)
+    var a = MenuIndex.keyOf(root.ring[root.selected]), b = MenuIndex.keyOf(root.ring[to])
+    root.saveRing(root.ringKeys.map(function (k) { return k === a ? b : k === b ? a : k }))
     root.select(to)
   }
 
