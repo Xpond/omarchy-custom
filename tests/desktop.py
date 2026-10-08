@@ -169,25 +169,21 @@ def check():
                 run("revert")
         print("ok: failed reload validation rolls back fresh setup, updates, and removals")
 
-    # The shortcut file is data: a key the row could have written is bound, anything else is SUPER+A.
-    cases = [(None, "SUPER + A"), ("SUPER + SHIFT + B\n", "SUPER + SHIFT + B"),
-             ("  ALT + SPACE \r\n", "ALT + SPACE"), ("SPACE\n", "SUPER + A"), ("", "SUPER + A"),
-             ('super + b") os.execute("touch pwned\n', "SUPER + A")]
-    for saved, key in cases:
+    # The shortcut and blur files are data: a key the row could have written is bound, anything else is
+    # SUPER+A, and "off" turns the backdrop's blur, and Hyprland's, off.
+    for name, saved, key, blur in [("wheel-shortcut", None, "SUPER + A", "on"),
+                                   ("wheel-shortcut", "SUPER + SHIFT + B\n", "SUPER + SHIFT + B", "on"),
+                                   ("wheel-shortcut", "  ALT + SPACE \r\n", "ALT + SPACE", "on"),
+                                   ("wheel-shortcut", "SPACE\n", "SUPER + A", "on"), ("wheel-shortcut", "", "SUPER + A", "on"),
+                                   ("wheel-shortcut", 'super + b") os.execute("touch pwned\n', "SUPER + A", "on"),
+                                   ("wheel-blur", "off\n", "SUPER + A", "off"), ("wheel-blur", "on\n", "SUPER + A", "on")]:
         with tempfile.TemporaryDirectory(prefix="omarchy-desktop-home-") as home:
             if saved is not None:
                 (Path(home) / ".config/omarchy").mkdir(parents=True)
-                (Path(home) / ".config/omarchy/wheel-shortcut").write_text(saved)
-            subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"), key],
+                (Path(home) / ".config/omarchy" / name).write_text(saved)
+            subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"), key, blur],
                            check=True, cwd=home, env=dict(os.environ, HOME=home))
             assert not (Path(home) / "pwned").exists()
-    # So is the blur file: "off" turns the backdrop's blur, and Hyprland's, off.
-    for saved in ("off\n", "on\n"):
-        with tempfile.TemporaryDirectory(prefix="omarchy-desktop-home-") as home:
-            (Path(home) / ".config/omarchy").mkdir(parents=True)
-            (Path(home) / ".config/omarchy/wheel-blur").write_text(saved)
-            subprocess.run(["lua", str(source / "tests/desktop.lua"), str(source / "config/hyprland.lua"),
-                            "SUPER + A", saved.strip()], check=True, cwd=home, env=dict(os.environ, HOME=home))
     print("ok: shipped Lua installs press/release bindings on the saved key, render environment and shared blur")
 
 

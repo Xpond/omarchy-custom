@@ -84,9 +84,21 @@ Item {
                                                         Object.keys(root.uses).length, root.panelsCentered)
   // The setting row being changed in place: the field shows the value, the row what saving would do.
   property string editing: ""
-  property string editValue: ""
-  property string editNote: ""
-  property string pending: ""
+  // The combo the shortcut row last heard: null before any, "" for a key with no name here.
+  property var pressed: null
+  // Why that combo cannot be saved. Hyprland takes a bound combo from every app, so it must hold
+  // SUPER, the key apps leave alone.
+  readonly property string refused: !root.pressed ? "pick another key"
+    : root.pressed.indexOf("SUPER + ") !== 0 ? "add SUPER" : root.pressed === "SUPER + W" ? "closes the wheel"
+    : root.pressed === root.shortcut ? "already set" : ""
+  readonly property string pending: root.refused ? "" : root.pressed
+  readonly property string taken: root.pending ? MenuIndex.bindingAt(root.bindText, root.pending) : ""
+  readonly property string editValue: root.editing === "backdrop" ? root.backdrop + "%"
+    : root.editing === "forget" ? "Forget " + Object.keys(root.uses).length + " picks"
+    : root.pressed || "Press a shortcut"
+  readonly property string editNote: root.editing === "backdrop" ? "←→ adjusts"
+    : root.editing === "forget" ? "enter forgets · esc keeps" : root.pressed === null ? "esc cancels"
+    : root.refused || (root.taken ? "replaces " + root.taken : "enter saves")
   // The ring editor: search adds to the ring, and the ring's own keys move and remove its slices.
   property bool editingRing: false
   // Ctrl+R asks twice before the ring is reset to the bar's.
@@ -506,20 +518,14 @@ Item {
   // row records the next combo; Hyprland's bindings pause meanwhile, so a taken one arrives too.
   function edit(e) {
     if (e.setting === "ring") { root.enter(""); root.editingRing = true; root.resetAsked = false; return }
-    if (e.setting === "folders" || e.setting === "skipped" || e.setting === "history") {
-      root.query = ""; root.listing = e.setting; return
-    }
+    if (/^(folders|skipped|history)$/.test(e.setting)) { root.query = ""; root.listing = e.setting; return }
     if (e.setting === "panels") {
       shellFile.setText(MenuIndex.withShellValue(shellFile.text(), "wheely", "panels", root.panelsCentered ? "native" : "centered"))
       return
     }
     root.backdropDraft = root.backdrop
+    root.pressed = null
     root.editing = e.setting
-    root.pending = ""
-    root.editValue = e.setting === "backdrop" ? root.backdrop + "%"
-      : e.setting === "forget" ? "Forget " + e.trail + " picks" : "Press a shortcut"
-    root.editNote = e.setting === "backdrop" ? "←→ adjusts"
-      : e.setting === "forget" ? "enter forgets · esc keeps" : "esc cancels"
   }
 
   // Plain Enter saves what was pressed, plain Esc gives up, and any other combo is the new candidate.
@@ -532,19 +538,7 @@ Item {
       return
     }
     var combo = MenuKeys.shortcutOf(event)
-    if (combo === null) return
-    root.pending = ""
-    root.editValue = combo || "Press a shortcut"
-    if (!combo) root.editNote = "pick another key"
-    // Hyprland takes a bound combo from every app, so it must hold SUPER, the key apps leave alone.
-    else if (combo.indexOf("SUPER + ") !== 0) root.editNote = "add SUPER"
-    else if (combo === "SUPER + W") root.editNote = "closes the wheel"
-    else if (combo === root.shortcut) root.editNote = "already set"
-    else {
-      var taken = MenuIndex.bindingAt(root.bindText, combo)
-      root.editNote = taken ? "replaces " + taken : "enter saves"
-      root.pending = combo
-    }
+    if (combo !== null) root.pressed = combo
   }
 
   // Hyprland reads the file on reload; the bindings are read again after it, for the next conflict.
@@ -558,7 +552,6 @@ Item {
   function setBackdrop(percent) {
     if ((percent > 0) !== (root.backdrop > 0)) blurFile.setText(percent > 0 ? "on\n" : "off\n")
     root.backdropDraft = percent
-    root.editValue = percent + "%"
     shellFile.setText(MenuIndex.withShellValue(shellFile.text(), "menu", "scrim-alpha", percent / 100))
   }
 
@@ -863,13 +856,20 @@ Item {
     onLoadFailed: root.uses = ({})
   }
 
-  FileView {
-    id: ringFile
-    printErrors: false
-    path: Quickshell.env("HOME") + "/.config/omarchy/wheel.json"
+  // A file the settings keep in ~/.config/omarchy, re-read on change, so a write keeps what another
+  // writer just put there.
+  component SettingFile: FileView {
+    property string name
+    path: Quickshell.env("HOME") + "/.config/omarchy/" + name
     watchChanges: true
     atomicWrites: true
+    printErrors: false
     onFileChanged: reload()
+  }
+
+  SettingFile {
+    id: ringFile
+    name: "wheel.json"
     onLoaded: {
       root.ringIds = MenuIndex.listIn(text(), "slices")
       root.savedFolders = MenuIndex.listIn(text(), "folders")
@@ -879,38 +879,17 @@ Item {
     onLoadFailed: { root.ringIds = null; root.savedFolders = null; root.savedSkipped = null }
   }
 
-  // The launch key, as data the Hyprland block reads on reload; Hyprland does not watch it.
-  FileView {
+  // The launch key and the backdrop's blur are data the Hyprland block reads on reload; Hyprland does
+  // not watch them. The shell watches shell.toml: [menu] scrim-alpha over the theme's, and [wheely] panels.
+  SettingFile {
     id: shortcutFile
-    path: Quickshell.env("HOME") + "/.config/omarchy/wheel-shortcut"
-    watchChanges: true
-    atomicWrites: true
-    printErrors: false
-    onFileChanged: reload()
+    name: "wheel-shortcut"
     onLoaded: root.shortcut = MenuIndex.shortcutIn(text())
     onLoadFailed: root.shortcut = MenuIndex.SHORTCUT
     onSaved: hyprReload.running = true
   }
-
-  // The shell watches this file: its [menu] scrim-alpha over the theme's, and [wheely] panels. Re-read on change,
-  // so a write keeps what another writer just put here.
-  FileView {
-    id: shellFile
-    path: Quickshell.env("HOME") + "/.config/omarchy/shell.toml"
-    watchChanges: true
-    atomicWrites: true
-    printErrors: false
-    onFileChanged: reload()
-  }
-
-  // The backdrop's blur, as data the Hyprland block reads on reload.
-  FileView {
-    id: blurFile
-    path: Quickshell.env("HOME") + "/.config/omarchy/wheel-blur"
-    atomicWrites: true
-    printErrors: false
-    onSaved: hyprReload.running = true
-  }
+  SettingFile { id: blurFile; name: "wheel-blur"; onSaved: hyprReload.running = true }
+  SettingFile { id: shellFile; name: "shell.toml" }
 
   Process {
     id: hyprReload

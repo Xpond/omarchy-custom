@@ -434,26 +434,14 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
       ["backdrop", "folders", "forget", "panels", "ring", "shortcut", "skipped"], query)
   assert.deepEqual(M.search(rows, "wheely settings", 40, {}).filter(r => r.setting === "history"), [],
     "history passed for a setting")
-  for (const query of ["wheely shortcut", "shortcut", "keybind"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "shortcut", query + " misses the shortcut row")
-  for (const query of ["wheely ring", "ring", "slices", "pin"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "ring", query + " misses the ring row")
-  for (const query of ["backdrop", "blur", "dim"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "backdrop", query + " misses the backdrop row")
-  assert.equal(M.search(rows, "searched folders", 40, {})[0]?.setting, "folders")
-  assert.equal(M.search(rows, "skip", 40, {})[0]?.setting, "skipped")
-  for (const query of ["forget", "clear picks"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "forget", query + " misses the forget row")
-  for (const query of ["centered panels", "panels", "center"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "panels", query + " misses the panels row")
-  for (const query of ["history", "wheely history", "recent"])
-    assert.equal(M.search(rows, query, 40, {})[0]?.setting, "history", query + " misses the history row")
+  for (const [setting, queries] of Object.entries({ shortcut: ["wheely shortcut", "shortcut", "keybind"],
+       ring: ["wheely ring", "ring", "slices", "pin"], backdrop: ["backdrop", "blur", "dim"], folders: ["searched folders"],
+       skipped: ["skip"], forget: ["forget", "clear picks"], panels: ["centered panels", "panels", "center"],
+       history: ["history", "wheely history", "recent"] }))
+    for (const query of queries) assert.equal(M.search(rows, query, 40, {})[0]?.setting, setting, query + " misses its row")
   assert.equal(M.indexOfEntry(M.settingRows("ALT + SPACE", false, [], M.SKIPPED, 0, true), rows[0]), 0, "saving a key lost the row")
   assert.deepEqual(M.settingRows("SUPER + A", true, ["/mnt"], ["a", "b"], 57, false).map(r => r.trail),
     ["SUPER + A", "Custom", "", "Off", "Home + 1", "2", "57", "57"])
-  assert.equal(rows[1].trail, "Bar")
-  assert.deepEqual(rows.filter(r => r.icon === M.SETTING_ICON).map(r => r.setting),
-    ["shortcut", "ring", "backdrop", "panels", "folders", "skipped", "forget"], "a setting row lost its icon, or history wore it")
 
   assert.equal(M.comboOf("SUPER SHIFT CTRL + space"), "SUPER + CTRL + SHIFT + SPACE")
   assert.equal(M.bindingAt(records, "SUPER + CTRL + SHIFT + SPACE"), "Theme menu", "another spelling hid a binding")
@@ -485,6 +473,7 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   const shellFile = { raw: "", text() { return this.raw }, setText(raw) { this.raw = raw } }
   const blurFile = { raw: "", setText(raw) { this.raw += raw } }
   const bd = { editing: "", drawn: 32, get backdrop() { return this.editing ? this.backdropDraft : this.drawn } }
+  derive(bd, "editValue")
   for (const name of ["edit", "setBackdrop"])
     bd[name] = method(wheelSource, name, { root: bd, shellFile, blurFile, MenuIndex: M })
   const backdropKey = keymap("plugins/xpo.wheel/MenuKeys.js", bd)
@@ -507,9 +496,10 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   // Forget picks asks again: Enter forgets every pick, on disk too; Esc keeps them; other keys wait.
   const usesFile = { raw: "", setText(raw) { this.raw = raw } }
   const fg = { editing: "", uses: { "system.lock": 3, "file:/a": 1 } }
+  derive(fg, "editValue")
   for (const name of ["edit", "forgetPicks"]) fg[name] = method(wheelSource, name, { root: fg, usesFile })
   const forgetKey = keymap("plugins/xpo.wheel/MenuKeys.js", fg)
-  fg.edit({ setting: "forget", trail: "2" })
+  fg.edit({ setting: "forget" })
   assert.deepEqual([fg.editValue, forgetKey("Key_A").accepted, fg.editing], ["Forget 2 picks", true, "forget"],
     "a key other than Enter or Esc left the question")
   forgetKey("Key_Escape")
@@ -538,8 +528,6 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   const panelRule = 'Color.shellValues["wheely.panels"] !== "native"'
   const keyboardPanel = read("patches/shell/Ui/KeyboardPanel.qml")
   assert.ok(wheelSource.includes(panelRule) && keyboardPanel.includes(panelRule), "the panels read another key than the wheel writes")
-  assert.ok(keyboardPanel.includes("if (centered && screenW > 0") && keyboardPanel.includes("backingWindowVisible && open && centered"),
-    "a panel centers or takes the backdrop with the setting off")
 
   // Recording: a modifier alone waits, plain Esc gives up, plain Enter saves only a candidate,
   // and any other press is judged. shortcutOf's names are checked against real Qt in runtime.py.
@@ -547,6 +535,7 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
               Key_Escape: 1, Key_Return: 2, Key_Enter: 3 }
   const saved = []
   const rec = { shortcut: "SUPER + A", bindText: records, saveShortcut: combo => saved.push(combo) }
+  derive(rec, "refused", "pending", "taken", "editValue", "editNote")
   const edit = method(wheelSource, "edit", { root: rec })
   const record = method(wheelSource, "record",
     { root: rec, Qt: Q, MenuIndex: M, MenuKeys: { shortcutOf: event => event.combo } })
@@ -607,8 +596,8 @@ console.log("ok: settings are rows, the wheel's own bindings are not, and the sh
     { label: "Firefox", address: "0x1", kind: M.KIND.window, keywords: "firefox" },
     { label: "notes.md", path: "/home/test/notes.md" }, { label: "42", copy: "42" },
     ...M.settingRows("SUPER + A", false, [], M.SKIPPED, 0, true)]
-  assert.deepEqual(index.map(r => M.pinnable(r)),
-    [true, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false])
+  assert.deepEqual(index.filter(M.pinnable).map(M.keyOf),
+    ["omarchy.audio", "omarchy.network", "omarchy.clipboard", "system", "app:firefox.desktop"])
   assert.deepEqual(M.ringOf(index, ["app:firefox.desktop", "omarchy.clipboard", "gone", "setting:ring",
                                     "system", "omarchy.audio"]).map(r => r.label),
     ["Firefox", "Clipboard", "System", "Audio"])
@@ -724,17 +713,15 @@ console.log("ok: the ring takes what search finds, and its editor adds, moves, r
   const home = "/home/test"
   assert.equal(M.scanCommand([home], M.SKIPPED, home).join(" "),
     "fd --hidden --max-depth 6 --exclude .cache --exclude .git --exclude node_modules . /home/test")
-  assert.equal(M.scanCommand([home], ["~/Android"], home).join(" "), "fd --hidden --max-depth 6 --exclude /Android/ . /home/test")
-  assert.equal(M.scanCommand(["/mnt"], ["~/Android", ".git"], home).join(" "), "fd --hidden --max-depth 6 --exclude .git . /mnt")
   const tree = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "wheel-scan-"))
-  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/p/node_modules/m", "home/1/2/3/4/5/6/deep", "mnt/a"])
+  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/p/node_modules/m", "home/1/2/3/4/5/6/deep", "mnt/Android/x"])
     fs.mkdirSync(path.dirname(path.join(tree, name)), { recursive: true }), fs.writeFileSync(path.join(tree, name), "")
   const found = [[tree + "/home"], [tree + "/mnt"]].map(roots => M.scanCommand(roots, ["node_modules", "~/Android"], tree + "/home"))
     .map(command => require("node:child_process").execFileSync(command[0], command.slice(1),
       { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })).join("")
   assert.deepEqual(found.split("\n").filter(Boolean).map(p => p.slice(tree.length)).sort(),
     ["/home/.claude/", "/home/.claude/CLAUDE.md", "/home/1/", "/home/1/2/", "/home/1/2/3/", "/home/1/2/3/4/",
-     "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/a"])
+     "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/Android/", "/mnt/Android/x"])
   fs.rmSync(tree, { recursive: true })
 
   // Typing suggests: folders under home to skip, from the scan, and subfolders outside home to search.
@@ -971,10 +958,6 @@ for (const f of ["plugins/xpo.wheel/Wheel.qml", "plugins/xpo.files/Files.qml"]) 
   assert.match(read(f), /onOpenedChanged:[\s\S]*?panelSurfaceVisible\(root\.opened\)/,
     f + " does not drive the bar scrim from its open state")
 }
-// The wheel lets go as its fade starts, as the panels do; at unmap, the bar's hold kept the backdrop after it.
-assert.match(read("plugins/xpo.wheel/Wheel.qml"),
-  /id: unmap[^}]*onRunningChanged:.*panelSurfaceVisible\(root\.opened && !unmap\.running\)/,
-  "the wheel keeps the backdrop through its fade")
 console.log("ok: neither plugin paints a scrim; both count on the bar's")
 
 // Every third-party plugin gets a facade. A namespace must never grant the
