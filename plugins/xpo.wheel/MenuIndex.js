@@ -628,7 +628,8 @@ var SKIPPED = [".cache", ".git", "node_modules"]
 function scanCommand(roots, skipped, home) {
   var command = ["fd", "--hidden", "--max-depth", "6"]
   for (var i = 0; i < skipped.length; i++) {
-    var skip = String(skipped[i])
+    // fd reads a skip as a glob, so a name holding brackets, braces or stars is escaped to mean itself.
+    var skip = String(skipped[i]).replace(/[[\]{}*?!\\]/g, "\\$&")
     if (skip.indexOf("/") < 0) command.push("--exclude", skip)
     else if (roots[0] === home && skip.indexOf("~/") === 0) command.push("--exclude", skip.slice(1) + "/")
   }
