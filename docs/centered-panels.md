@@ -2,9 +2,7 @@
 
 Makes Omarchy's bar panels (Display, Audio, Network, Power…) open centered on
 screen over a blurred desktop, instead of tucked against the bar edge beside
-their widget. The wheel's **Centered panels** setting turns it off: with
-`[wheely] panels = native` in `~/.config/omarchy/shell.toml`, `KeyboardPanel`
-places the card beside its widget as stock does and holds no backdrop.
+their widget. The wheel's **Centered panels** setting turns this off.
 
 **Working:** centering, blur, Ctrl+Left/Right panel switching, the
 panel-to-panel handoff, and the open/close animation.

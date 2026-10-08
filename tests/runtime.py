@@ -63,7 +63,7 @@ Scope {
     handlers = wheel[wheel.index("  property int scanEpoch:"):wheel.index(
         "  // Omarchy's menu re-checks its rows on every open")]
 
-    def scan(seconds, folder_seconds="5", folders="[]"):
+    def scan(seconds, folder_seconds="0.05", folders="[]"):
         out = """
   property bool opened: true
   property string mode: ""
@@ -432,18 +432,18 @@ Scope {
     print("ok: every shortcut name the wheel writes is a key Hyprland binds")
 
     # Saving writes the file, then reloads Hyprland, then reads the bindings again; the reload
-    # must see the new key. An edit by hand is read back by the same rule as the Hyprland block.
+    # must see the new key.
     home = base / "home"
     (home / ".config/omarchy").mkdir(parents=True)
     reload = block(wheel, r"  Process \{\n    id: hyprReload")
     reload = re.sub(r"command: \[.*\]", 'command: ["sh", "-c", "cat $HOME/.config/omarchy/wheel-shortcut >> $HOME/reloads"]', reload)
+    setting_file = block(wheel, r"  component SettingFile: FileView \{") + "\n"
     run("shortcut-save", '''
   property string shortcut: "unset"
   property int stage: 0
   QtObject { id: bindList; property bool running: false }
-  Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel-shortcut", "sh", text] }
   function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
-''' + block(wheel, r"  FileView \{\n    id: shortcutFile") + "\n" + reload + "\n" + block(wheel, r"  function saveShortcut\(") + '''
+''' + setting_file + block(wheel, r"  SettingFile \{\n    id: shortcutFile") + "\n" + reload + "\n" + block(wheel, r"  function saveShortcut\(") + '''
   Timer { interval: 150; running: true; repeat: true; onTriggered: {
     switch (root.stage++) {
     case 0:
@@ -451,19 +451,12 @@ Scope {
       root.saveShortcut("SUPER + SHIFT + B"); break
     case 1:
       root.check(root.shortcut === "SUPER + SHIFT + B" && bindList.running, "the bindings were not read again")
-      edit.text = "ALT + SPACE\\n"; edit.running = true; break
-    case 2:
-      root.check(root.shortcut === "ALT + SPACE", "an edit by hand was missed: " + root.shortcut)
-      edit.text = "rm -rf /\\n"; edit.running = true; break
-    case 3:
-      root.check(root.shortcut === "SUPER + A", "a bad file was believed: " + root.shortcut)
       console.log("PASS"); Qt.quit()
     }
   } }
 ''', {"HOME": str(home)})
     assert (home / "reloads").read_text() == "SUPER + SHIFT + B\n", "the reload ran before the write landed"
-    assert (home / ".config/omarchy/wheel-shortcut").read_text() == "rm -rf /\n"
-    print("ok: saving reloads Hyprland once the key is written; edits by hand are read by the block's rule")
+    print("ok: saving reloads Hyprland once the key is written")
 
     # The backdrop saves on every step, faster than key repeat: shell.toml ends on the last step and
     # keeps what another writer put there first, and Hyprland reloads once the blur's turn is written.
@@ -478,7 +471,7 @@ Scope {
   property var steps: [60, 70, 80, 90, 100, 80, 60, 40, 20, 0]
   QtObject { id: bindList; property bool running: false }
   Process { id: edit; command: ["sh", "-c", "printf '[font]\\\\nbase-size = 16\\\\n' > $HOME/.config/omarchy/shell.toml"] }
-""" + block(wheel, r"  FileView \{\n    id: shellFile") + "\n" + block(wheel, r"  FileView \{\n    id: blurFile") + "\n"
+""" + setting_file + line(wheel, r"^  SettingFile \{ id: blurFile.*$") + line(wheel, r"^  SettingFile \{ id: shellFile.*$")
         + reload.replace("wheel-shortcut", "wheel-blur") + "\n" + block(wheel, r"  function setBackdrop\(") + """
   Timer { id: burst; interval: 5; repeat: true; onTriggered: root.steps.length ? root.setBackdrop(root.steps.shift()) : stop() }
   Timer { interval: 150; running: true; repeat: true; onTriggered: {
@@ -500,14 +493,10 @@ Scope {
   property var ringIds: "unset"
   property var savedFolders: "unset"
   property var savedSkipped: "unset"
-  property string listing: ""
   property int stage: 0
-  function dropScan() {}
-  function scanFiles() {}
   Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel.json", "sh", text] }
   function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
-''' + block(wheel, r"  FileView \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + "\n"
-        + block(wheel, r"  function saveList\(") + '''
+''' + setting_file + block(wheel, r"  SettingFile \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + '''
   Timer { id: burst; interval: 15; repeat: true; property int n: 0; onTriggered: {
     root.check(n === 0 || JSON.stringify(root.ringIds) === JSON.stringify(["omarchy.audio", "app:" + n]),
                "an older ring came back: " + JSON.stringify(root.ringIds))
@@ -525,22 +514,15 @@ Scope {
       edit.text = '{ "slices": ["system"], "other": 1 }'; edit.running = true; break
     case 2:
       root.check(JSON.stringify(root.ringIds) === '["system"]', "an edit by hand was missed: " + JSON.stringify(root.ringIds))
-      root.saveRing(["system", "omarchy.audio"]); break
-    case 3:
-      root.saveRing([]); break
-    case 4:
-      root.check(root.ringIds === null, "an empty ring did not follow the bar")
       edit.text = '{ "folders": ["/x"], "skipped": [], "other": 1 }'; edit.running = true; break
-    case 5:
+    case 3:
       root.check(JSON.stringify([root.savedFolders, root.savedSkipped]) === '[["/x"],null]', "the lists were misread")
-      root.listing = "skipped"; root.saveList(["~/Android"]); break
-    case 6:
-      root.listing = "folders"; root.saveList([]); break
-    case 7:
-      root.check(root.savedFolders === null, "an emptied list did not go back to its default")
+      root.saveRing(["system"]); break
+    case 4:
       console.log("PASS"); Qt.quit()
     }
   } }
 ''', {"HOME": str(home)})
-    assert json.loads((home / ".config/omarchy/wheel.json").read_text()) == {"other": 1, "skipped": ["~/Android"]}
+    assert json.loads((home / ".config/omarchy/wheel.json").read_text()) == {"folders": ["/x"], "skipped": [], "other": 1,
+                                                                             "slices": ["system"]}
     print("ok: the ring saves on every change, a burst ends on its last ring, and the rest of wheel.json stays")

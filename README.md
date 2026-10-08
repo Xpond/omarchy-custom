@@ -6,7 +6,7 @@ A radial control center, a file browser and centered shell panels for
 - **Wheel** (`SUPER+A`): your bar's panels on a ring. Start typing to search
   every panel, the Omarchy menu, every keybinding, apps, open windows
   (`workspace` lists them all), themes and fonts; begin
-  with `/` to search files and folders under your home instead (`Ctrl+Enter`
+  with `/` to search files and folders under your home, and any folders you add, instead (`Ctrl+Enter`
   opens a terminal in one), or with `=`
   to calculate (`Enter` copies the answer). `SUPER+W`
   closes the wheel and any open shell panel, otherwise the active window. Its
@@ -14,7 +14,8 @@ A radial control center, a file browser and centered shell panels for
   See [`docs/wheel.md`](docs/wheel.md).
 - **Files**: a keyboard-driven directory browser with previews, opened from
   the wheel. See [`docs/files.md`](docs/files.md).
-- **Centered panels**: bar panels open centered over a blurred desktop. See
+- **Centered panels**: bar panels open centered over a blurred desktop, unless
+  the wheel's Centered panels setting is off. See
   [`docs/centered-panels.md`](docs/centered-panels.md).
 - **Lock screen**: swappable designs, picked in the wheel under Style ›
   Lockscreen Designs. `rally`: a 3D line-art Audi quattro assembles above the

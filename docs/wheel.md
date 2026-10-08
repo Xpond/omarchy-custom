@@ -76,7 +76,7 @@ try: it calls `xpo.wheel back`, and the wheel returns `none` for a panel it did
 not open, leaving the key to mean what it always did there.
 
 Mouse works too: the whole screen is a compass around center, so a flick in
-any direction selects that slice. Release of `SUPER+A` commits it. The scroll
+any direction selects that slice. Releasing the key commits it. The scroll
 wheel steps the ring one slice per notch, or the result list while searching.
 
 Clicking the field or the result stack does nothing, rather than closing the
@@ -233,13 +233,12 @@ that opens a panel or the browser keeps the instant unmap: the target grabs the
 keyboard on the next tick and a layer surface still holding an exclusive grab
 hands it a window without focus, so `close(true)` skips the fade. Any other pick
 (an app, a window, a command) fades out as a cancel does, with the backdrop, and
-waits in `queued` for the tick after the unmap. Hyprland refuses to focus a
-window while the grab stands: dispatched the tick after dropping the grab, the
-focus never moved (0 of 5), and the tick after an unmap it always did (5 of 5).
-A click during the fade runs nothing. A press of the wheel's key during the fade
-does nothing either: it may be the closing tap's own press, landing after its
-release. Reopening mid-fade cancels the pending unmap and the pick waiting on it,
-and counts as a fresh open.
+waits in `queued` for the tick after the unmap: Hyprland will not focus a window
+while the grab stands, and dropping the grab alone was not enough. A click during
+the fade runs nothing. A press of the wheel's key during the fade does nothing
+either: it may be the closing tap's own press, landing after its release.
+Reopening mid-fade cancels the pending unmap and the pick waiting on it, and
+counts as a fresh open.
 
 Typing swaps the ring for the results by fading rather than switching
 `visible`: the ring draws back to 0.94 while the stack grows from
@@ -309,8 +308,7 @@ Use `omarchy restart shell`.
 are one scrim surface owned by the bar, which the centered panels, the browser
 and the clipboard hold a count on too. The wheel takes that count when it opens
 and drops it as its fade starts (`panelSurfaceVisible`), so the bar's 150 ms
-hold ends the backdrop with the 130 ms fade; dropping it at unmap left the
-backdrop up 150 ms after the wheel. Drawing a scrim on the
+hold outlasts the 130 ms fade by 20 ms. Drawing a scrim on the
 wheel instead unmaps the blur along with the wheel, and the desktop snaps sharp
 for the frames in between. See `docs/centered-panels.md` for the scrim itself.
 
@@ -463,9 +461,8 @@ toggle, or Omarchy's menu opened at it by id or alias — is not a second row. I
 lends that row its description as search words, so `idle` finds Stay Awake
 (Toggle locking on idle) and `ocr` finds Capture › Text. Bindings sharing a
 command are one row. The wheel's own bindings (open, commit, close) are no rows, since
-they mean nothing from inside it. Here the other 211 make 169 rows of their own and join
-32 more. The keys themselves are never shown: the wheel is there so that none need
-remembering.
+they mean nothing from inside it. The keys themselves are never shown: the wheel is
+there so that none need remembering.
 
 A window action — Toggle floating, Full screen, Move window to workspace 3 —
 acts on Hyprland's active window, and while the wheel holds the keyboard
@@ -511,14 +508,11 @@ Quickshell, fails on a warning it doesn't expect (`tests/qslog.py`).
 `search()` sorts its matches. File mode has too many to sort: it buckets them
 by rank and name length as it scans, keeping only the first 40 of each tie,
 which is every row that could be read. A file opened from the wheel before
-leads its rank, most opened first, but never climbs into a better one. A bare
-`/` lists those files, latest first, while the scan runs. Home and the folders
-added outside it scan apart, so a slow folder, such as a network share still
-mounting, holds back only its own paths: home's show as soon as they land, and
-the folders' join them. Each scan is parsed as it lands, so the join reads only
-the folders' paths: parsing home's again froze the wheel for 74 ms over 82k
-paths. The Skipped folders list suggests home's folders alone, so it scans home
-alone. Closing cancels both scans and rejects whatever they were
+leads its rank, most opened first, but never climbs into a better one, and a
+bare `/` lists those files, latest first. Home and the folders added outside it
+scan apart, so a slow folder, such as a network share still mounting, holds back
+only its own paths. The Skipped folders list suggests home's folders alone, so it
+scans home alone. Closing cancels both scans and rejects whatever they were
 about to say; reopening starts fresh ones. `Enter` on a path
 opens the browser there, whether or not the browser was already up. The browser
 keeps to home, so a path from a folder outside it (Settings) opens the way the
@@ -560,83 +554,41 @@ checks 2000 random ones against JavaScript's own arithmetic.
 
 ## Settings
 
-Settings are search rows. `wheely settings` lists every one, and each answers to its
-own words (`wheely shortcut`, `keybind`). A setting row ends in its value, drawn as a
-control in Omarchy's control fill and border, the way its panel rows end in a switch;
-every other row ends in plain text, so a setting cannot pass for a result. Enter on
-one changes it in place: the wheel stays up, and the row says what is happening. Every
-setting wears the wheel's own ring of dots, an icon nothing in Omarchy uses, so its row
-reads as a Wheely setting among other results.
+Settings are search rows: `wheely settings` lists them. Each row ends in its
+value, and Enter changes it without closing the wheel.
 
-**Wheely shortcut** is the key that opens the wheel, `SUPER + A` until you choose
-another. Enter starts recording, and the row takes every key. The field shows the combo
-pressed, where a value is typed, and the row, with its whole width, says what saving
-would do: `enter saves`, `replaces Omarchy menu` when another binding holds it (the
-wheel's own do not count), or why it cannot be had (`add SUPER`, `closes the wheel`, `pick
-another key` for a key with no name here, such as a shifted symbol). SUPER is required
-because Hyprland takes a bound combo from every app, and apps leave SUPER alone.
-One row cannot hold both: a long combo lost its key. Plain Enter saves; plain Esc gives
-up, and the query comes back.
+**Wheely shortcut** (`SUPER + A`): Enter, then press a combo that includes
+SUPER, since Hyprland takes a bound combo from every app and apps leave SUPER
+alone. Hyprland's bindings pause while the row records, so a taken combo can be
+chosen; the row says what it would replace. Enter saves, Esc cancels. Saved to
+`~/.config/omarchy/wheel-shortcut`, then Hyprland reloads. Pressing the
+shortcut with the wheel up closes it.
 
-A bound combo never reaches a client, since Hyprland runs it instead (the `SUPER`+arrows
-trap). So while the row records, the wheel holds a keyboard-shortcuts inhibitor
-(Quickshell's `ShortcutInhibitor`), and Hyprland skips every binding while the focused
-surface holds one, layer surfaces included (`isInhibited()` in its `ShortcutsInhibit.cpp`).
-A taken combo is recorded and nothing it is bound to runs. Hyprland honours an inhibitor
-only while its surface has the keyboard, and this one ends with the recording, so nothing
-can be left stuck. With `binds:disable_keybind_grabbing = true` Hyprland ignores
-inhibitors, and only free combos arrive.
+**Wheely ring** (`Bar` or `Custom`): Enter edits the ring (The ring).
 
-Saving writes `~/.config/omarchy/wheel-shortcut`, then runs `hyprctl reload` once the
-write has landed, as Omarchy's own toggles reload. The managed Hyprland block cannot
-carry the key itself, because the installer refuses a block that was edited. It reads
-the file as data instead, the way Omarchy reads a disabled input device's name, and binds
-what it holds if that reads as keys joined by ` + `; anything else is `SUPER + A`. It
-unbinds the key before binding it, so a taken key's binding is gone until the wheel
-moves off it. The names come from Qt's key codes, and `tests/runtime.py` has Hyprland's
-own `--verify-config` accept every one the wheel can write.
+**Backdrop**: Enter, then ←/→ change how much the backdrop hides the desktop,
+in tenths, saved as you go; Enter or Esc is done. 0% is a clear desktop with no
+blur (`~/.config/omarchy/wheel-blur`). The dim is `[menu] scrim-alpha` in
+`~/.config/omarchy/shell.toml`, which Omarchy's own menus use too.
 
-Pressing the key again with the wheel up closes it: the press is a `toggle`. Only the
-release of the press that opened the wheel fires a flick. Press and release reach the
-shell as separate processes, so a closing tap's release can land before its press, and
-a release that fired or reopened would leave the wheel up.
+**Centered panels** (`On`): Enter toggles. Off, bar panels open beside their
+widget with no backdrop (`[wheely] panels = native` in `shell.toml`).
 
-**Wheely ring** reads `Bar` while the ring follows the bar and `Custom` once it
-has been changed; Enter opens the ring editor (The ring).
+**Searched folders** and **Skipped folders** change what `/` searches. By
+default: home, hidden files included, six levels deep, skipping every
+`.cache`, `.git` and `node_modules`. Enter lists the entries. Type to find one
+to add (Searched: a path from `/` outside home; Skipped: a folder under home)
+and Enter adds it; Del removes, Esc is done; an emptied list is its default
+again. A skip without a slash, like the defaults, skips that name anywhere.
+Files found in an added folder open in their default app, not the browser.
+Both lists live in `~/.config/omarchy/wheel.json` as `"folders"` and
+`"skipped"`.
 
-**Backdrop** ends in Omarchy's own slider: how much the backdrop hides the desktop. Enter,
-then ←/→ step it by a tenth, saved at once so the backdrop behind the wheel shows it. 0% is
-a clear desktop; above it, each step darkens it over a blurred desktop. The tint is
-Omarchy's `[menu] scrim-alpha` in `~/.config/omarchy/shell.toml`, which its own menus draw
-too. The blur is `~/.config/omarchy/wheel-blur`, which the managed block reads like the
-shortcut's file (`off` turns it off, and Hyprland's own blur with it); only crossing 0%
-reloads Hyprland, which re-applies the layer rule to the open backdrop.
+**Wheely history** (`history`): your picks, newest first, files included.
+Enter runs one; typing goes back to search; Esc is done.
 
-**Centered panels** reads `On` until it is turned off: Enter flips it. Off, every bar panel
-opens beside its bar widget with no backdrop, whether the bar or the wheel opened it. It is
-`[wheely] panels = native` in `~/.config/omarchy/shell.toml`, which the shell already
-watches; each panel reads it through `Color.shellValues` as it opens (centered-panels.md).
-
-**Searched folders** and **Skipped folders** change what `/` searches; until they do, it is
-what it always was: home, hidden folders included, six levels deep, skipping every folder
-named `.cache`, `.git` or `node_modules`. Searched folders adds folders outside home
-(`Home + 1`), scanned beside home. Enter on either puts its list in the results: typing suggests
-what to add, folders under home to skip as `/` would find them, or the subfolders of a path
-typed from `/`, and Enter adds the one picked; Del removes the picked entry, and Esc is done.
-The subfolders come from a `FolderListModel` made only while a path is typed: Qt's model with
-no folder lists the process's working directory, the shell's home, and watches it.
-Both are saved to `wheel.json` beside the ring (`"folders"`, `"skipped"`), and an emptied list
-is its default again. A skip with a slash is that folder under home; one without is every
-folder of that name. fd anchors a path only to the first folder it is given, home, so a
-folder outside home is skipped only by name.
-
-**Forget picks** ends in how many rows are remembered (What it remembers). It cannot be
-undone, so Enter only asks: the field reads `Forget 57 picks`, Enter again forgets them,
-on disk too, and Esc keeps them; other keys wait.
-
-**Wheely history** answers to `history` rather than `settings`. Enter lists what you have
-picked in the results, the latest first, files included; Enter on one runs it, and it comes
-back to the top. Typing leaves history for search, where picks rank anyway, and Esc is done.
+**Forget picks** ends in how many are remembered. Enter, then Enter again
+clears them; Esc keeps them.
 
 ## What it remembers
 
@@ -651,15 +603,12 @@ name starts with `br`, however often Files is picked.
 Windows are deliberately uncounted -- their address is new on every launch, so
 counting them would grow the file without bound, and they already sort on live
 focus order. `check.js` holds both invariants: every counted row has a key,
-and no two share one. Opening a setting row is no pick either, so the count on
-Wheely history and Forget picks is what history lists, along with any pick whose
-row has since gone, such as an app you removed.
+and no two share one. Opening a setting row is no pick either.
 
 The counts live in `~/.local/state/omarchy/wheel-uses.json`, written through on
 each pick rather than batched at exit -- the wheel is a plugin in a shell that
-gets restarted, so no orderly shutdown is guaranteed to arrive. A pick moves
-its key last, so the file reads oldest to newest and **Wheely history** needs no
-clock. The **Forget picks** setting empties it. There is no decay: what you
+gets restarted, so no orderly shutdown is guaranteed to arrive. The **Forget
+picks** setting empties it. There is no decay: what you
 reach for through a wheel is stable for months, and a half-life is a second knob
 to be wrong about.
 
@@ -682,7 +631,7 @@ Clones borrow their source's mark, Weather uses its widget's own glyph, and
 unknown panels a generic one.
 
 To choose the ring yourself, open the **Wheely ring** setting: the ring becomes
-its own editor, starting from the bar's ring. Type to find anything, and Enter
+its own editor, starting from the ring you have. Type to find anything, and Enter
 adds it after the selected slice, or last when none is. Del removes the selected
 slice, Shift+←/→ swaps it with its neighbour, across north too, and Esc is done.
 Ctrl+R, pressed twice, resets the ring to the bar's widgets, as removing the
