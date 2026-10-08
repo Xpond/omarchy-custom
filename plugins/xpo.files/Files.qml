@@ -433,7 +433,7 @@ Item {
     if (name.indexOf("/") !== -1) { ops.note("a name cannot hold a /"); return }
     if (verb === "new") {
       var folder = slashed || (!dotted && name.indexOf(".") < 0)
-      ops.run(["sh", "-c", '[ -e "$2" ] && exit 17; exec "$1" -- "$2"',
+      ops.run(["sh", "-c", 'if [ -e "$2" ] || [ -L "$2" ]; then exit 17; fi; exec "$1" -- "$2"',
                 "files", folder ? "mkdir" : "touch", ops.inHere(name)],
                { name: name, land: true, done: "made " + name, fail: "could not make " + name })
       return

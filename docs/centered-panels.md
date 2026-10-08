@@ -215,7 +215,8 @@ hyprctl dispatch 'hl.dsp.exec_cmd("sh -c \"env > /tmp/q\"")'; grep QSG /tmp/q
 ```bash
 # 2. Did the render loop really change? This thread exists ONLY under
 #    `threaded` -- `basic` renders on the GUI thread.
-P=$(pgrep -x quickshell); cat /proc/$P/task/*/comm | grep QSGRenderThread
+P=$(quickshell list -j -p /usr/share/omarchy/shell | jq -r '.[0].pid // empty')
+grep QSGRenderThread /proc/"$P"/task/*/comm
 ```
 
 Check 2 is the strong one: it observes the running shell's actual behaviour

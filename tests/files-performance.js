@@ -41,6 +41,36 @@ for (const count of [0, 1, 2, 499, 500, 501, 1000, 100000])
     }
 console.log("ok: all file sort orders, stable ties, Unicode and bounded preview parity")
 
+// Pin the mapped fields independently of preview equivalence.
+const mapped = [
+  { fileName: "notes.txt", filePath: "/tmp/notes.txt", fileIsDir: false, fileSize: "1024", fileModified: null },
+  { fileName: "Folder", filePath: "/tmp/Folder", fileIsDir: 1, fileSize: undefined, fileModified: "invalid" }
+]
+const model = { count: mapped.length, get: (i, field) => mapped[i][field] }
+assert.deepEqual(F.snapshot(model), [
+  { name: "notes.txt", path: "/tmp/notes.txt", isDir: false, size: 1024, modified: null },
+  { name: "Folder", path: "/tmp/Folder", isDir: true, size: 0, modified: "invalid" }
+])
+assert.deepEqual(F.snapshot(model, 1), [
+  { name: "notes.txt", path: "/tmp/notes.txt", isDir: false, size: 1024, modified: null }
+])
+
+// At 80 characters two 38-character columns fit, filled down before across.
+const preview = [
+  { name: "Folder", isDir: true, size: 999, modified: new Date(2026, 0, 2) },
+  { name: "notes.txt", isDir: false, size: 1024, modified: null },
+  { name: "another-very-long-name.txt", isDir: false, size: 12, modified: "invalid" },
+  { name: "last", isDir: false, size: 0, modified: null }
+]
+const folder = "󰉋  " + "Folder".padEnd(19) + "     " + "  " + " 2 Jan 26"
+const notes = "󰈔  " + "notes.txt".padEnd(19) + " 1.0K" + "  " + "         "
+const clipped = "󰈔  another-very-long-…" + "  12B" + "  " + "         "
+const last = "󰈔  " + "last".padEnd(19) + "   0B" + "  " + "         "
+assert.deepEqual(F.columns([], 2, 80, 4), [])
+assert.deepEqual(F.columns(preview, 2, 80, 4), [folder + "\n" + notes, clipped + "\n" + last])
+assert.deepEqual(F.columns(preview, 2, 80, 3), [folder + "\n" + notes, clipped + "\n…"])
+assert.deepEqual(F.columns(preview, 1, 38, 4), [[folder, notes, clipped, last].join("\n")])
+
 for (const count of [0, 1, 399, 400, 401, 2000]) {
   let reads = 0
   const model = { count, get(i, field) {

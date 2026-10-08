@@ -21,23 +21,24 @@ const code = qml.slice(qml.indexOf("  function pieces("), qml.indexOf("  onClock
 const drive = qml.match(/onDriveChanged: \{([^]*?)\n  \}\n  onWidthChanged/)[1]
 const streakFrom = qml.match(/readonly property var streakFrom: (\[[^]*?\]\])\n/)[1]
 const paint = qml.match(/readonly property var paint: (\[[^\]]*\])/)[1]
-// traced is when the last outline lands; painted is the paint's own progress over the paintTime after it,
-// a binding in QML and set by hand here.
-const traced = Math.ceil(Math.max(...parts.map(part => part.end)))
-const paintTime = Number(qml.match(/readonly property int paintTime: (\d+)/)[1])
+const binding = name => qml.match(new RegExp("readonly property \\w+ " + name + ": (.+)"))[1]
+const traced = new Function("parts", "return " + binding("traced"))(parts)
+const paintTime = new Function("return " + binding("paintTime"))()
+const driveTime = new Function("return " + binding("driveTime"))()
+const wavefront = qml.match(/onFrontChanged: (.+)/)[1]
 const car = new Function("model", "parts", "Qt", `
   var paint = ${paint}, width = 1920, height = 1080, clock = 0, lines, wheelLines, tracing, comets = [[], [], []], streaks = [[], [], []]
   var bodywork, wheels, finished, view, stance, projected = {}, focusHeights, bodyPose
-  var drive = 0, driveTime = 1100, launch = 0, lamps = 0, rolled = 0, glowing = [], pose, streakFrom = ${streakFrom}
+  var drive = 0, driveTime = ${driveTime}, launch = 0, lamps = 0, rolled = 0, glowing = [], pose, streakFrom = ${streakFrom}
   var traced = ${traced}, paintTime = ${paintTime}, painted = 1, span = null, front = 0, wavefront = []
   ${code}
   function onDrive() { ${drive} }
   function tick(t) {
     clock = t
-    painted = Math.min(1, Math.max(0, (t - traced) / paintTime))
-    front = span ? span[0] + (span[1] - span[0]) * painted : 0
+    painted = ${binding("painted")}
+    front = ${binding("front")}
     frame()
-    wavefront = painted > 0 && painted < 1 ? cuts() : []
+    ${wavefront}
   }
   // Every tone's surfaces as drawn: the body's parked, which bodyPose moves as a whole, and the wheels'.
   function fills() { return bodywork.map(function(tone, n) { return tone.concat(wheels[n]) }) }
@@ -91,8 +92,8 @@ assert.ok(inside.some(part => part.whole.length > 1) && inside.every(part => par
 console.log("ok: inside outlines are clipped to the glass")
 
 // The drive-off poses every frame finitely.
-for (let t = 0; t <= 1100; t += 7) {
-  const off = car.drive(t / 1100)
+for (let t = 0; t <= driveTime; t += 7) {
+  const off = car.drive(t / driveTime)
   assert.ok(finite([...off.lines, ...off.streaks, ...off.fills, off.glowing]), "non-finite point driving off at " + t + "ms")
 }
 console.log("ok: the drive-off stays finite")

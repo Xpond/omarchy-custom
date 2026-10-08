@@ -11,6 +11,12 @@ import tempfile
 import time
 import qslog
 
+
+def interrupted(signum, frame):
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, interrupted)
 repo = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix="lock-process-") as directory:
     out = Path(directory)
@@ -104,8 +110,9 @@ ShellRoot { Lock.Service {} }
         return subprocess.Popen(["quickshell", "--no-color", "-p", str(out)], env=env,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    parent = start()
+    parent = None
     try:
+        parent = start()
         until(lambda: status().get("passwordPam"), "bridge did not start")
         time.sleep(1)
         until(lambda: not child_pid(), "initial worker did not retire")
@@ -163,6 +170,14 @@ ShellRoot { Lock.Service {} }
         until(lambda: not list(home.glob("wake.*")), "worker exited before its wake command finished", timeout=3)
         print("ok: failed launch retries, shell restart/crash reconnects, worker crash recovers, unlock/wake retires", flush=True)
     finally:
-        subprocess.run(["quickshell", "kill", "-p", str(worker)], env=env, capture_output=True)
-        parent.terminate()
-        parent.wait(timeout=3)
+        # Stop the bridge first so killing an active test worker cannot respawn it.
+        if parent is not None:
+            parent.terminate()
+            try:
+                parent.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                parent.kill()
+                parent.wait(timeout=3)
+        subprocess.run(["quickshell", "kill", "-p", str(worker)], env=env,
+                       capture_output=True, timeout=3)
+        until(lambda: not child_pid(), "cleanup retained its worker")

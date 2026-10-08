@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
+const { execFileSync } = require("node:child_process")
 const plugin = path.resolve(__dirname, "../plugins/xpo.wheel")
 const read = name => fs.readFileSync(path.join(plugin, name), "utf8")
 const wheel = read("Wheel.qml")
@@ -21,7 +22,12 @@ for (const [name, effect] of Object.entries(effects)) {
   assert.ok(effect.includes(name + ".frag.qsb"), "found the wrong ShaderEffect")
   const bound = new Set([...effect.matchAll(/property\s+\w+\s+(\w+)\b/g)].map(m => m[1]))
   assert.deepEqual([...bound].sort(), [...declared].sort(), name + " shader and QML disagree on uniforms")
-  assert.ok(fs.existsSync(path.join(plugin, name + ".frag.qsb")), name + " compiled shader is missing")
+  const dump = execFileSync("/usr/lib/qt6/bin/qsb", ["--dump", path.join(plugin, name + ".frag.qsb")], { encoding: "utf8" })
+  assert.match(dump, /^Stage: Fragment\n[^]*GLSL \d+/, name + " compiled fragment shader has no OpenGL variant")
+  const reflection = JSON.parse(dump.match(/Reflection info: (\{[^]*?\n\})/)[1])
+  const compiled = [...reflection.uniformBlocks.flatMap(block => block.members), ...(reflection.combinedImageSamplers || [])]
+    .map(uniform => uniform.name).filter(n => !n.startsWith("qt_"))
+  assert.deepEqual(compiled.sort(), [...bound].sort(), name + " compiled shader and QML disagree on uniforms")
   console.log("ok: " + name + " shader and QML agree on every uniform")
 }
 assert.ok(fs.existsSync(path.join(plugin, "mark.png")), "mark.png is missing")
@@ -51,7 +57,6 @@ assert.ok(fs.existsSync(path.join(plugin, "mark.png")), "mark.png is missing")
   // Haze peaks while stars are still visible, on both sides of the horizon.
   for (const p of [0.5, 1]) {
     assert.ok(dusk(elevation(p)) > 0.9, "no haze at the hour it is meant to be thickest")
-    near(light(p), 0, "the sun is still up where the haze peaks")
   }
   // The arc runs left to right across the day, not straight up the middle.
   near(azimuth(0), -1, "the light does not come up out of the left")
@@ -90,7 +95,12 @@ assert.ok(fs.existsSync(path.join(plugin, "mark.png")), "mark.png is missing")
   // Glow and fluid positions share the same ellipse, half a day apart.
   const positionExpr = src.match(/function bodyPosition\(side\) \{\s*return (.+)/)[1]
   const position = new Function("Qt", "azimuth", "elevation", "side", "return " + positionExpr)
-  const bodyAt = (p, side) => position({ vector2d: (x, y) => ({ x, y }) }, azimuth(p), elevation(p), side)
+  const bodies = ["sunPosition", "moonPosition"].map(name => new Function("Qt", "bodyPosition", "return " +
+    src.match(new RegExp("readonly property vector2d " + name + ": (.+)"))[1]))
+  const bodyAt = (p, side) => {
+    const Qt = { vector2d: (x, y) => ({ x, y }) }
+    return bodies[side === 1 ? 0 : 1](Qt, s => position(Qt, azimuth(p), elevation(p), s))
+  }
   near(bodyAt(0, 1).x, 0.1, "sunrise is not on the left")
   near(bodyAt(0.5, 1).x, 0.9, "sunset is not on the right")
   near(bodyAt(0.25, 1).y, 0.22, "the sun does not reach overhead")

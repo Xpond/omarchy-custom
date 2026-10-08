@@ -32,7 +32,7 @@ Item {
 
   // Pass paths as arguments to preserve shell metacharacters.
   function guarded(verb, src, dst) {
-    return ["sh", "-c", '[ -e "$2" ] && exit 17; exec ' + verb + ' -- "$1" "$2"',
+    return ["sh", "-c", 'if [ -e "$2" ] || [ -L "$2" ]; then exit 17; fi; exec ' + verb + ' -- "$1" "$2"',
             "files", src, dst]
   }
 

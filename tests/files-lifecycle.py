@@ -68,10 +68,13 @@ Scope {
       root.sel = ({ path: "visible-change" }); break
     case 2:
       root.check(root.settledSel === root.sel, "visible selection did not settle")
+      root.editing = root.dirty = root.discarding = true; root.naming = "rename"
       root.opened = false
       root.sel = ({ path: "hidden-change" }); break
     case 3:
       root.check(!root.settledSel, "hidden directory update restarted preview")
+      root.check(!root.editing && !root.dirty && !root.discarding && !root.naming,
+                 "close retained editing, dirty, discard or naming state")
       root.opened = true; break
     case 4:
       root.check(root.settledSel === root.sel, "reopen did not preview updated selection")
@@ -80,14 +83,19 @@ Scope {
       root.check(!root.settledSel, "close did not cancel pending preview")
       root.opened = true; break
     case 6:
+      root.editing = root.dirty = root.discarding = true; root.naming = "new"
       root.popOut()
       root.check(root.settledSel === root.sel, "popping out dropped the preview")
+      root.check(root.editing && root.dirty && root.discarding && root.naming === "new",
+                 "popping out discarded active editing state")
       root.sel = ({ path: "windowed-change" }); break
     case 7:
       root.check(root.settledSel === root.sel, "windowed selection did not settle")
       root.sel = ({ path: "closing" }); root.windowed = false; break
     case 8:
       root.check(!root.settledSel, "closing the window did not cancel pending preview")
+      root.check(!root.editing && !root.dirty && !root.discarding && !root.naming,
+                 "closing the window retained editing state")
       console.log("PASS"); Qt.quit()
     }
   } }
