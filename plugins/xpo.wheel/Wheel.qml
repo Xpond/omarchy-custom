@@ -140,7 +140,8 @@ Item {
   readonly property int resultCap: 8
   readonly property var results: root.listing === "history" ? MenuIndex.historyRows(root.index, root.uses, root.home)
     : root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
-    : root.listing === "skipped" ? MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true)
+    : root.listing === "skipped" ? MenuIndex.nameRows(root.files, root.query, root.resultLimit, root.home)
+      .concat(MenuIndex.fileRows(root.files, root.query, root.resultLimit, root.home, true))
     : root.listing ? MenuIndex.subfolderRows(root.subfolderPaths, root.query, root.home)
     // A bare `/` lists the files picked before, latest first, while the scan runs.
     : root.mode === "file" && !root.term ? MenuIndex.historyRows([], root.uses, root.home)
@@ -599,8 +600,9 @@ Item {
     ringFile.setText(MenuIndex.withList(ringFile.text(), "slices", root.ringIds))
   }
 
+  // A folder row adds its path; a name row, which only the skip list offers, adds the name.
   function addEntry(e) {
-    var entry = e.path ? MenuIndex.listEntry(e.path, root.home) : ""
+    var entry = e.path ? MenuIndex.listEntry(e.path, root.home) : e.label
     if (entry && root.listed.indexOf(entry) < 0) root.saveList(root.listed.concat([entry]))
     root.query = ""
   }

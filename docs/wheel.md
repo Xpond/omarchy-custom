@@ -576,13 +576,14 @@ widget with no backdrop (`[wheely] panels = native` in `shell.toml`).
 
 **Searched folders** and **Skipped folders** change what `/` searches. By
 default: home, hidden files included, six levels deep, skipping every
-`.cache`, `.git` and `node_modules`. Enter lists the entries. Type to find one
-to add (Searched: a path from `/` outside home; Skipped: a folder under home)
-and Enter adds it; Del removes, Esc is done; an emptied list is its default
-again. A skip without a slash, like the defaults, skips that name anywhere.
-Files found in an added folder open in their default app, not the browser.
-Both lists live in `~/.config/omarchy/wheel.json` as `"folders"` and
-`"skipped"`.
+`.cache`, `.git` and `node_modules`, and whatever a git repository's
+`.gitignore` lists. Enter lists the entries. Type to find one to add and Enter
+adds it: Searched takes a path from `/` outside home; Skipped offers folder
+names first, each skipping every folder called that, anywhere, as the defaults
+do, then single folders under home. Del removes, Esc is done; an emptied list
+is its default again. Files found in an added folder open in their default
+app, not the browser. Both lists live in `~/.config/omarchy/wheel.json` as
+`"folders"` and `"skipped"`.
 
 **Wheely history** (`history`): your picks, newest first, files included.
 Enter runs one; typing goes back to search; Esc is done.
