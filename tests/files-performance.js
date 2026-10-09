@@ -37,6 +37,8 @@ for (const count of [0, 1, 2, 499, 500, 501, 1000, 100000])
         assert.equal(F.head(text, limit), expected)
       }
     }
+// The gutter numbers every line the preview shows, blank ones included, and nothing for no text.
+assert.deepEqual(["", "a", "a\n\nb"].map(F.numbers), ["", "1", "1\n2\n3"])
 console.log("ok: all file sort orders, stable ties, Unicode and bounded preview parity")
 
 // Pin the mapped fields independently of preview equivalence.

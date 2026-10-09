@@ -99,8 +99,11 @@ def check(wheel, base, env, run, block, line):
   property var savedFolders: "unset"
   property var savedSkipped: "unset"
   property int stage: 0
+  property int waits: 0
   Process { id: edit; property string text; command: ["sh", "-c", "printf %s \\"$1\\" > $HOME/.config/omarchy/wheel.json", "sh", text] }
   function check(ok, message) { if (!ok) { console.error("FAIL", message); Qt.exit(1) } }
+  // A hand edit reaches the reader through the file watch, later on a busy machine: wait for it, a while.
+  function settled(ok) { if (ok || root.waits++ >= 8) { root.waits = 0; return true } root.stage--; return false }
 ''' + setting_file + block(wheel, r"  SettingFile \{\n    id: ringFile") + "\n" + block(wheel, r"  function saveRing\(") + '''
   Timer { id: burst; interval: 15; repeat: true; property int n: 0; onTriggered: {
     root.check(n === 0 || JSON.stringify(root.ringIds) === JSON.stringify(["omarchy.audio", "app:" + n]),
@@ -118,9 +121,11 @@ def check(wheel, base, env, run, block, line):
       root.check(JSON.stringify(root.ringIds) === '["omarchy.audio","app:30"]', "the burst ended on " + JSON.stringify(root.ringIds))
       edit.text = '{ "slices": ["system"], "other": 1 }'; edit.running = true; break
     case 2:
+      if (!root.settled(JSON.stringify(root.ringIds) === '["system"]')) break
       root.check(JSON.stringify(root.ringIds) === '["system"]', "an edit by hand was missed: " + JSON.stringify(root.ringIds))
       edit.text = '{ "folders": ["/x"], "skipped": [], "other": 1 }'; edit.running = true; break
     case 3:
+      if (!root.settled(JSON.stringify([root.savedFolders, root.savedSkipped]) === '[["/x"],null]')) break
       root.check(JSON.stringify([root.savedFolders, root.savedSkipped]) === '[["/x"],null]', "the lists were misread")
       root.saveRing(["system"]); break
     case 4:

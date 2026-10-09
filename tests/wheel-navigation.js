@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict")
 const { read, method, keymap } = require("./qml.js")
-const { M, wheelSource } = require("./wheel-source.js")
+const { M, wheelSource, binding, derive } = require("./wheel-source.js")
 
 // A panel cannot tell how it was opened, so the wheel answers for it: only the
 // panel the wheel put on screen, and only while it is still there.
@@ -81,10 +81,9 @@ console.log("ok: backspace gives the ring back the slice it was left on")
 function dialAt(count, selected) {
   const seen = []
   const w = { selected, sliceCount: count, searching: false,
-    sliceOrigin: count % 2 === 0 ? 90 % (360 / count) : 0,
-    get sliceStep() { return 360 / count },
     select(i) { seen.push(i); this.selected = i },
     rotate: null, nearestSlice: null }
+  derive(w, "sliceStep", "sliceOrigin")
   w.nearestSlice = method(wheelSource, "nearestSlice", { root: w })
   w.rotate = method(wheelSource, "rotate", { root: w })
   return { wheel: w, seen, key: keymap("plugins/xpo.wheel/MenuKeys.js", w) }
@@ -107,3 +106,32 @@ const empty = dialAt(0, -1)
 empty.key("Key_Right")
 assert.deepEqual(empty.seen, [], "an empty ring selects nothing at all")
 console.log("ok: the ring steps one slice a press, from the top when it is fresh")
+
+// The pointer is a compass around the screen's centre: inside the dead zone it names no slice, and
+// from its edge out it names the slice it points at, north first and clockwise.
+{
+  const { wheel } = dialAt(4, -1)
+  wheel.deadzone = 60
+  const at = (w, x, y) => method(wheelSource, "sliceAt", { root: w, surface: { width: 1000, height: 800 } })(x, y)
+  assert.deepEqual([[500, 400], [500, 341], [500, 340], [800, 400], [500, 700], [200, 400]].map(([x, y]) => at(wheel, x, y)),
+    [-1, -1, 0, 1, 2, 3])
+  // Six slices offset their origin so east falls on a slice of its own.
+  const six = dialAt(6, -1).wheel
+  six.deadzone = 60
+  assert.equal(at(six, 800, 400), 1)
+}
+console.log("ok: the pointer names the slice it points at, and none near the centre")
+
+// Arrows keep the selected row visible and wrap from the top to the bottom.
+{
+  const rows = n => Array.from({ length: n }, (_, i) => ({ label: "r" + i, action: "a" + i }))
+  const r = { results: rows(20), resultIndex: 0, resultTop: 0, resultCap: 8 }
+  for (const name of ["moveResult", "showResult"]) r[name] = method(wheelSource, name, { root: r })
+  for (let i = 0; i < 9; i++) r.moveResult(1)
+  assert.deepEqual([r.resultIndex, r.resultTop], [9, 2], "the selection scrolled out of view")
+  assert.deepEqual(binding("beads", { root: r }).map(e => e.label), ["r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"],
+    "the visible rows are not the window over the results")
+  r.resultIndex = 0; r.resultTop = 0; r.moveResult(-1)
+  assert.deepEqual([r.resultIndex, r.resultTop], [19, 12], "up from the top did not wrap to the bottom")
+}
+console.log("ok: arrows page through results and wrap within the visible window")

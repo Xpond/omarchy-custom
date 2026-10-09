@@ -64,8 +64,9 @@ dial.terminal = method(wheelSource, "terminal", { root: dial, MenuIndex: M,
 dial.results.push({ path: "/home/test/My Dir/" })
 dial.resultIndex = 0; dialKey("Key_Return", ctrl)
 assert.deepEqual([terminals, entered.map(e => e.appId)], [[], ["firefox"]], "ctrl+enter on an app is not enter")
-dial.resultIndex = 1; dialKey("Key_Return", ctrl)
+dial.resultIndex = 1; copied.length = 0; dialKey("Key_Return", ctrl)
 assert.deepEqual(terminals, [], "the terminal opened before the wheel unmapped")
+assert.deepEqual(copied, ["dismissed"], "ctrl+enter on a path left the wheel up")
 dial.queued()
 dial.resultIndex = 2; dialKey("Key_Enter", ctrl); dial.queued()
 assert.deepEqual(terminals, [["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test"],

@@ -61,8 +61,8 @@ const shift = 1 << 25, ctrl = 1 << 26
   assert.deepEqual(written(), { other: 1, slices: ["omarchy.audio", "app:firefox.desktop", "omarchy.network",
                                                  "omarchy.clipboard"] }, "the file lost what else it held")
   assert.equal(ed.query, "", "a pick left the query up")
-  ed.select(3); ed.run(index[4])
-  assert.equal(ring() + " " + saved.length, "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard @1 1",
+  ed.select(3); ed.run(ed.ring[0])
+  assert.equal(ring() + " " + saved.length, "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard @0 1",
     "a slice already on the ring was added twice")
   ed.select(-1); ed.run(index[3])
   assert.equal(ring(), "omarchy.audio app:firefox.desktop omarchy.network omarchy.clipboard system @4",

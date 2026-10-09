@@ -37,6 +37,7 @@ const { M, wheelSource, binding, derive } = require("./wheel-source.js")
   assert.equal(M.bindingAt(records, "SUPER + C"), "Universal copy", "a binding no row runs gave up its key")
   assert.equal(M.bindingAt(records, "SUPER + X"), "another binding", "a binding without a description gave up its key")
   assert.equal(M.bindingAt(records, "SUPER + A") + M.bindingAt(records, "SUPER + B"), "")
+  assert.equal(M.bindingAt("SUPER + T → Terminal\texec\tx", "SUPER + T"), "Terminal", "the first binding gave up its key")
 
   // The Hyprland block reads the file by the same rule, over the same cases (tests/desktop.py).
   for (const [saved, key] of [[undefined, "SUPER + A"], ["SUPER + SHIFT + B\n", "SUPER + SHIFT + B"],

@@ -2,7 +2,7 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 const { method, keymap } = require("./qml.js")
-const { M, wheelSource, binding } = require("./wheel-source.js")
+const { M, wheelSource, binding, derive } = require("./wheel-source.js")
 
 // Until a list changes, `/` scans home as it always has; folders outside home get a scan of their own,
 // and a skip with a slash anchors under home, so only home's scan takes it. Run against fd itself.
@@ -11,7 +11,7 @@ const { M, wheelSource, binding } = require("./wheel-source.js")
   assert.equal(M.scanCommand([home], M.SKIPPED, home).join(" "),
     "fd --hidden --max-depth 6 --exclude .cache --exclude .git --exclude node_modules . /home/test")
   const tree = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "wheel-scan-"))
-  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/Music [old]/x", "home/p/node_modules/m",
+  for (const name of ["home/.claude/CLAUDE.md", "home/Android/x", "home/Music [old]/x", "home/p/node_modules/m", "home/p/Android/x",
                       "home/1/2/3/4/5/6/deep", "mnt/Android/x"])
     fs.mkdirSync(path.dirname(path.join(tree, name)), { recursive: true }), fs.writeFileSync(path.join(tree, name), "")
   const found = [[tree + "/home"], [tree + "/mnt"]].map(roots => M.scanCommand(roots, ["node_modules", "~/Android", "~/Music [old]"], tree + "/home"))
@@ -19,16 +19,18 @@ const { M, wheelSource, binding } = require("./wheel-source.js")
       { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: tree } })).join("")
   assert.deepEqual(found.split("\n").filter(Boolean).map(p => p.slice(tree.length)).sort(),
     ["/home/.claude/", "/home/.claude/CLAUDE.md", "/home/1/", "/home/1/2/", "/home/1/2/3/", "/home/1/2/3/4/",
-     "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/mnt/Android/", "/mnt/Android/x"])
+     "/home/1/2/3/4/5/", "/home/1/2/3/4/5/6/", "/home/p/", "/home/p/Android/", "/home/p/Android/x",
+     "/mnt/Android/", "/mnt/Android/x"], "a skip by path reached a folder of that name elsewhere")
   fs.rmSync(tree, { recursive: true })
 
   // Typing suggests: names and folders under home to skip, from the scan, and subfolders outside home to
   // search. A name starts with what is typed, and is offered once however many folders share it.
   const files = M.parseFiles(["/home/test/Android/", "/home/test/Android/README", "/mnt/android/", "/home/test/p/target/",
-    "/home/test/q/target/", "/home/test/targets/", "/home/test/star/", "/home/test/target.txt", "/mnt/target/"].join("\n"))
+    "/home/test/q/target/", "/home/test/targets/", "/home/test/star/", "/home/test/target.txt", "/mnt/target/", "/home/test/tz/"].join("\n"))
   assert.deepEqual(M.fileRows(files, "andr", 40, home, true).map(r => r.path), ["/home/test/Android/"])
   assert.deepEqual(M.nameRows(files, "tar", 40, home).map(r => r.label + " " + r.trail), ["target anywhere", "targets anywhere"])
   assert.deepEqual(M.nameRows(files, "andr", 40, home).map(r => r.label), ["Android"], "a name from outside home was offered")
+  assert.deepEqual(M.nameRows(files, "t", 40, home).map(r => r.label), ["tz", "target", "targets"], "names were not shortest first")
   assert.deepEqual(M.subfolderRows(["/home", "/media", "/mnt", "/home/test/x"], "/m", home).map(r => r.path), ["/media/", "/mnt/"])
   assert.deepEqual(M.subfolderRows(["/home"], "/", home).concat(M.subfolderRows(["/home/test/x"], "/home/test/", home)), [],
     "home, or a folder in or around it, was offered")
@@ -39,10 +41,9 @@ const { M, wheelSource, binding } = require("./wheel-source.js")
   const saved = []
   const disk = { raw: '{ "slices": ["system"] }', text() { return this.raw }, setText(raw) { this.raw = raw; saved.push(JSON.parse(raw)) } }
   const ls = { query: "", listing: "", savedFolders: null, savedSkipped: null, resultIndex: 0, resultLimit: 40, home, files,
-    subfolderPaths: ["/mnt"], get folders() { return this.savedFolders || [] }, get skipped() { return this.savedSkipped || M.SKIPPED },
-    get listed() { return this.listing === "skipped" ? this.skipped : this.folders },
-    get results() { return binding("results", { root: this, MenuIndex: M }) }, drops: 0, dropScan() { this.drops++ }, scanFiles() {} }
+    subfolderPaths: ["/mnt"], get results() { return binding("results", { root: this, MenuIndex: M }) }, drops: 0, dropScan() { this.drops++ }, scans: 0, scanFiles() { this.scans++ } }
   for (const name of ["edit", "addEntry", "removeEntry", "saveList"]) ls[name] = method(wheelSource, name, { root: ls, ringFile: disk, MenuIndex: M })
+  derive(ls, "folders", "skipped", "listed")
   ls.query = "wheely"; ls.edit({ setting: "skipped" })
   assert.deepEqual([ls.query, ls.results.map(r => r.label + r.trail)], ["", [".cacheanywhere", ".gitanywhere", "node_modulesanywhere"]])
   ls.query = "andr"
@@ -53,7 +54,11 @@ const { M, wheelSource, binding } = require("./wheel-source.js")
   assert.deepEqual([ls.results.map(r => r.label), ls.resultIndex, saved.at(-1)],
     [[".cache", "node_modules", "~/Android", "target"], 1,
      { slices: ["system"], skipped: [".cache", "node_modules", "~/Android", "target"] }])
-  assert.equal(ls.drops, 3, "a saved list kept the old scan")
+  assert.deepEqual([ls.drops, ls.scans], [3, 3], "a saved list kept the old scan, or did not scan again")
+  // With nothing selected, Del removes nothing.
+  const writes = saved.length
+  ls.resultIndex = -1; ls.removeEntry()
+  assert.equal(saved.length, writes, "Del with nothing selected changed the list")
   ls.edit({ setting: "folders" })
   ls.query = "/m"; ls.addEntry(ls.results[0]); ls.query = "/m"; ls.addEntry(ls.results[0])
   assert.deepEqual(saved.at(-1).folders, ["/mnt"], "a folder was added twice")
