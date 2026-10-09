@@ -711,10 +711,13 @@ function dirOf(path) {
   return p.charAt(p.length - 1) === "/" ? p.slice(0, -1) : p.slice(0, p.lastIndexOf("/")) || "/"
 }
 
-function pathPayload(path) {
+// From the pinned search, Files opens inside its window.
+function pathPayload(path, pinned) {
   var p = String(path)
   var name = p.slice(p.lastIndexOf("/") + 1)
-  return JSON.stringify(name ? { dir: dirOf(p), select: name } : { dir: dirOf(p) })
+  var out = name ? { dir: dirOf(p), select: name } : { dir: dirOf(p) }
+  if (pinned) out.pinned = true
+  return JSON.stringify(out)
 }
 
 // Rank paths by name position, then picks, then length; materialize rows only for winners.

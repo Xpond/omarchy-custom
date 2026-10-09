@@ -8,6 +8,7 @@ import qs.Commons
 import qs.Ui
 import "FilesIndex.js" as FilesIndex
 import "FilesKeys.js" as FilesKeys
+import "../xpo.wheel/Pinned.js" as Pinned
 
 // Keyboard-first browser rooted at $HOME. Writes never overwrite; deletes use trash.
 Item {
@@ -20,7 +21,9 @@ Item {
   // Ctrl+T pops the overlay out into a Hyprland window. The shell then counts
   // the panel as closed, so the wheel and other panels leave the window alone.
   property bool windowed: false
-  readonly property bool shown: root.opened || root.windowed
+  // The pinned search's window while Files shows inside it, opened from there.
+  property var host: null
+  readonly property bool shown: root.opened || root.windowed || !!root.host
   // Absolute, and without a trailing slash except at the root itself.
   property string dir: Quickshell.env("HOME")
   // A leading / or ~ enters path completion; both are rooted at $HOME.
@@ -212,7 +215,11 @@ Item {
   function open(payloadJson) {
     var payload = {}
     try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) {}
-    if (root.windowed) {
+    if (payload.pinned && Pinned.window && !root.shown) {
+      root.host = Pinned.window
+      root.host.guest = keys
+    }
+    if (root.windowed || root.host) {
       root.raise()
       if (!payload.dir) return
     }
@@ -225,7 +232,7 @@ Item {
     root.naming = ""
     root.enter(payload.dir ? String(payload.dir) : root.home)
     root.pending = payload.select ? String(payload.select) : ""
-    if (!root.windowed) {
+    if (!root.windowed && !root.host) {
       root.openScreen = root.focusedScreen()
       root.opened = true
     }
@@ -256,12 +263,20 @@ Item {
   }
 
   // Setting windowed before clearing opened keeps the panel shown, so the selection
-  // and preview carry over.
+  // and preview carry over. Pressed again, the window or the pinned search hands it
+  // back to the overlay the same way.
   function popOut() {
-    if (!root.opened) return
-    root.windowed = true
-    root.opened = false
-    if (root.shell) root.shell.hide("xpo.files")
+    if (!root.shown) return
+    if (root.opened) {
+      root.windowed = true
+      root.opened = false
+      if (root.shell) root.shell.hide("xpo.files")
+      return
+    }
+    root.openScreen = root.focusedScreen()
+    root.opened = true
+    root.windowed = false
+    if (root.host) root.host.guest = null
   }
 
   // Focus the window the way the wheel focuses any other.
@@ -269,7 +284,8 @@ Item {
     var all = Hyprland.toplevels.values
     for (var i = 0; i < all.length; i++) {
       var t = all[i]
-      if (t.wayland && t.wayland.appId === "org.quickshell" && t.title === window.title)
+      if (t.wayland && t.wayland.appId === "org.quickshell"
+          && t.title === (root.host ? root.host.title : window.title))
         Hyprland.dispatch("hl.dsp.focus({ window = \"address:0x" + t.address + "\" })")
     }
   }
@@ -300,8 +316,9 @@ Item {
 
   function up() { root.enter(FilesIndex.parentOf(root.dir)) }
 
-  // At home, hand Backspace navigation to the wheel.
+  // At home, hand Backspace navigation to the wheel, or back to the pinned search.
   function toWheel() {
+    if (root.host) { root.host.guest = null; return }
     Quickshell.execDetached(["omarchy-shell", "-q", "shell", "call",
                              "xpo.wheel", "back", ""])
   }
@@ -500,12 +517,26 @@ Item {
     root.claimPending()
   }
 
+  // The pinned search lets go on return or when its window closes; an unsaved edit then
+  // returns to the overlay, as it does when Files' own window closes.
+  Connections {
+    target: root.host
+    function onGuestChanged() {
+      if (root.host.guest === keys) return
+      if (root.editing && root.dirty) {
+        root.openScreen = root.focusedScreen()
+        root.opened = true
+      }
+      root.host = null
+    }
+  }
+
   // A plain toplevel, so Hyprland tiles, moves, and closes it like any other window.
   FloatingWindow {
     id: window
     visible: root.windowed
     title: "Files"
-    color: card.color
+    color: keys.ground
     implicitWidth: root.cardWidth
     implicitHeight: Style.space(900)
     // Closing the window cannot ask twice, so an unsaved edit returns to the overlay.
@@ -544,8 +575,10 @@ Item {
 
       Item {
         id: keys
+        // A window's ground, nearly solid, so the blurred backdrop barely shows through.
+        readonly property color ground: Util.alpha(Color.menu.background, 0.88)
         // The window has its own border, so it takes the content without the card.
-        parent: root.windowed ? window.contentItem : card
+        parent: root.host ? root.host.contentItem : root.windowed ? window.contentItem : card
         anchors.fill: parent
         anchors.margins: Style.spacing.panelPadding
         anchors.bottomMargin: Style.spacing.xl

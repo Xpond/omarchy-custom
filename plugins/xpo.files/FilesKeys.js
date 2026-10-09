@@ -63,6 +63,7 @@ function onKey(panel, ops, preview, event) {
   switch (event.key) {
   case Qt.Key_Escape:
     if (panel.filter) panel.filter = ""
+    else if (panel.host) panel.toWheel()
     else panel.close()
     event.accepted = true; return
   case Qt.Key_Backspace:

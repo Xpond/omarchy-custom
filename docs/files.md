@@ -60,7 +60,7 @@ red, and a save is confirmed by reading the file back.
 | `Ctrl+H` | show hidden files |
 | `Ctrl+U` | clear the field |
 | `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
-| `Ctrl+T` | pop out into a window — see [Popping out](#popping-out) |
+| `Ctrl+T` | pop out into a window, and back — see [Popping out](#popping-out) |
 | `Esc` | clear the field, then close |
 
 Shift is the one modifier that means "the other pane", and it is the whole
@@ -382,13 +382,20 @@ exactly as written.
 `Ctrl+T` moves the browser out of the overlay into a normal Hyprland window,
 keeping the folder, the selection and the preview. Hyprland tiles it beside
 whatever else is open, and it moves, floats and pins like any other window. The
-overlay goes, and the dimmed backdrop with it.
+overlay goes, and the dimmed backdrop with it; the window is nearly solid, so the
+blurred backdrop barely shows through. `Ctrl+T` in the window brings the overlay
+back the same way.
 
 To the shell the browser is then closed, so opening the wheel or a panel leaves
 the window alone, and `SUPER+W` closes it as it closes any window. `Esc` only
 clears the field: closing is the window's business. A file picked in the wheel
 sends the window there and focuses it; summoning the browser without a path only
 focuses it. Once the window is gone, the next summon opens the overlay again.
+
+A file picked in the pinned search (see `docs/wheel.md`, Pinning) opens the
+browser inside the search's window rather than a window of its own. There `Esc`,
+or `Backspace` at home, goes back to the search, and `Ctrl+T` moves the browser
+to the overlay, leaving the search in its window.
 
 Closing a window cannot ask twice, so an unsaved edit does not go with it: the
 overlay comes back holding the edit, where `Esc` asks as usual.
