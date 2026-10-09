@@ -24,6 +24,10 @@ Item {
   // The pinned search's window while Files shows inside it, opened from there.
   property var host: null
   readonly property bool shown: root.opened || root.windowed || !!root.host
+  // Ctrl+B slides the list out so the preview takes its width; the choice lasts while the shell runs.
+  property bool listShown: true
+  // F1 swaps the legend's everyday keys for every key.
+  property bool allKeys: false
   // Absolute, and without a trailing slash except at the root itself.
   property string dir: Quickshell.env("HOME")
   // A leading / or ~ enters path completion; both are rooted at $HOME.
@@ -103,7 +107,7 @@ Item {
     text: "0"
   }
 
-  readonly property int listWidth: Math.round(nameMetrics.advanceWidth * 34)
+  readonly property int listWidth: Math.round(nameMetrics.advanceWidth * 28)
     + Style.font.iconLarge + Style.spacing.rowPaddingX * 2 + Style.spacing.md
   readonly property int previewWidth: Math.round(codeMetrics.advanceWidth * 100)
   readonly property int gutterGap: Math.round(codeMetrics.advanceWidth * 2)
@@ -210,6 +214,7 @@ Item {
     : root.settledSel.isDir ? FilesIndex.countLabel(childFolder.count, childFolder.count, "", root.showHidden)
     : FilesIndex.humanSize(root.settledSel.size)
       + (root.imageDims ? "  ·  " + root.imageDims : "")
+      + (root.fullText ? "  ·  " + FilesIndex.lineLabel(root.fullText) : "")
       + (root.settledSel.modified
          ? "  ·  " + Qt.formatDateTime(root.settledSel.modified, "d MMM yyyy") : "")
 
@@ -326,7 +331,12 @@ Item {
     root.pending = ""
   }
 
-  function up() { root.enter(FilesIndex.parentOf(root.dir)) }
+  // Land on the folder just left, which rows claim once the parent loads.
+  function up() {
+    var from = root.dir
+    root.enter(FilesIndex.parentOf(from))
+    if (root.dir !== from) root.pending = from.slice(from.lastIndexOf("/") + 1)
+  }
 
   // At home, hand Backspace navigation to the wheel, or back to the pinned search.
   function toWheel() {
@@ -613,6 +623,7 @@ Item {
         }
 
         Item {
+          clip: true
           anchors {
             top: rule.bottom; topMargin: Style.spacing.panelGap
             left: parent.left; right: parent.right
@@ -623,18 +634,23 @@ Item {
             id: list
             panel: root
             operations: ops
-            anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+            anchors { top: parent.top; bottom: parent.bottom }
+            x: root.listShown ? 0 : -root.listWidth - Style.spacing.huge
+            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             width: root.listWidth
           }
 
+          // The preview rides along with the list at its narrow width and takes the freed
+          // width only once the list is out, so it lays out once per slide, not every frame.
           FilesPreview {
             id: preview
             panel: root
             anchors {
               top: parent.top; bottom: parent.bottom
               left: list.right; leftMargin: Style.spacing.huge
-              right: parent.right
             }
+            width: list.x > -list.width - Style.spacing.huge
+                   ? parent.width - list.width - Style.spacing.huge : parent.width
           }
         }
 

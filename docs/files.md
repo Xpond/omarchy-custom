@@ -37,10 +37,11 @@ red, and a save is confirmed by reading the file back.
 | | |
 |---|---|
 | type anything | filter the current directory by name |
-| `/` or `~` | switch the field to a path — see [Path entry](#path-entry) |
+| `/` or `~` | switch the field to a path from here or from home — see [Path entry](#path-entry) |
 | `↑` `↓` `Tab` `Shift+Tab` `Ctrl+N` `Ctrl+P` | move the selection, wrapping at both ends |
-| `→` `Enter` | descend into a folder, or hand a file to the app that owns it, text to your editor |
-| `←` | go up one directory |
+| `Enter` | descend into a folder, or hand a file to the app that owns it, text to your editor |
+| `→` | descend into a folder; on a file it does nothing |
+| `←` | go up one directory, landing on the folder you left |
 | `Backspace` | delete a character, then go up one directory, then back to the wheel |
 | `Home` `End` | the first and last row |
 | `PageUp` `PageDown` | a page of rows, one kept for orientation |
@@ -61,12 +62,22 @@ red, and a save is confirmed by reading the file back.
 | `Ctrl+U` | clear the field |
 | `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
 | `Ctrl+T` | pop out into a window, and back — see [Popping out](#popping-out) |
+| `Ctrl+B` | slide the list out so the preview takes its width, and back |
+| `F1` | show every key in the legend, or only the everyday ones |
 | `Esc` | clear the field, then close |
 
-Shift is the one modifier that means "the other pane", and it is the whole
-rule: every bare key drives the list, every shifted one drives the preview.
+Shift is the one modifier that means "the other pane", and while the list is
+shown it is the whole rule: every bare key drives the list, every shifted one
+drives the preview.
 `Home` is the first row rather than the home directory, because `~` already
 opens path entry sitting there and is the character that says so.
+
+`Ctrl+B` slides the list out to the left and the preview takes the width. With
+the list hidden the preview is the view, so the bare keys act as shifted ones —
+`↑` `↓`, the page keys and `Home` `End` scroll it — and `←` brings the list back
+rather than going up. The preview slides along at its old width and widens only
+once the list is out: reflowing a Markdown table every frame of the slide would
+stutter. The choice holds across the overlay and its windows while the shell runs.
 
 The mouse works too — hover selects, click opens, a click outside the card
 closes it, and the wheel scrolls whichever pane is under the pointer.
@@ -97,9 +108,11 @@ directory being listed becomes whatever complete directory you have typed so
 far, and the tail you are still typing filters it — so the list *completes* the
 path as you write it, and `Enter` descends into what it found.
 
-Both prefixes mean the same place, because home is the only root this panel
-has: `/xpo/omarchy-custom` and `~/xpo/omarchy-custom` are the same path. A
-leading slash is how you say "from the top", and the top here is `$HOME`.
+`~` starts from home. `/` starts from the folder you are in: typed in
+`~/xpo/omarchy-custom/docs` it writes `/xpo/omarchy-custom/docs/` into the
+field, so the list stays put, `Ctrl+W` climbs a segment and typing goes deeper.
+Both are rooted at `$HOME`, the only root this panel has, so
+`/xpo/omarchy-custom` and `~/xpo/omarchy-custom` are the same path.
 
 **A typed path is written into the trail, not beside it.** The breadcrumb
 already *is* the directory being listed, so the tail still being typed is drawn
@@ -126,7 +139,7 @@ entries are listed in rather than anything inside it.
 Both columns are sized in **characters of the font they render**, not in
 fractions of the display:
 
-    listWidth     34 characters + icon + row padding
+    listWidth     28 characters + icon + row padding
     previewWidth  100 characters
     card width    the sum of those, plus gaps, capped at 92% of the screen
 
@@ -145,7 +158,8 @@ a window dropped inside this one.
 The header is one line: the path as a breadcrumb trail with the leaf at full
 strength and the trail behind it dimmed, then whatever is narrowing the list,
 then the count, all flowing left. The preview's own heading — name, size, the
-pixel dimensions if it is an image, date — right-aligns on the same line. The
+pixel dimensions if it is an image or the line count if it is text, date —
+right-aligns on the same line. The
 count sits with the path rather than at the far edge because right-aligned it
 stacked directly above the preview's size and date, and two dim figures in a
 column read as two facts about one file.

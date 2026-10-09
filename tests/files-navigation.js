@@ -100,7 +100,7 @@ console.log("ok: busy operations report refusal; wheel paths summon the browser,
 const scrolls = []
 const browser = {
   rows: Array.from({ length: 100 }, (_, i) => ({ name: "row" + i })),
-  index: 40, listPage: 10, editing: false, naming: "",
+  index: 40, listPage: 10, editing: false, naming: "", listShown: true,
   move(step) { this.index = (this.index + step + this.rows.length) % this.rows.length }
 }
 const preview = { pageStep: 7, panStep: 3, scrollBy: d => scrolls.push(d),
@@ -131,11 +131,36 @@ browserKey("Key_Return", 1 << 26); browserKey("Key_Return")
 assert.deepEqual(browsed, ["closed", ["uwsm-app", "--", "xdg-terminal-exec", "--dir=/home/test/My Dir"], "open"])
 console.log("ok: browser bare keys drive the list, shift drives the preview, ctrl+enter opens a terminal")
 
+// With the list hidden, bare keys scroll the preview and ← brings the list back.
+scrolls.length = 0
+browser.index = 5; browser.listShown = false; browser.lineHeight = 3; browser.up = () => scrolls.push("went up")
+key("Key_Down"); key("Key_Home")
+assert.deepEqual(scrolls, [9, "to0"], "a bare key missed the preview")
+assert.equal(browser.index, 5, "a bare key moved the hidden list")
+key("Key_Left")
+assert.equal(browser.listShown, true, "← did not bring the list back")
+assert.deepEqual(scrolls, [9, "to0"], "← went up instead of showing the list")
+key("Key_Down")
+assert.equal(browser.index, 6, "the list did not take the keys back")
+console.log("ok: a hidden list leaves the keys to the preview; ← brings it back")
+
+// → steps into folders but never opens a file.
+const opened = []
+const stepper = { editing: false, naming: "", listShown: true, sel: { name: "notes.md", isDir: false } }
+const stepKey = keymap("plugins/xpo.files/FilesKeys.js", stepper,
+  { doomed: "", activate: e => opened.push(e.name) }, {})
+stepKey("Key_Right")
+assert.deepEqual(opened, [], "→ opened a file")
+stepper.sel = { name: "docs", isDir: true }
+stepKey("Key_Right")
+assert.deepEqual(opened, ["docs"], "→ did not enter a folder")
+console.log("ok: → enters folders but opens no file")
+
 // Backspace is one key with three jobs, taken in order: shorten the filter,
 // walk up a directory, leave for the wheel. Home is the floor, so the press
 // that cannot go up is the one that goes back.
 const walk = { home: "/home/test", dir: "/home/test/a/b", filter: "ab",
-  editing: false, naming: "", left: 0,
+  editing: false, naming: "", listShown: true, left: 0,
   up() { this.dir = F.parentOf(this.dir) }, toWheel() { this.left++ } }
 const walkKey = keymap("plugins/xpo.files/FilesKeys.js", walk, { doomed: "" }, {})
 walkKey("Key_Backspace"); assert.equal(walk.filter, "a", "the filter goes first")
@@ -146,3 +171,28 @@ assert.equal(walk.left, 0, "nothing leaves while there is somewhere to go")
 walkKey("Key_Backspace"); assert.equal(walk.left, 1, "home has nowhere left but out")
 assert.equal(walk.dir, "/home/test", "and it does not climb past home on the way")
 console.log("ok: backspace shortens, then climbs, then leaves for the wheel")
+
+// Going up lands on the folder just left, not on whichever row sorts first.
+const climber = { home: "/home/test", dir: "/home/test/a/docs",
+  enter(d) { this.dir = F.within(d, this.home); this.pending = "" } }
+const climb = method(source, "up", { root: climber, FilesIndex: F })
+climb()
+assert.equal(climber.dir, "/home/test/a")
+assert.equal(climber.pending, "docs", "going up forgot the folder it came from")
+climber.dir = "/home/test"
+climb()
+assert.equal(climber.pending, "", "home has nothing above it to land on")
+console.log("ok: going up selects the folder it came from")
+
+// A leading / starts the path from the folder being browsed.
+const typist = { home: "/home/test", dir: "/home/test/xpo/docs", filter: "", index: 3,
+  editing: false, naming: "", listShown: true }
+const typeKey = keymap("plugins/xpo.files/FilesKeys.js", typist, { doomed: "" }, {})
+typeKey("Key_Slash", 0, "/")
+assert.equal(typist.filter, "/xpo/docs/", "/ reset the path to home")
+typeKey("Key_Slash", 0, "/")
+assert.equal(typist.filter, "/xpo/docs//", "a later / is just a character")
+typist.filter = ""; typist.dir = typist.home
+typeKey("Key_Slash", 0, "/")
+assert.equal(typist.filter, "/", "at home / is home")
+console.log("ok: / starts the path where you are")

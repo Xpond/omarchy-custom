@@ -24,6 +24,13 @@ for (let i = 0; i < 2000; i++) {
 }
 console.log("ok: complete UTF-8 validation")
 
+// Lines count as wc -l does, plus an unterminated last line.
+assert.equal(F.lineLabel(""), "")
+assert.equal(F.lineLabel("one"), "1 line")
+assert.equal(F.lineLabel("one\ntwo"), "2 lines")
+assert.equal(F.lineLabel("one\ntwo\n"), "2 lines")
+console.log("ok: line counts")
+
 // A full-sort reference checks ordering, picks, stable ties, and multi-term matching.
 function reference(files, query, limit, uses = {}) {
   const q = query.trim().toLowerCase()

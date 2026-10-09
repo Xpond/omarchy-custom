@@ -91,6 +91,14 @@ function crumbs(dir, home) {
   return out
 }
 
+// Lines as an editor counts them: a final newline ends the last line, it does not start one.
+function lineLabel(text) {
+  var t = String(text || "")
+  if (!t) return ""
+  var n = t.split("\n").length - (t.slice(-1) === "\n" ? 1 : 0)
+  return n + (n === 1 ? " line" : " lines")
+}
+
 function countLabel(shown, total, query, hidden, order) {
   var s = String(query || "").length
     ? shown + " of " + total

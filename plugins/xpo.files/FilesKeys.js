@@ -34,6 +34,7 @@ function onKey(panel, ops, preview, event) {
     case Qt.Key_Enter: ops.terminal(); event.accepted = true; return
     case Qt.Key_O: panel.cycleOrder(); event.accepted = true; return
     case Qt.Key_T: panel.popOut(); event.accepted = true; return
+    case Qt.Key_B: panel.listShown = !panel.listShown; event.accepted = true; return
     case Qt.Key_N:
       if (event.modifiers & Qt.ShiftModifier) panel.beginNew()
       else panel.move(1)
@@ -47,8 +48,11 @@ function onKey(panel, ops, preview, event) {
       event.accepted = true; return
     }
   }
+  // With the list hidden the preview is the view: bare keys scroll it, and ← brings the list back.
+  var reading = !panel.listShown && !(event.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))
+  if (reading && event.key === Qt.Key_Left) { panel.listShown = true; event.accepted = true; return }
   // Shift directs navigation to the preview pane.
-  if (event.modifiers & Qt.ShiftModifier) {
+  if ((event.modifiers & Qt.ShiftModifier) || reading) {
     switch (event.key) {
     case Qt.Key_Down:  preview.scrollBy(panel.lineHeight * 3); event.accepted = true; return
     case Qt.Key_Up:    preview.scrollBy(-panel.lineHeight * 3); event.accepted = true; return
@@ -80,15 +84,21 @@ function onKey(panel, ops, preview, event) {
   case Qt.Key_PageUp:   panel.goTo(panel.index - panel.listPage); event.accepted = true; return
   case Qt.Key_Home:  panel.goTo(0); event.accepted = true; return
   case Qt.Key_End:   panel.goTo(panel.rows.length - 1); event.accepted = true; return
+  case Qt.Key_F1:    panel.allKeys = !panel.allKeys; event.accepted = true; return
   case Qt.Key_F2:    panel.beginRename(); event.accepted = true; return
   case Qt.Key_Delete: ops.remove(); event.accepted = true; return
+  // Only Enter opens a file; → just steps into folders.
   case Qt.Key_Right:
+    if (panel.sel && panel.sel.isDir) ops.activate(panel.sel)
+    event.accepted = true; return
   case Qt.Key_Return:
   case Qt.Key_Enter:
     ops.activate(panel.sel); event.accepted = true; return
   }
   if (event.text && event.text.length === 1 && event.text >= " ") {
-    panel.filter += event.text
+    // A leading / starts the path from the folder being browsed, which is always under home.
+    if (!panel.filter && event.text === "/") panel.filter = panel.dir.slice(panel.home.length) + "/"
+    else panel.filter += event.text
     panel.index = 0
     event.accepted = true
   }
