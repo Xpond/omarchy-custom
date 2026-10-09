@@ -48,9 +48,12 @@ function onKey(panel, ops, preview, event) {
       event.accepted = true; return
     }
   }
-  // With the list hidden the preview is the view: bare keys scroll it, and ← brings the list back.
+  // With the list hidden the preview is the view: bare keys scroll it, and the keys that
+  // would go up (←, Backspace with nothing to delete) bring the list back instead.
   var reading = !panel.listShown && !(event.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))
-  if (reading && event.key === Qt.Key_Left) { panel.listShown = true; event.accepted = true; return }
+  if (reading && (event.key === Qt.Key_Left || (event.key === Qt.Key_Backspace && !panel.filter))) {
+    panel.listShown = true; event.accepted = true; return
+  }
   // Shift directs navigation to the preview pane.
   if ((event.modifiers & Qt.ShiftModifier) || reading) {
     switch (event.key) {
