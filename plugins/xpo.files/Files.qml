@@ -75,8 +75,9 @@ Item {
 
   // FolderListModel cannot combine directory filtering with our ranking.
   property var entries: []
+  readonly property var listedEntries: FilesIndex.withDeleted(root.entries, root.status, root.listedDir, "", root.showHidden)
   readonly property string query: root.pathMode ? root.typedLeaf : root.filter
-  readonly property var orderedEntries: FilesIndex.ordered(root.entries, root.order)
+  readonly property var orderedEntries: FilesIndex.ordered(root.listedEntries, root.order)
   readonly property var rows: FilesIndex.matching(root.orderedEntries, root.query, root.order)
   readonly property var sel: root.index >= 0 && root.index < root.rows.length
     ? root.rows[root.index] : null
@@ -121,7 +122,7 @@ Item {
   readonly property int lineHeight: Math.round(Style.font.subtitle * 1.75)
 
   readonly property int previewLimit: 262144
-  readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir
+  readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir && !root.settledSel.missing
                                      && FilesIndex.isImage(root.settledSel.name)
   property string imageDims: ""
   Process {
@@ -131,15 +132,15 @@ Item {
     }
   }
   readonly property bool showsMarkdown: !root.showsDiff && !!root.settledSel && !root.settledSel.isDir
-                                        && FilesIndex.isMarkdown(root.settledSel.name)
+                                        && !root.settledSel.missing && FilesIndex.isMarkdown(root.settledSel.name)
   readonly property string previewPath:
-    (root.settledSel && !root.settledSel.isDir && !root.showsImage
+    (root.settledSel && !root.settledSel.isDir && !root.settledSel.missing && !root.showsImage
      && root.settledSel.size <= root.previewLimit) ? root.settledSel.path : ""
   // Keep the full file for safe editing. The preview lays out two screens of its lines,
   // and twice as many whenever scrolling nears their end.
   property string fullText: ""
   property bool utf8: false
-  property int shownLines: 0
+  property int shownLines: 1
   // The diff takes the file's place in the preview; edits still start from the file.
   readonly property string shownText: root.showsDiff ? root.diffText : root.fullText
   readonly property string previewText: FilesIndex.head(root.shownText, root.shownLines)
@@ -182,54 +183,66 @@ Item {
   // git's status of everything under the listed folder, reread whenever its rows load:
   // marks by entry name for the list, and for a folder's preview.
   property string status: ""
+  readonly property string gitScript:
+    decodeURIComponent(String(Qt.resolvedUrl("git-preview.py")).replace(/^file:\/\//, ""))
   readonly property var changes: FilesIndex.changes(root.status, "")
   readonly property var childChanges: root.settledSel && root.settledSel.isDir
-    ? FilesIndex.changes(root.status, root.settledSel.name) : ({})
-  Process {
+    ? FilesIndex.changes(root.status, root.settledSel.name) : Object.create(null)
+  FilesGitProcess {
     id: gitStatus
-    stdout: StdioCollector {
-      onStreamFinished: root.status = text
-    }
+    onFinished: function (output, code) { root.status = code === 0 ? output : "" }
   }
   function readChanges() {
-    gitStatus.running = false
-    gitStatus.command = FilesIndex.statusCommand(root.listedDir)
-    gitStatus.running = true
+    gitStatus.cancel()
+    statusSoon.stop()
+    if (root.shown) statusSoon.restart()
   }
-  onListedDirChanged: root.status = ""
+  Timer {
+    id: statusSoon
+    interval: 60
+    onTriggered: gitStatus.start(FilesIndex.statusCommand(root.listedDir, root.gitScript))
+  }
+  onListedDirChanged: {
+    root.status = ""
+    root.entries = []
+    root.readChanges()
+  }
   onEntriesChanged: root.readChanges()
 
   property string diffText: ""
   readonly property bool showsDiff: root.diffMode && !!root.diffText && !root.editing
-  Process {
+  FilesGitProcess {
     id: differ
-    stdout: StdioCollector {
-      onStreamFinished: root.diffText = FilesIndex.readableDiff(text)
+    onFinished: function (output, code) {
+      // --no-index returns 1 when a new file has content.
+      root.diffText = code === 0 || code === 1 ? FilesIndex.readableDiff(output) : ""
     }
   }
   // Read whether shown or not, so the heading can count its lines. Only changed files have
   // a diff; the rest, and images, keep their usual preview.
   function readDiff() {
-    differ.running = false
+    differ.cancel()
     var e = root.settledSel
     if (!e || e.isDir || root.showsImage || !root.changes[e.name]) { root.diffText = ""; return }
-    differ.command = FilesIndex.diffCommand(root.listedDir, e.name)
-    differ.running = true
+    differ.start(FilesIndex.diffCommand(root.listedDir, e.name, root.gitScript))
   }
   onDiffModeChanged: preview.resetScroll()
   onChangesChanged: root.readDiff()
 
   // Fill folder previews down the pane, then across it.
   property var dirEntries: []
+  readonly property var previewEntries: root.settledSel && root.settledSel.isDir
+    ? FilesIndex.ordered(FilesIndex.withDeleted(root.dirEntries, root.status, root.listedDir,
+                                               root.settledSel.name, root.showHidden), "name") : []
   readonly property bool showsDir: !!root.settledSel && root.settledSel.isDir
-                                   && root.dirEntries.length > 0
+                                   && root.previewEntries.length > 0
   readonly property int dirRows: Math.max(1, Math.floor(preview.paneHeight / root.lineHeight))
   readonly property int listPage: Math.max(1, Math.floor(list.view.height / root.rowHeight) - 1)
   readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
-    ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
+    ? FilesIndex.columns(root.previewEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
   readonly property var dirMarks: root.showsDir
-    ? FilesIndex.markColumns(root.dirEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
+    ? FilesIndex.markColumns(root.previewEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
   // Align the first preview line with the centered text in the first list row.
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
@@ -245,14 +258,17 @@ Item {
   // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
     var path = root.settledSel ? root.settledSel.path : ""
-    if (path !== root.settledPath) preview.resetScroll()
+    if (path !== root.settledPath) {
+      preview.resetScroll()
+      root.shownLines = 2 * Math.max(1, Math.ceil(preview.paneHeight / Style.font.subtitle))
+    }
     root.settledPath = path
     root.diffText = ""
     root.readDiff()
     root.dirEntries = []
     root.imageDims = ""
     measurer.running = false
-    if (root.settledSel && !root.settledSel.isDir && FilesIndex.isImage(root.settledSel.name)) {
+    if (root.showsImage) {
       measurer.command = ["identify", "-format", "%w×%h\n", root.settledSel.path]
       measurer.running = true
     }
@@ -260,7 +276,9 @@ Item {
 
   readonly property string metaLine:
     !root.settledSel ? ""
-    : root.settledSel.isDir ? FilesIndex.countLabel(childFolder.count, childFolder.count, "", root.showHidden)
+    : root.settledSel.missing ? (root.settledSel.isDir ? "deleted folder" : "deleted")
+    : root.settledSel.isDir ? FilesIndex.countLabel(childFolder.count + root.previewEntries.length - root.dirEntries.length,
+        childFolder.count + root.previewEntries.length - root.dirEntries.length, "", root.showHidden)
     : FilesIndex.humanSize(root.settledSel.size)
       + (root.imageDims ? "  ·  " + root.imageDims : "")
       + (root.fullText ? "  ·  " + FilesIndex.lineLabel(root.fullText) : "")
@@ -273,6 +291,7 @@ Item {
     : !root.settledSel ? (root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
     : root.showsCode || root.previewBody ? ""
+    : root.settledSel.missing ? "Deleted · Ctrl+D shows changes"
     : (root.showsImage && preview.imageStatus !== Image.Error) ? ""
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
 
@@ -364,6 +383,8 @@ Item {
       settle.restart()
       root.readChanges()
     } else {
+      gitStatus.cancel()
+      statusSoon.stop()
       settle.stop()
       root.settledSel = null
       root.editing = false
@@ -460,7 +481,7 @@ Item {
   property int renameAt: 0
 
   function beginRename() {
-    if (!root.sel || root.editing) return
+    if (!root.sel || root.sel.missing || root.editing) return
     root.renameTo = root.sel.name
     var dot = root.renameTo.lastIndexOf(".")
     root.renameAt = dot > 0 ? dot : root.renameTo.length

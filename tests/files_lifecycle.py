@@ -15,10 +15,13 @@ def check(files, run, block, line):
   property string naming: ""
   property int stage: 0
   property var entries: []
+  readonly property var listedEntries: entries
   property string query: ""
   property string order: "name"
   QtObject { id: ops; property string doomed: "" }
   function readChanges() {}
+  QtObject { id: gitStatus; function cancel() {} }
+  QtObject { id: statusSoon; function stop() {} }
   function check(ok, message) {
     if (!ok) { console.error("FAIL", message); Qt.exit(1) }
   }

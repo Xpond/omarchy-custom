@@ -56,6 +56,7 @@ console.log("ok: diffs read old above new, changes in bold, numbered and counted
 // The real git commands on a scratch repository: marks by entry name, folders holding changes, literal names.
 const { execFileSync, spawnSync } = require("node:child_process")
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path")
+const script = path.resolve(__dirname, "../plugins/xpo.files/git-preview.py")
 const repo = fs.mkdtempSync(path.join(os.tmpdir(), "files-git-"))
 const put = (name, text) => { fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true }); fs.writeFileSync(path.join(repo, name), text) }
 const git = (...args) => execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t",
@@ -66,18 +67,18 @@ git("init", "-q"); git("add", "."); git("commit", "-qm", "base")
 put("src/a.js", "new\n"); put("src/a*b", "new\n"); put("src/axb", "new\n"); put("src/deep/b.txt", "new\n")
 put("src/new dir/x", "x"); put("src/fresh.md", "x"); put("src/staged.txt", "x"); git("add", "src/staged.txt")
 fs.rmSync(path.join(repo, "src/gone.txt"))
-assert.deepEqual(F.changes(run(F.statusCommand(repo))), { src: "●" })
-assert.deepEqual(F.changes(run(F.statusCommand(repo + "/src"))), { "a.js": "M", "a*b": "M", axb: "M", deep: "●",
-  "new dir": "?", "fresh.md": "?", "staged.txt": "A", "gone.txt": "D" })
+assert.deepEqual({ ...F.changes(run(F.statusCommand(repo, script))) }, { src: "●" })
+assert.deepEqual({ ...F.changes(run(F.statusCommand(repo + "/src", script))) }, { "a.js": "M", "a*b": "M", axb: "M", deep: "●",
+  "new dir": "●", "fresh.md": "?", "staged.txt": "A", "gone.txt": "D" })
 // One status of a folder also marks inside each of its folders, for their previews.
-const status = run(F.statusCommand(repo))
-assert.deepEqual(F.changes(status, "src"), F.changes(run(F.statusCommand(repo + "/src"))))
-assert.deepEqual(F.changes(status, "src/deep"), { "b.txt": "M" })
-assert.deepEqual(F.changes(status, "sr"), {}, "a folder is not a prefix of its neighbour's name")
-assert.deepEqual(F.changes(run(F.statusCommand(os.tmpdir()))), {}, "outside a repository")
-assert.equal(F.readableDiff(run(F.diffCommand(repo + "/src", "a*b"))), "@@ -1 +1 @@\n-old\n+new\n", "a*b was read as a glob")
-assert.equal(run(F.diffCommand(repo + "/src", "same.txt")), "")
-assert.match(run(F.diffCommand(repo + "/src", "staged.txt")), /^\+x$/m, "staged changes count")
+const status = run(F.statusCommand(repo, script))
+assert.deepEqual(F.changes(status, "src"), F.changes(run(F.statusCommand(repo + "/src", script))))
+assert.deepEqual({ ...F.changes(status, "src/deep") }, { "b.txt": "M" })
+assert.deepEqual({ ...F.changes(status, "sr") }, {}, "a folder is not a prefix of its neighbour's name")
+assert.deepEqual({ ...F.changes(run(F.statusCommand(os.tmpdir(), script))) }, {}, "outside a repository")
+assert.equal(F.readableDiff(run(F.diffCommand(repo + "/src", "a*b", script))), "@@ -1 +1 @@\n-old\n+new\n", "a*b was read as a glob")
+assert.equal(run(F.diffCommand(repo + "/src", "same.txt", script)), "")
+assert.match(run(F.diffCommand(repo + "/src", "staged.txt", script)), /^\+x$/m, "staged changes count")
 fs.rmSync(repo, { recursive: true })
 console.log("ok: git marks and diffs")
 

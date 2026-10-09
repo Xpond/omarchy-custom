@@ -12,6 +12,7 @@ from wheel_scans import check as check_wheel_scans
 from wheel_menu import check as check_wheel_menu
 from file_runtime import check as check_file_runtime
 from files_lifecycle import check as check_files_lifecycle
+from files_git_runtime import check as check_files_git
 from wheel_settings import check as check_wheel_settings
 import qslog
 
@@ -66,6 +67,7 @@ Scope {
     check_wheel_menu(wheel, base, run, block, line)
     check_file_runtime(files, ops, base, run, block)
     check_files_lifecycle(files, run, block, line)
+    check_files_git(repo, files, base, run, block, line)
 
     # Every star shares one gradient, so a tint change costs three stops, not three per star.
     shutil.copyfile(repo / "plugins/xpo.wheel/QuietPoints.qml", base / "QuietPoints.qml")

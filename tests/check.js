@@ -1,6 +1,7 @@
 // Pure logic and lifecycle regressions. Run: node tests/check.js
 
 require("./files-index.js")
+require("./files-git.js")
 require("./files-performance.js")
 require("./wheel-menu.js")
 require("./files-navigation.js")
