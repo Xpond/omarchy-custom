@@ -65,6 +65,12 @@ Item {
   function resetScroll() { scroller.contentY = 0; scroller.contentX = 0 }
 
   function scrollTo(fraction) {
+    // The end of a partly laid out file waits for the rest.
+    if (fraction === 1 && panel.previewCut) {
+      root.pendingAt = 1
+      panel.showAll()
+      return
+    }
     scroller.contentY = fraction * Math.max(0, scroller.contentHeight - scroller.height)
     scroller.contentX = 0
   }
@@ -72,8 +78,9 @@ Item {
   // Preserve relative scroll position while rendered and editable heights change.
   property real pendingAt: -1
   function keepPlace() {
-    root.pendingAt = Util.clamp(scroller.contentY
-                                / Math.max(1, scroller.contentHeight - scroller.height), 0, 1)
+    var at = Util.clamp(scroller.contentY / Math.max(1, scroller.contentHeight - scroller.height), 0, 1)
+    // A partly laid out file is only its share of the text.
+    root.pendingAt = panel.previewCut ? at * panel.previewText.length / panel.fullText.length : at
   }
   function takePlace() {
     if (root.pendingAt < 0) return
@@ -85,6 +92,12 @@ Item {
   }
 
   function focusEditor() { editor.forceActiveFocus() }
+
+  // Lay out more of a long file once the view comes within a screen of its end.
+  function fill() {
+    if (panel.previewCut && !panel.editing && scroller.contentY + scroller.height * 2 > scroller.contentHeight)
+      panel.shownLines *= 2
+  }
 
   function revealCursor() {
     if (!panel.editing) return
@@ -111,7 +124,8 @@ Item {
     // Include both vertical insets so the last line remains reachable.
     contentHeight: (panel.showsDir ? folderView.height : content.height)
                    + panel.dirTopPad * 2
-    onContentHeightChanged: root.takePlace()
+    onContentHeightChanged: { root.takePlace(); root.fill() }
+    onContentYChanged: root.fill()
     flickableDirection: Flickable.HorizontalAndVerticalFlick
     boundsBehavior: Flickable.StopAtBounds
     clip: true
@@ -175,23 +189,33 @@ Item {
         onCursorRectangleChanged: root.revealCursor()
       }
 
+      // Markdown has its own Text: a line height that switched with the format, or a handler
+      // per line, made Qt lay out its tables many times slower.
       Text {
-        id: rendered
-        visible: !panel.editing
-        text: panel.previewBody
+        visible: !panel.editing && panel.showsMarkdown
+        width: scroller.width
+        text: panel.showsMarkdown ? panel.previewBody : ""
+        wrapMode: Text.Wrap
+        textFormat: Text.MarkdownText
         color: Color.menu.text
         opacity: 0.92
-        width: panel.showsMarkdown ? scroller.width : implicitWidth
-        wrapMode: panel.showsMarkdown ? Text.Wrap : Text.NoWrap
-        textFormat: panel.showsMarkdown ? Text.MarkdownText
-                    : panel.showsCode ? Text.StyledText
-                    : Text.PlainText
         font.family: Style.font.menuFamily
         font.pixelSize: Style.font.subtitle
         renderType: Text.NativeRendering
-        lineHeightMode: panel.showsMarkdown ? Text.ProportionalHeight
-                                           : Text.FixedHeight
-        lineHeight: panel.showsMarkdown ? 1.0 : panel.lineHeight
+      }
+
+      Text {
+        id: rendered
+        visible: !panel.editing && !panel.showsMarkdown
+        text: panel.showsMarkdown ? "" : panel.previewBody
+        color: Color.menu.text
+        opacity: 0.92
+        textFormat: panel.showsCode ? Text.StyledText : Text.PlainText
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.subtitle
+        renderType: Text.NativeRendering
+        lineHeightMode: Text.FixedHeight
+        lineHeight: panel.lineHeight
         onLineLaidOut: function (line) {
           if (!panel.showsCode) return
           if (line.number === 0) root.measure(text)

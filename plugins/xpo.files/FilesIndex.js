@@ -211,15 +211,15 @@ function isUtf8(data) {
   return true
 }
 
-// Bound Text rendering cost for large files.
-function head(text, lines) {
-  var t = String(text || "")
-  var end = -1
+// Bound Text rendering cost for large files. Highlighted markup breaks its lines with <br>.
+function head(text, lines, br) {
+  var t = String(text || ""), b = br || "\n"
+  var end = -b.length
   for (var i = 0; i < lines; i++) {
-    end = t.indexOf("\n", end + 1)
+    end = t.indexOf(b, end + b.length)
     if (end === -1) return t
   }
-  return end === t.length - 1 ? t : t.slice(0, Math.max(0, end)) + "\n…"
+  return end === t.length - b.length ? t : t.slice(0, Math.max(0, end)) + b + "…"
 }
 
 var DIR_GLYPH = "\udb80\ude4b"

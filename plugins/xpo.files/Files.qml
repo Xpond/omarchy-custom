@@ -115,7 +115,6 @@ Item {
   readonly property int lineHeight: Math.round(Style.font.subtitle * 1.75)
 
   readonly property int previewLimit: 262144
-  readonly property int previewLines: 500
   readonly property bool showsImage: !!root.settledSel && !root.settledSel.isDir
                                      && FilesIndex.isImage(root.settledSel.name)
   property string imageDims: ""
@@ -130,13 +129,20 @@ Item {
   readonly property string previewPath:
     (root.settledSel && !root.settledSel.isDir && !root.showsImage
      && root.settledSel.size <= root.previewLimit) ? root.settledSel.path : ""
-  // Keep the full file for safe editing; only the preview is truncated.
+  // Keep the full file for safe editing. The preview lays out two screens of its lines,
+  // and twice as many whenever scrolling nears their end.
   property string fullText: ""
   property bool utf8: false
-  readonly property string previewText: FilesIndex.head(root.fullText, root.previewLines)
-  onPreviewPathChanged: { root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = null }
+  property int shownLines: 0
+  readonly property string previewText: FilesIndex.head(root.fullText, root.shownLines)
+  readonly property bool previewCut: root.previewText !== root.fullText
+  function showAll() { root.shownLines = root.fullText.split("\n").length }
+  onPreviewPathChanged: {
+    root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = null
+    root.shownLines = 2 * Math.max(1, Math.ceil(preview.paneHeight / Style.font.subtitle))
+  }
 
-  // Highlight only the settled selection, in one Pygments process.
+  // Highlight the whole settled file once, in one Pygments process; the preview shows its first lines.
   property string previewHtml: ""
   readonly property string highlightScript:
     decodeURIComponent(String(Qt.resolvedUrl("highlight.py")).replace(/^file:\/\//, ""))
@@ -146,8 +152,8 @@ Item {
     id: highlightSoon
     interval: 60
     onTriggered: {
-      if (!root.previewText || root.showsMarkdown) return
-      highlighter.command = ["python3", root.highlightScript, root.previewPath, String(root.previewLines)]
+      if (!root.fullText || root.showsMarkdown) return
+      highlighter.command = ["python3", root.highlightScript, root.previewPath]
       highlighter.running = true
     }
   }
@@ -159,10 +165,10 @@ Item {
     }
   }
 
-  onPreviewTextChanged: {
+  onFullTextChanged: {
     root.previewHtml = ""
     highlighter.running = false
-    if (root.previewText && !root.showsMarkdown) highlightSoon.restart()
+    if (root.fullText && !root.showsMarkdown) highlightSoon.restart()
   }
 
   // Fill folder previews down the pane, then across it.
@@ -178,12 +184,18 @@ Item {
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
     root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
-    : root.showsCode ? root.previewHtml || FilesIndex.styledCode(root.previewText)
+    : root.showsCode ? (root.previewHtml ? FilesIndex.head(root.previewHtml, root.shownLines, "<br>")
+                                         : FilesIndex.styledCode(root.previewText))
       : ""
   onSelChanged: { if (root.shown) settle.restart(); ops.doomed = "" }
+  // Saving rewrites the file and the folder answers with a new row for it, so only a new path
+  // starts at the top.
+  property string settledPath: ""
   // Clear stale folder and image data before the next preview loads.
   onSettledSelChanged: {
-    preview.resetScroll()
+    var path = root.settledSel ? root.settledSel.path : ""
+    if (path !== root.settledPath) preview.resetScroll()
+    root.settledPath = path
     root.dirEntries = []
     root.imageDims = ""
     measurer.running = false
@@ -337,8 +349,8 @@ Item {
   property bool editing: false
   property bool dirty: false
   property bool saveError: false
-  // Never edit a truncated or non-UTF-8 preview; saving it would lose data.
-  readonly property bool editable: root.utf8 && !!root.previewPath && root.fullText === root.previewText
+  // Never edit non-UTF-8 text; saving it would lose data.
+  readonly property bool editable: root.utf8 && !!root.previewPath
                                    && (!!root.fullText || root.settledSel.size === 0)
 
   function edit() {
@@ -371,6 +383,8 @@ Item {
   property bool discarding: false
   function leaveEdit() {
     if (root.dirty && !root.discarding) { root.discarding = true; discardArmed.restart(); return }
+    // The preview comes back whole, so the editor's place maps onto it.
+    root.showAll()
     preview.keepPlace()
     root.editing = false
     root.dirty = false
