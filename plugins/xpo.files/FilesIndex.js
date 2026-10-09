@@ -136,6 +136,124 @@ function styledCode(text) {
              function (c) { return "&#" + c.charCodeAt(0) + ";" })
 }
 
+// Ready git's diff for reading. The file header goes once a hunk follows: the preview's
+// heading already names the file. git lists a whole block of removed lines before the
+// lines that replaced them; instead each old line goes straight above the most alike new
+// line still unused, in order, and the new lines it passes over go first as plain additions.
+// A "\ No newline at end of file" note would split a block, so it goes too.
+function readableDiff(text) {
+  var at = ("\n" + text).indexOf("\n@@")
+  if (at < 0) return text
+  var lines = text.slice(at).split("\n").filter(function (l) { return l.charAt(0) !== "\\" })
+  var out = [], i = 0
+  while (i < lines.length) {
+    if (lines[i].charAt(0) !== "-") { out.push(lines[i++]); continue }
+    var old = [], now = [], j = 0
+    while (i < lines.length && lines[i].charAt(0) === "-") old.push(lines[i++])
+    while (i < lines.length && lines[i].charAt(0) === "+") now.push(lines[i++])
+    old.forEach(function (o) {
+      var best = -1, most = 0
+      for (var k = j; k < now.length; k++) {
+        var like = likeness(o.slice(1), now[k].slice(1))
+        if (like > most) { best = k; most = like }
+      }
+      if (most < ALIKE) { out.push(o); return }
+      while (j < best) out.push(now[j++])
+      out.push(o, now[j++])
+    })
+    while (j < now.length) out.push(now[j++])
+  }
+  return out.join("\n")
+}
+
+// Lines whose shared start and end cover this much of the longer are one line, changed.
+var ALIKE = 0.5
+
+// How many characters two lines share at the start, then at the end.
+function shared(a, b) {
+  var p = 0, s = 0, n = Math.min(a.length, b.length)
+  while (p < n && a[p] === b[p]) p++
+  while (s < n - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++
+  return [p, s]
+}
+
+function likeness(a, b) {
+  var ends = shared(a, b)
+  return (ends[0] + ends[1]) / Math.max(a.length, b.length, 1)
+}
+
+// What differs between a line and the one it pairs with, widened to whole words, in bold.
+function emboldened(line, other) {
+  var ends = shared(line, other), p = ends[0], s = ends[1]
+  while (p > 0 && /\w/.test(line[p - 1])) p--
+  while (s > 0 && /\w/.test(line[line.length - s])) s--
+  return styledCode(line.slice(0, p)) + "<b>" + styledCode(line.slice(p, line.length - s)) + "</b>"
+    + styledCode(line.slice(line.length - s))
+}
+
+// Colour a unified diff by how each line starts, in highlight.py's One Dark. A hunk's
+// @@ line becomes a ⋯ break carrying git's context; a diff without hunks, as a binary's,
+// is all header, in grey. A removed line next to an added one alike enough is a pair, and
+// each shows what changed in bold.
+function styledDiff(text) {
+  var lines = String(text || "").replace(/\n$/, "").split("\n"), header = lines[0].slice(0, 2) !== "@@"
+  return lines.map(function (line, i) {
+    if (line.slice(0, 2) === "@@") line = ("⋯ " + line.replace(/^@@[^@]*@@ ?/, "")).trim()
+    var lead = line.charAt(0)
+    var colour = header ? "#7f848e" : lead === "⋯" ? "#61afef"
+      : lead === "+" ? "#98c379" : lead === "-" ? "#e06c75" : ""
+    var other = header ? ""
+      : lead === "-" && (lines[i + 1] || "").charAt(0) === "+" ? lines[i + 1]
+      : lead === "+" && (lines[i - 1] || "").charAt(0) === "-" ? lines[i - 1] : ""
+    var code = other && likeness(line.slice(1), other.slice(1)) >= ALIKE
+      ? lead + emboldened(line.slice(1), other.slice(1)) : styledCode(line)
+    return colour ? '<font color="' + colour + '">' + code + "</font>" : code
+  }).join("<br>")
+}
+
+// Each line's number in the file as it is now, the numbers its plain preview shows.
+// A removed line is no longer in the file, so it has none.
+function diffNumbers(text) {
+  var now = 0
+  return String(text || "").replace(/\n$/, "").split("\n").map(function (line) {
+    var hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(line)
+    if (hunk) { now = +hunk[1]; return "" }
+    return now && (line.charAt(0) === "+" || line.charAt(0) === " ") ? now++ : ""
+  }).join("\n")
+}
+
+// The listed folder's place in its repository, then git's status of everything under it.
+// Outside a repository it prints nothing.
+function statusCommand(dir) {
+  return ["sh", "-c", 'git -C "$1" rev-parse --show-prefix && exec git --no-optional-locks -C "$1" '
+    + "status --porcelain -z --no-renames -- .", "files", dir]
+}
+
+// statusCommand's output as marks by entry name in the listed folder, or in its folder
+// `under`: a file's status letter as git prints it, or ● on a folder holding changes.
+function changes(text, under) {
+  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : ""), marks = {}
+  text.slice(cut + 1).split("\0").forEach(function (entry) {
+    if (entry.slice(3, 3 + prefix.length) !== prefix) return
+    var path = entry.slice(3 + prefix.length).replace(/\/$/, "")
+    if (!path) return
+    var slash = path.indexOf("/")
+    marks[slash < 0 ? path : path.slice(0, slash)] = slash < 0 ? entry.slice(0, 2).trim().charAt(0) : "●"
+  })
+  return marks
+}
+
+// How many lines a diff adds and removes.
+function diffStat(text) {
+  return [(text.match(/^\+/gm) || []).length, (text.match(/^-/gm) || []).length]
+}
+
+// Everything uncommitted in one file, staged or not. Literal, so a name like a*b is not a glob.
+function diffCommand(dir, name) {
+  return ["git", "--no-optional-locks", "--literal-pathspecs", "-C", dir,
+          "diff", "--no-color", "--no-ext-diff", "HEAD", "--", name]
+}
+
 // Links are inert here; flatten them to keep theme colors legible.
 function flattenLinks(text) {
   return String(text || "")
@@ -239,28 +357,48 @@ var MIN_COL = 38
 var SIZE_COL = 5
 var DATE_COL = 9
 
-function columns(entries, rows, paneChars, limit) {
-  var n = Math.min(entries.length, limit)
+// How many rows each folder-preview column holds, and how many characters wide it is.
+function shape(n, rows, paneChars) {
   var wanted = Math.ceil(n / rows)
   var fits = Math.floor((paneChars + GUTTER) / (MIN_COL + GUTTER))
   var cols = Math.max(1, Math.min(wanted, fits))
   // Balance columns rather than leaving a short final column.
-  var per = Math.ceil(n / cols)
-  var width = Math.floor((paneChars - GUTTER * (cols - 1)) / cols)
+  return [Math.ceil(n / cols), Math.floor((paneChars - GUTTER * (cols - 1)) / cols)]
+}
+
+// Where a folder holds changes, each row keeps room after its name for markColumns() to fill.
+function columns(entries, rows, paneChars, limit, marks) {
+  var n = Math.min(entries.length, limit), cut = shape(n, rows, paneChars)
+  var marked = !!marks && Object.keys(marks).length > 0
   var out = []
-  for (var i = 0; i < n; i += per) {
+  for (var i = 0; i < n; i += cut[0]) {
     var col = []
-    for (var j = i; j < Math.min(i + per, n); j++) col.push(row(entries[j], width))
+    for (var j = i; j < Math.min(i + cut[0], n); j++) col.push(row(entries[j], cut[1], marked))
     out.push(col.join("\n"))
   }
   if (entries.length > n) out[out.length - 1] += "\n\u2026"
   return out
 }
 
-function row(e, width) {
-  var nameCol = Math.max(8, width - 3 - SIZE_COL - 2 - DATE_COL)
+// git's letter or dot in the room each row of columns() keeps for it, counted from just past
+// the row's glyph; the preview draws these over the rows in another colour.
+function markColumns(entries, rows, paneChars, limit, marks) {
+  var n = Math.min(entries.length, limit), cut = shape(n, rows, paneChars), out = []
+  var skip = pad("", 2 + nameColumn(cut[1], true) + 1)
+  for (var i = 0; i < n; i += cut[0])
+    out.push(entries.slice(i, Math.min(i + cut[0], n))
+             .map(function (e) { return marks[e.name] ? skip + marks[e.name] : "" }).join("\n"))
+  return out
+}
+
+function nameColumn(width, marked) {
+  return Math.max(8, width - 3 - SIZE_COL - 2 - DATE_COL - (marked ? 2 : 0))
+}
+
+function row(e, width, marked) {
+  var nameCol = nameColumn(width, marked)
   return (e.isDir ? DIR_GLYPH : FILE_GLYPH) + "  "
-       + pad(clip(e.name, nameCol), nameCol)
+       + pad(clip(e.name, nameCol), nameCol) + (marked ? "  " : "")
        + lead(e.isDir ? "" : humanSize(e.size), SIZE_COL) + "  "
        + lead(stamp(e.modified), DATE_COL)
 }

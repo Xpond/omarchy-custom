@@ -26,6 +26,8 @@ Item {
   readonly property bool shown: root.opened || root.windowed || !!root.host
   // Ctrl+B slides the list out so the preview takes its width; the choice lasts while the shell runs.
   property bool listShown: true
+  // Ctrl+D shows a changed file's uncommitted diff in place of its contents; this lasts too.
+  property bool diffMode: false
   // F1 swaps the legend's everyday keys for every key.
   property bool allKeys: false
   // Absolute, and without a trailing slash except at the root itself.
@@ -128,7 +130,7 @@ Item {
       onStreamFinished: root.imageDims = text.split("\n")[0].trim()
     }
   }
-  readonly property bool showsMarkdown: !!root.settledSel && !root.settledSel.isDir
+  readonly property bool showsMarkdown: !root.showsDiff && !!root.settledSel && !root.settledSel.isDir
                                         && FilesIndex.isMarkdown(root.settledSel.name)
   readonly property string previewPath:
     (root.settledSel && !root.settledSel.isDir && !root.showsImage
@@ -138,9 +140,11 @@ Item {
   property string fullText: ""
   property bool utf8: false
   property int shownLines: 0
-  readonly property string previewText: FilesIndex.head(root.fullText, root.shownLines)
-  readonly property bool previewCut: root.previewText !== root.fullText
-  function showAll() { root.shownLines = root.fullText.split("\n").length }
+  // The diff takes the file's place in the preview; edits still start from the file.
+  readonly property string shownText: root.showsDiff ? root.diffText : root.fullText
+  readonly property string previewText: FilesIndex.head(root.shownText, root.shownLines)
+  readonly property bool previewCut: root.previewText !== root.shownText
+  function showAll() { root.shownLines = root.shownText.split("\n").length }
   onPreviewPathChanged: {
     root.fullText = ""; root.utf8 = false; root.previewHtml = ""; root.saving = null
     root.shownLines = 2 * Math.max(1, Math.ceil(preview.paneHeight / Style.font.subtitle))
@@ -175,6 +179,46 @@ Item {
     if (root.fullText && !root.showsMarkdown) highlightSoon.restart()
   }
 
+  // git's status of everything under the listed folder, reread whenever its rows load:
+  // marks by entry name for the list, and for a folder's preview.
+  property string status: ""
+  readonly property var changes: FilesIndex.changes(root.status, "")
+  readonly property var childChanges: root.settledSel && root.settledSel.isDir
+    ? FilesIndex.changes(root.status, root.settledSel.name) : ({})
+  Process {
+    id: gitStatus
+    stdout: StdioCollector {
+      onStreamFinished: root.status = text
+    }
+  }
+  function readChanges() {
+    gitStatus.running = false
+    gitStatus.command = FilesIndex.statusCommand(root.listedDir)
+    gitStatus.running = true
+  }
+  onListedDirChanged: root.status = ""
+  onEntriesChanged: root.readChanges()
+
+  property string diffText: ""
+  readonly property bool showsDiff: root.diffMode && !!root.diffText && !root.editing
+  Process {
+    id: differ
+    stdout: StdioCollector {
+      onStreamFinished: root.diffText = FilesIndex.readableDiff(text)
+    }
+  }
+  // Read whether shown or not, so the heading can count its lines. Only changed files have
+  // a diff; the rest, and images, keep their usual preview.
+  function readDiff() {
+    differ.running = false
+    var e = root.settledSel
+    if (!e || e.isDir || root.showsImage || !root.changes[e.name]) { root.diffText = ""; return }
+    differ.command = FilesIndex.diffCommand(root.listedDir, e.name)
+    differ.running = true
+  }
+  onDiffModeChanged: preview.resetScroll()
+  onChangesChanged: root.readDiff()
+
   // Fill folder previews down the pane, then across it.
   property var dirEntries: []
   readonly property bool showsDir: !!root.settledSel && root.settledSel.isDir
@@ -183,11 +227,14 @@ Item {
   readonly property int listPage: Math.max(1, Math.floor(list.view.height / root.rowHeight) - 1)
   readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
-    ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400) : []
+    ? FilesIndex.columns(root.dirEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
+  readonly property var dirMarks: root.showsDir
+    ? FilesIndex.markColumns(root.dirEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
   // Align the first preview line with the centered text in the first list row.
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
     root.showsMarkdown ? FilesIndex.airOut(FilesIndex.escapeTags(FilesIndex.flattenLinks(root.previewText)))
+    : root.showsDiff ? FilesIndex.styledDiff(root.previewText)
     : root.showsCode ? (root.previewHtml ? FilesIndex.head(root.previewHtml, root.shownLines, "<br>")
                                          : FilesIndex.styledCode(root.previewText))
       : ""
@@ -200,6 +247,8 @@ Item {
     var path = root.settledSel ? root.settledSel.path : ""
     if (path !== root.settledPath) preview.resetScroll()
     root.settledPath = path
+    root.diffText = ""
+    root.readDiff()
     root.dirEntries = []
     root.imageDims = ""
     measurer.running = false
@@ -311,8 +360,9 @@ Item {
   // Drop preview state and pending work when the panel closes.
   onShownChanged: {
     if (root.shown) {
-      // Rebuild a preview even when reopening on the same row.
+      // Rebuild a preview even when reopening on the same row, and catch changes made meanwhile.
       settle.restart()
+      root.readChanges()
     } else {
       settle.stop()
       root.settledSel = null

@@ -18,6 +18,7 @@ def check(files, run, block, line):
   property string query: ""
   property string order: "name"
   QtObject { id: ops; property string doomed: "" }
+  function readChanges() {}
   function check(ok, message) {
     if (!ok) { console.error("FAIL", message); Qt.exit(1) }
   }

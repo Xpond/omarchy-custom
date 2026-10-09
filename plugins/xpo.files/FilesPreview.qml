@@ -17,10 +17,13 @@ Item {
   property alias editorText: editor.text
   readonly property string lineNumbers:
     panel.editing ? FilesIndex.numbers(editor.text)
+    : panel.showsDiff ? FilesIndex.diffNumbers(panel.previewText)
     : panel.showsMarkdown ? "" : FilesIndex.numbers(panel.previewText)
 
   // StyledText sets each line's baseline at its ascent. The rich text it replaced
-  // set it 4/5 down a fixed-height line whatever the fonts; keep that placement.
+  // set it 4/5 down a fixed-height line whatever the fonts; keep that placement,
+  // which the gutter's numbers share.
+  function baselineIn(lineHeight) { return Math.floor(lineHeight * 256 / 5) / 64 }
   // Measured as each layout starts: a binding could still hold the previous font.
   property real codeBaseline: 0
   property real codeAscent: 0
@@ -36,7 +39,7 @@ Item {
 
   function measure(markup) {
     root.codeLines = markup.split("<br>")
-    root.codeBaseline = Math.floor(rendered.lineHeight * 256 / 5) / 64
+    root.codeBaseline = root.baselineIn(rendered.lineHeight)
     probe.font = rendered.font
     probe.text = "x"
     root.codeAscent = probe.baselineOffset
@@ -80,7 +83,7 @@ Item {
   function keepPlace() {
     var at = Util.clamp(scroller.contentY / Math.max(1, scroller.contentHeight - scroller.height), 0, 1)
     // A partly laid out file is only its share of the text.
-    root.pendingAt = panel.previewCut ? at * panel.previewText.length / panel.fullText.length : at
+    root.pendingAt = panel.previewCut ? at * panel.previewText.length / panel.shownText.length : at
   }
   function takePlace() {
     if (root.pendingAt < 0) return
@@ -136,11 +139,21 @@ Item {
       y: panel.dirTopPad
       spacing: panel.gutterGap * 2
 
+      // Marks are placed from just past each row's glyph.
+      TextMetrics {
+        id: glyphWidth
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.subtitle
+        text: FilesIndex.DIR_GLYPH
+      }
+
       Repeater {
         model: panel.dirColumns
 
         delegate: Text {
+          id: column
           required property string modelData
+          required property int index
           text: modelData
           color: Color.menu.text
           opacity: 0.92
@@ -149,6 +162,17 @@ Item {
           renderType: Text.NativeRendering
           lineHeightMode: Text.FixedHeight
           lineHeight: panel.lineHeight
+
+          // git's marks over the room each row keeps after its name, in the list's colour.
+          Text {
+            x: glyphWidth.advanceWidth
+            text: panel.dirMarks[column.index] || ""
+            color: Color.accent
+            font: column.font
+            renderType: Text.NativeRendering
+            lineHeightMode: Text.FixedHeight
+            lineHeight: panel.lineHeight
+          }
         }
       }
     }
@@ -160,6 +184,7 @@ Item {
       spacing: panel.gutterGap
 
       Text {
+        id: gutter
         visible: root.lineNumbers.length > 0
         text: root.lineNumbers
         horizontalAlignment: Text.AlignRight
@@ -171,7 +196,13 @@ Item {
         renderType: Text.NativeRendering
         lineHeightMode: panel.editing ? Text.ProportionalHeight : Text.FixedHeight
         lineHeight: panel.editing ? 1.0 : panel.lineHeight
+        // Left to Qt, the smaller numbers sat above the code's baseline; share it instead.
+        onLineLaidOut: function (line) {
+          if (!panel.editing)
+            line.y = line.number * lineHeight + root.baselineIn(lineHeight) - gutterMetrics.ascent
+        }
       }
+      FontMetrics { id: gutterMetrics; font: gutter.font }
 
       TextEdit {
         id: editor

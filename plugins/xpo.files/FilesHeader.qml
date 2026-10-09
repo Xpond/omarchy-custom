@@ -155,15 +155,33 @@ Item {
       font.pixelSize: Style.font.bodySmall
     }
 
-    Text {
+    // Lines the uncommitted changes add and remove, in the diff's own green and red. They lead
+    // the name as one more fact, set off by the facts' own dot and spaces, so no gap of the row's.
+    Row {
       anchors.verticalCenter: parent.verticalCenter
-      width: Math.min(implicitWidth, Math.round(panel.previewWidth * 0.6))
-      elide: Text.ElideMiddle
-      text: panel.settledSel ? panel.settledSel.name : ""
-      color: Color.menu.text
-      opacity: 0.9
-      font.family: Style.font.menuFamily
-      font.pixelSize: Style.font.body
+
+      Text {
+        readonly property var counts: FilesIndex.diffStat(panel.diffText)
+        anchors.verticalCenter: parent.verticalCenter
+        visible: counts[0] + counts[1] > 0
+        textFormat: Text.StyledText
+        // No-break spaces: trailing plain ones would not count toward the width.
+        text: '<font color="#98c379">+' + counts[0] + '</font>&#32;<font color="#e06c75">\u2212' + counts[1]
+              + '</font><font color="' + Util.alpha(Color.menu.text, 0.5) + '">&#160;&#160;·&#160;&#160;</font>'
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(implicitWidth, Math.round(panel.previewWidth * 0.6))
+        elide: Text.ElideMiddle
+        text: panel.settledSel ? panel.settledSel.name : ""
+        color: Color.menu.text
+        opacity: 0.9
+        font.family: Style.font.menuFamily
+        font.pixelSize: Style.font.body
+      }
     }
 
     Text {
