@@ -14,7 +14,8 @@ plugin = repo / "plugins/xpo.files"
 shell = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell"
 LIMIT = 120
 
-# The highlighter as it was: pygments HTML for a rich-text <pre>.
+# The highlighter as it was: pygments HTML for a rich-text <pre>. The cut's ellipsis now
+# follows the colour rather than going through it, so it is plain here too.
 RICH = """import sys
 from pygments import highlight
 from pygments.lexers import get_lexer_for_filename
@@ -23,12 +24,13 @@ from pygments.formatters import HtmlFormatter
 p = sys.argv[1]
 parts = open(p, errors='replace').read().split('\\n')
 src = '\\n'.join(parts[:%d])
-if len(parts) - (parts[-1] == '') > %d: src += '\\n\u2026'
+cut = len(parts) - (parts[-1] == '') > %d
 try:
     lx = get_lexer_for_filename(p, stripnl=False)
 except Exception:
     lx = TextLexer()
-sys.stdout.write(highlight(src, lx, HtmlFormatter(nowrap=True, noclasses=True, style='one-dark')))
+out = highlight(src, lx, HtmlFormatter(nowrap=True, noclasses=True, style='one-dark'))
+sys.stdout.write(out + '\u2026' if cut else out)
 """ % (LIMIT, LIMIT)
 
 samples = {
@@ -70,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-preview-") as temporary:
         path.parent.mkdir(exist_ok=True)
         path.write_text(text, newline="")
         cases.append({"name": name, "text": text, "rich": run("python3", "-c", RICH, str(path)),
-                      "styled": run("python3", str(plugin / "highlight.py"), str(path), str(LIMIT))})
+                      "styled": run("python3", str(plugin / "highlight.py"), str(path))})
     (base / "cases.json").write_text(json.dumps(cases))
 
     (base / "shell.qml").write_text('''import QtQuick
@@ -115,7 +117,7 @@ Scope {
     before.previewBody = '<pre style="margin:0; font-family:\\'' + Style.font.menuFamily + '\\'; font-size:'
       + j.px + 'px">' + (j.stage === "plain"
         ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : j.rich) + '</pre>'
-    after.previewBody = j.stage === "plain" ? FilesIndex.styledCode(text) : j.styled
+    after.previewBody = j.stage === "plain" ? FilesIndex.styledCode(text) : FilesIndex.head(j.styled, ''' + str(LIMIT) + ''', "<br>")
     Qt.callLater(function () {
       console.log("BODY", j.file, Math.ceil(styled.testBodyX))
       rich.grabToImage(function (a) {

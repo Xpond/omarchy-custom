@@ -17,7 +17,7 @@ def check(source, base, run, block):
   property string previewPath: ""
   property string fullText: ""
   property bool utf8: false
-  readonly property string previewText: FilesIndex.head(root.fullText, 3)
+  function showAll() {}
   property var settledSel: ({ size: 0 })
   property bool editing: false
   property bool dirty: false
@@ -41,8 +41,7 @@ def check(source, base, run, block):
   function check(ok, message) { if (!ok) throw new Error("FAIL " + message) }
 ''' + production
 
-    for name, content, note in [("truncated", b"one\ntwo\nthree\nfour\n", ""),
-                                ("non-utf8", b"caf\xe9\n", "not UTF-8; preview only")]:
+    for name, content, note in [("non-utf8", b"caf\xe9\n", "not UTF-8; preview only")]:
         target = base / (name + ".txt")
         target.write_bytes(content)
         run("edit-refuses-" + name, common + '''

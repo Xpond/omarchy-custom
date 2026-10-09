@@ -1,4 +1,4 @@
-"""Colour a file preview for Qt's StyledText: python3 highlight.py <path> <lines>"""
+"""Colour a whole file for Qt's StyledText: python3 highlight.py <path>"""
 import re
 import sys
 
@@ -7,11 +7,8 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_for_filename
 from pygments.lexers.special import TextLexer
 
-path, limit = sys.argv[1], int(sys.argv[2])
-parts = open(path, errors="replace").read().split("\n")
-src = "\n".join(parts[:limit])
-if len(parts) - (parts[-1] == "") > limit:
-    src += "\n…"
+path = sys.argv[1]
+src = open(path, errors="replace").read()
 try:
     lexer = get_lexer_for_filename(path, stripnl=False)
 except Exception:

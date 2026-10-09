@@ -163,7 +163,7 @@ Four kinds of thing, one scroller:
 | a folder | its contents as a listing — name, size, date — capped at 400 entries |
 | an image | itself, aspect-fit, async, formats Qt actually has plugins for |
 | a `.md` file | rendered Markdown — headings, bold, code blocks |
-| any other text | the first 500 lines, syntax highlighted, with line numbers |
+| any other text | syntax highlighted, with line numbers |
 | anything else | its size and `no preview` |
 
 The first four are read-only renderings. `Ctrl+E` replaces the third or fourth with the
@@ -186,6 +186,12 @@ The preview follows the selection only once it has **stopped moving** — 60 ms,
 the same wait the highlighter takes. Held-down arrows through forty files used
 to read, slice and lay out every file passed over, about half a second of CPU
 spent on frames nobody saw.
+
+Only what is near the view is **laid out**. A selection lays out two screens of
+lines; scrolling within a screen of their end doubles that, and `End` lays out
+the rest first, so the whole file is there to scroll through. The file is still
+read whole: reading costs well under a millisecond, and editing needs it.
+Laying out is the cost, and a selection in `docs/` now takes 10 to 30 ms.
 
 Files over **256 KB** are never read. A NUL byte in the first kilobyte is what
 marks a binary, rather than an extension list to maintain: `.frag` and `.qsb`
@@ -298,13 +304,11 @@ length of the edit, which is also the clearest signal that you are looking at
 bytes rather than at a picture of them. The heading says `editing`, `unsaved`,
 `saved` or `write failed` while it lasts.
 
-**It refuses anything it did not read whole.** `head()` cuts a file past 500
-lines and marks the cut with `…`; saving that back would delete the rest of the
-file. `FileView` holds `fullText` — the file as it is on disk — `previewText` is
-the cut *of* it, and `editable` is the identity between them, so a file over 500
-lines, over 256 KB, binary, or not valid UTF-8 is not editable -- the bytes are
-what get checked, so a file that genuinely contains U+FFFD still edits. Writes
-go out `atomicWrites`.
+**It edits only what it can write back whole.** `FileView` holds `fullText` —
+the file as it is on disk — and the editor takes all of it, never the preview's
+lines, so a file of any length edits. A file over 256 KB, binary, or not valid
+UTF-8 is not editable -- the bytes are what get checked, so a file that
+genuinely contains U+FFFD still edits. Writes go out `atomicWrites`.
 A save is then confirmed by reading the file back, because `FileView` will not
 tell you (see [Traps](#traps)), and `endLine()` adds the trailing newline `vim`
 would, since a file saved without one is a file `git` calls damaged.
@@ -352,10 +356,10 @@ printable ASCII. NEL goes in as U+0080, another glyphless control, because Qt
 reads `&#133;` as an ellipsis. `tests/files-preview.py` holds all of it to the
 old rendering pixel for pixel.
 
-The gutter is generated from `head()`, which appends an ellipsis line when it
-truncates. The Python truncates the same way, from the same `previewLines`
-property, for the same reason: if the two disagree the numbers stop naming the
-lines beside them.
+`highlight.py` colours the whole file once. The preview shows its first
+`shownLines`: the gutter numbers `head()` of the text, and the markup is cut by
+the same `head()` at its `<br>`s, appending the same `…` line, for the same
+reason: if the two disagree the numbers stop naming the lines beside them.
 
 Colour is a nicety, not a dependency. If `python3` or pygments is missing the
 process yields nothing and the escaped plain text stays on screen.
@@ -376,6 +380,12 @@ whatever line height it is set at — headings included. `airOut()` replaces eac
 blank line with a paragraph holding a single non-breaking space, which
 CommonMark counts as content rather than as more blank. Fenced blocks are left
 exactly as written.
+
+**Markdown has a `Text` of its own.** When one `Text` served both, its line
+height switched with the format and it carried the code's per-line handler, and
+Qt then laid out Markdown tables many times slower: 100 to 780 ms a selection in
+`docs/`. Fixed values and no handler bring the same documents to under 80 ms
+even at 500 lines. Do not fold the two back together.
 
 ## Popping out
 
