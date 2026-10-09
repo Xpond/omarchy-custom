@@ -74,8 +74,8 @@ opens path entry sitting there and is the character that says so.
 
 `Ctrl+B` slides the list out to the left and the preview takes the width. With
 the list hidden the preview is the view, so the bare keys act as shifted ones —
-`↑` `↓`, the page keys and `Home` `End` scroll it — and `←` brings the list back
-rather than going up. The preview slides along at its old width and widens only
+`↑` `↓`, the page keys and `Home` `End` scroll it — and `←`, or `Backspace` with
+nothing left to delete, brings the list back rather than going up. The preview slides along at its old width and widens only
 once the list is out: reflowing a Markdown table every frame of the slide would
 stutter. The choice holds across the overlay and its windows while the shell runs.
 

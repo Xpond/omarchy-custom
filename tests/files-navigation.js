@@ -139,10 +139,16 @@ assert.deepEqual(scrolls, [9, "to0"], "a bare key missed the preview")
 assert.equal(browser.index, 5, "a bare key moved the hidden list")
 key("Key_Left")
 assert.equal(browser.listShown, true, "← did not bring the list back")
-assert.deepEqual(scrolls, [9, "to0"], "← went up instead of showing the list")
+browser.listShown = false; browser.filter = "a"
+key("Key_Backspace")
+assert.equal(browser.filter, "", "backspace kept the typed character")
+assert.equal(browser.listShown, false, "deleting a character brought the list back")
+key("Key_Backspace")
+assert.equal(browser.listShown, true, "backspace did not bring the list back")
+assert.deepEqual(scrolls, [9, "to0"], "← or backspace went up instead of showing the list")
 key("Key_Down")
 assert.equal(browser.index, 6, "the list did not take the keys back")
-console.log("ok: a hidden list leaves the keys to the preview; ← brings it back")
+console.log("ok: a hidden list leaves the keys to the preview; ← and backspace bring it back")
 
 // → steps into folders but never opens a file.
 const opened = []
