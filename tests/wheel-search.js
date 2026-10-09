@@ -126,3 +126,15 @@ assert.equal(M.search(root.index, "thing", 40, {})[0].label, "New Menu",
   "the binding did not join the menu row that runs its command")
 assert.deepEqual(previous.map(e => e.label), ["Old Document", "Old Editor"])
 console.log(`ok: ${checked} wheel searches preserve ordering, matching, ties, and live scores; production refresh replaces cached rows`)
+
+// Apps match their generic name and full id tail; the focus handler keeps window recency.
+{
+  const live = M.liveRows({ apps: [{ entry: { id: "org.mozilla.firefox", name: "Firefox", genericName: "Web Browser" } },
+                                   { entry: { id: "org.gnome.Nautilus", name: "Files" } }], windows: [], focusOrder: [] })
+  assert.deepEqual(["browser", "nautilus", "naut"].map(q => M.search(live, q, 40, {}).map(r => r.label).join()), ["Firefox", "Files", ""])
+  const focused = new Function("root", wheelSource.match(/^  onActiveWindowChanged: \{([^]*?)^  }/m)[1])
+  const w = { focusOrder: ["a", "b", "c"], activeWindow: { address: "b" } }
+  focused(w); w.activeWindow = null; focused(w)
+  assert.deepEqual(w.focusOrder, ["b", "a", "c"], "window recency lost its order")
+}
+console.log("ok: apps by generic name and id, and window recency")

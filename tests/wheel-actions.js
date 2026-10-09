@@ -46,3 +46,13 @@ for (const [entry, expected] of [
   assert.equal(root.launched, entry.plugin || "")
 }
 console.log("ok: app, action, plugin and window picks execute once after unmapping with exact arguments")
+
+// Reopening during the fade cancels the pick, so closing again without one runs nothing.
+const Qt = { callLater: fn => fn() }
+const root = { opened: true, queued: () => assert.fail("a cancelled pick ran on the next close"),
+  closePeers: () => ({ clear: true }), focusedScreen() {}, rebuildIndex() {}, reread() {}, dropScan() {} }
+method(wheelSource, "open", { root, Qt, unmap: { stop() {} }, spin: { restart() {} },
+  searchInput: { forceActiveFocus() {} } })()
+root.opened = false
+new Function("root", "Qt", openedSource)(root, Qt)
+console.log("ok: reopening during the fade cancels the queued pick")

@@ -98,3 +98,20 @@ console.log("ok: every panel the bar can open is searchable, on the ring or not"
   assert.deepEqual([added.length, hr.listing, hr.path.join(".")], [0, "", "system"], "a submenu from history was added, or kept the list")
 
 }
+
+// Empty or failing submenus stay hidden; a submenu lists its direct children, and descriptions are searchable.
+{
+  const items = { s: { label: "Setup" }, "s.empty": { label: "Empty" }, "s.empty.x": { label: "X", action: "x", when: "a" },
+    "s.full": { label: "Full" }, "s.full.y": { label: "Y", action: "y" }, "s.gone": { label: "Gone", when: "b" },
+    "s.gone.z": { label: "Z", action: "z" }, "s.tool": { label: "Tool", action: "t", description: "screen ruler" } }
+  const cond = M.parseConditions("s.tool:c\n", items)
+  assert.deepEqual(M.childrenOf(items, "s", cond).map(e => [e.label, e.node || e.action]), [["Full", "s.full"], ["Tool ✓", "t"]],
+    "a submenu showed empty, kept a failing one, or reached past its children")
+  const rows = M.menuRows(items, cond)
+  assert.deepEqual(M.search(rows, "ruler", 40, {}).map(r => r.label), ["Tool ✓"], "a description is not searchable")
+  assert.deepEqual(rows.filter(r => r.node).map(r => r.label), ["Setup", "Full"], "search lost a submenu, or listed an empty one")
+  const slices = path => binding("slices", { root: { menuItems: items, path, conditions: cond, ring: [{ label: "Home" }] }, MenuIndex: M })
+  assert.deepEqual([slices([]).map(e => e.label), slices(["s"]).map(e => e.label)], [["Home"], ["Full", "Tool ✓"]],
+    "the ring did not show home, or a submenu's own rows")
+}
+console.log("ok: submenus show what passes and list their own children, and descriptions search")

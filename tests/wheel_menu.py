@@ -1,28 +1,55 @@
 """Reactive wheel query, history, launch and menu reload behavior."""
 import json
+import os
+import re
+import subprocess
 
 
 def check(wheel, base, run, block, line):
-    # The field and the query are one value both ways, and queryAt is the field's own
-    # caret: typing edits from inside, Esc clears from outside, and Ctrl+W places the
-    # caret after it assigns the query. The real lines are the fixture.
-    run("query-field", '''
+    # Real keys reach the field and its key map: typing edits the query, Ctrl+W puts the query and
+    # caret back through the binding and queryAt, Enter runs the result and Esc clears. The real
+    # field, minus its styling, and the real query handler are the fixture.
+    field = re.search(r"^( +)TextInput \{\n +id: searchInput$.*?^\1}", wheel, re.S | re.M).group()
+    (base / "field").mkdir()
+    (base / "field/tst_field.qml").write_text('''import QtQuick
+import QtTest
+import "../MenuKeys.js" as MenuKeys
+Item {
+  id: root
   property string query: ""
-''' + line(wheel, r"^  property alias queryAt:.*$") + '''
-  TextInput {
-    id: searchInput
-''' + line(wheel, r"^ +text: root\.query$") + line(wheel, r"^ +onTextChanged:.*$") + '''
-  }
-  Timer { interval: 1; running: true; onTriggered: {
-    searchInput.insert(0, "firefox")
-    if (root.query !== "firefox") { console.error("FAIL typing missed the query", root.query); Qt.exit(1); return }
-    root.query = "fox"; root.queryAt = 1
-    if (searchInput.text + "|" + searchInput.cursorPosition !== "fox|1") {
-      console.error("FAIL the caret did not land", searchInput.text, searchInput.cursorPosition); Qt.exit(1); return
+  property string editing: ""
+  property bool editingRing: false
+  property string listing: ""
+  readonly property bool searching: query.length > 0
+  property var results: [{ action: "picked" }]
+  property int resultIndex: 0
+  property int resultTop: 0
+  property int ran: 0
+  function run(e) { if (e) root.ran++ }
+''' + line(wheel, r"^  property alias queryAt:.*$") + block(wheel, r"  onQueryChanged: \{") + "\n"
+        + "".join(l for l in field.splitlines(True) if not re.search(r"\b(Style|Color|Util)\.", l)) + '''
+  TestCase {
+    name: "QueryField"
+    when: windowShown
+    function test_keys() {
+      for (const c of "fire fox") keyClick(c)
+      compare(root.query, "fire fox", "typing missed the query")
+      keyClick(Qt.Key_W, Qt.ControlModifier)
+      compare(searchInput.text + "|" + searchInput.cursorPosition, "fire |5", "Ctrl+W lost the text or caret")
+      keyClick(Qt.Key_Return)
+      compare(root.ran, 1, "Enter never reached the wheel")
+      keyClick(Qt.Key_Escape)
+      compare(searchInput.text, "", "Esc did not clear the field")
     }
-    console.log("PASS"); Qt.quit()
-  } }
+  }
+}
 ''')
+    # Qt 6's runner: the one on PATH may be Qt 5's.
+    result = subprocess.run(["/usr/lib/qt6/bin/qmltestrunner", "-input", str(base / "field")],
+                            env=dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="generic"),
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stdout + result.stderr
+    print("ok: query-field")
 
     # History opens from its own search, so the query clears before the list shows; typing then
     # leaves history for search, while a folder list keeps its typing. The real handlers are the fixture.
