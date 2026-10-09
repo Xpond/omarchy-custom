@@ -10,6 +10,13 @@ Item {
 
   // Delete confirmation takes priority over the key legend.
   readonly property bool arming: !!panel && !!panel.doomed
+  readonly property var listKey: ["ctrl+b", !!panel && panel.listShown ? "hide list" : "show list"]
+  // With the list hidden the bare keys scroll the preview; see FilesKeys.
+  readonly property var moves: !panel || panel.listShown
+    ? [["↑↓", "select"], ["enter", "open"], ["←", "up"], ["shift+↑↓", "scroll"]]
+    : [["↑↓", "scroll"], ["enter", "open"], ["←", "list"]]
+  // A window closes like any other, so only the overlay offers esc.
+  readonly property var leave: !panel ? [] : panel.host ? [["esc", "search"]] : panel.windowed ? [] : [["esc", "close"]]
 
   readonly property var pairs:
     !panel ? []
@@ -25,46 +32,60 @@ Item {
             ["/ at the end", "a folder"], [". at the end", "a file"],
             ["enter", "make it"], ["esc", "cancel"]]
          : [["type", "the new name"], ["enter", "rename"], ["esc", "cancel"]])
-    // A window closes like any other, so only the overlay offers esc; ctrl+t goes either way.
     : panel.held
-      ? [["↑↓", "select"], ["→", "open"], ["←", "up"],
-         ["ctrl+v", (panel.held.move ? "move " : "copy ") + panel.held.name + " here"],
-         ["ctrl+e", "edit"]].concat(panel.host ? [["esc", "search"]] : panel.windowed ? [] : [["esc", "close"]])
-    : [["↑↓", "select"], ["→", "open"], ["←", "up"],
-       ["shift+↑↓", "scroll"], ["ctrl+x/c/v", "move/copy"],
-       ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
-       ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"]]
-      .concat(panel.host ? [["ctrl+t", "unpin"], ["esc", "search"]] : panel.windowed ? [["ctrl+t", "unpin"]]
-              : [["ctrl+t", "window"], ["esc", "close"]])
+      ? root.moves.concat([["ctrl+v", (panel.held.move ? "move " : "copy ") + panel.held.name + " here"],
+         ["ctrl+e", "edit"]], root.leave)
+    // The everyday keys by default; F1 swaps in every key.
+    : panel.allKeys
+      ? root.moves.concat([["ctrl+x/c/v", "move/copy"],
+         ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
+         ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"], root.listKey,
+         ["ctrl+t", panel.host || panel.windowed ? "unpin" : "window"]], root.leave, [["f1", "fewer keys"]])
+    : root.moves.concat([["ctrl+e", "edit"], root.listKey], root.leave, [["f1", "all keys"]])
 
-  Row {
+  // A legend too long for one readable line takes two.
+  readonly property var lines: root.pairs.length > 10
+    ? [root.pairs.slice(0, Math.ceil(root.pairs.length / 2)), root.pairs.slice(Math.ceil(root.pairs.length / 2))]
+    : [root.pairs]
+
+  Column {
     id: hints
     anchors.horizontalCenter: parent.horizontalCenter
-    // Shrink rather than clip when a tiled window is narrower than the legend.
-    scale: implicitWidth > root.width ? root.width / implicitWidth : 1
-    spacing: Style.spacing.xxl
+    spacing: Style.spacing.md
 
     Repeater {
-      model: root.pairs
+      model: root.lines
 
       delegate: Row {
         required property var modelData
-        spacing: Style.spacing.xs
+        anchors.horizontalCenter: parent.horizontalCenter
+        // Shrink rather than clip when a tiled window is narrower than the line.
+        scale: implicitWidth > root.width ? root.width / implicitWidth : 1
+        spacing: Style.spacing.xxl
 
-        Text {
-          text: modelData[0]
-          color: root.arming ? panel.danger : Color.menu.text
-          opacity: root.arming ? 1.0 : 0.72
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.caption
-        }
+        Repeater {
+          model: modelData
 
-        Text {
-          text: modelData[1]
-          color: root.arming ? panel.danger : Color.menu.text
-          opacity: root.arming ? 0.9 : 0.36
-          font.family: Style.font.menuFamily
-          font.pixelSize: Style.font.caption
+          delegate: Row {
+            required property var modelData
+            spacing: Style.spacing.xs
+
+            Text {
+              text: modelData[0]
+              color: root.arming ? panel.danger : Color.menu.text
+              opacity: root.arming ? 1.0 : 0.72
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Text {
+              text: modelData[1]
+              color: root.arming ? panel.danger : Color.menu.text
+              opacity: root.arming ? 0.9 : 0.36
+              font.family: Style.font.menuFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
         }
       }
     }
