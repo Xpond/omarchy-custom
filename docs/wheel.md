@@ -58,6 +58,7 @@ key means and the dial performs it, which is what lets a test press a key.
 | `Ctrl+V` | paste at the caret or over the selection, runs of whitespace collapsed to one space |
 | `Ctrl+Y` | copy the highlighted path and close |
 | `Ctrl+Enter` | open a terminal in the highlighted path's folder; on any other row, as `Enter` |
+| `Ctrl+T` | pin the search as a window, and back — see [Pinning](#pinning) |
 | `Esc` | clear the query, then go up one level, then close |
 | `SUPER+W` | close the wheel and whatever it opened |
 
@@ -86,6 +87,28 @@ gap beside a row you missed -- must not count as "away". Neither is clickable
 in any other sense, and neither shows a hover state, because there is nothing
 to click for: the field always holds the keyboard, so a click can do nothing a
 keystroke does not already do.
+
+## Pinning
+
+`Ctrl+T` moves the search out of the overlay into a normal Hyprland window,
+keeping the query. Only the field and its results go: no ring, sky or fades.
+The field sits centered, as on the wheel, and the results show as many rows as
+fit below it, up to eight. The window's ground is the backdrop's tint, which
+Hyprland blurs as it blurs the backdrop, so the empty space follows the
+wallpaper; the field and rows are a little more translucent than on the wheel
+and keep their shadows.
+
+A pick runs at once and the window stays, cleared for the next. A panel opens
+over it as it would from the bar, and gives the keyboard back when it closes. A
+file opens Files inside the same window; `Esc`, or `Backspace` at home, goes
+back to the search. `SUPER+A` focuses the window instead of opening the wheel,
+`Ctrl+T` in it brings the wheel back holding the query, and `SUPER+W` closes it
+like any window. Each new `/` search scans again, as each open of the wheel
+does, so files made after pinning are found.
+
+`Pinned.js` hands the window to Files. Both plugins import it, and a plugin
+reload reloads both, so they always share one copy; Files therefore needs the
+wheel installed.
 
 ## The comet
 
@@ -687,6 +710,9 @@ chord between their neighbours.
 
 ## Known limits
 
+- The pinned search has no ring: submenus and the ring editor need it, and
+  recording a shortcut needs the overlay, so they work from the wheel only. Its
+  results do not scroll with the mouse wheel.
 - A window is found by its title or its app id, never by what is running
   inside it: a terminal holding a Claude Code session is titled after the
   session's topic, so `claude` will not find it. Searching the app id

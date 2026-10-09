@@ -51,6 +51,7 @@ function onKey(wheel, event) {
       wheel.queryAt = kept.length; event.accepted = true; return
     case Qt.Key_E: wheel.queryAt = wheel.query.length; event.accepted = true; return
     case Qt.Key_V: wheel.paste(); event.accepted = true; return
+    case Qt.Key_T: wheel.popOut(); event.accepted = true; return
     case Qt.Key_Y:
       if (!wheel.takePath()) return
       event.accepted = true; return

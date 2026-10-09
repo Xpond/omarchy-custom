@@ -10,6 +10,7 @@ import qs.Ui
 import "Calc.js" as Calc
 import "MenuIndex.js" as MenuIndex
 import "MenuKeys.js" as MenuKeys
+import "Pinned.js" as Pinned
 
 // Radial control center: the ring is the fast path, search is the complete one.
 Item {
@@ -137,7 +138,10 @@ Item {
   // Cache scanned paths only for the current open.
   property var files: null
   readonly property int resultLimit: 40
-  readonly property int resultCap: 8
+  // A pinned search shows only the rows that fit below its centered field.
+  readonly property int resultCap: !root.windowed ? 8 : Math.max(1, Math.min(8, Math.floor(
+    (pinned.height / 2 - root.searchHeight / 2 - Style.spacing.panelGap - Style.spacing.panelPadding + Style.spacing.md)
+    / (root.resultHeight + Style.spacing.md))))
   readonly property var results: root.listing === "history" ? MenuIndex.historyRows(root.index, root.uses, root.home)
     : root.listing && !root.query ? MenuIndex.listedRows(root.listing, root.listed)
     : root.listing === "skipped" ? MenuIndex.nameRows(root.files, root.query, root.resultLimit, root.home)
@@ -153,7 +157,8 @@ Item {
   property int resultTop: 0
   readonly property var beads: root.results.slice(root.resultTop,
                                                   root.resultTop + root.resultCap)
-  readonly property bool searching: root.query.length > 0 || !!root.listing
+  // A pinned search has no ring, so its keys always go to the results.
+  readonly property bool searching: root.query.length > 0 || !!root.listing || root.windowed
 
   // Ignore synthetic hover moves when result rows shift under the pointer.
   property point hoverAt: Qt.point(-1, -1)
@@ -164,6 +169,7 @@ Item {
   }
   readonly property string emptyText: root.mode === "calc" ? (root.term ? "No answer" : "Type to calculate")
     : root.listing === "folders" && !root.query ? "Home is always searched"
+    : root.windowed && !root.query ? ""
     : root.listing === "history" ? "Nothing picked yet"
     : root.mode !== "file" && root.listing !== "skipped" ? "No match"
     : !root.files ? "Scanning\u2026"
@@ -325,7 +331,7 @@ Item {
     }
   }
 
-  readonly property color surfaceFill: Util.alpha(Color.menu.background, 0.85)
+  readonly property color surfaceFill: Util.alpha(Color.menu.background, root.windowed ? 0.6 : 0.85)
   readonly property color surfaceEdge: Util.alpha(Color.menu.text, 0.16)
   readonly property color selectedFill: Qt.tint(Util.alpha(Color.menu.background, 0.9),
                                                 Util.alpha(Color.accent, 0.22))
@@ -361,6 +367,8 @@ Item {
   }
 
   function open() {
+    // A pinned search is raised instead.
+    if (root.windowed) { root.raise(); return }
     // Treat a press during fade-out as a fresh open.
     var wasOpen = root.opened && !unmap.running
     unmap.stop()
@@ -408,6 +416,33 @@ Item {
   function dismiss(immediate) {
     root.close(immediate)
     if (root.shell) root.shell.hide(root.pluginId)
+  }
+
+  // Ctrl+T: the field and its results become a plain window; the ring, sky and fades stay behind.
+  // Pressed again in the window, the wheel comes back holding the query.
+  property bool windowed: false
+  function popOut() {
+    if (root.windowed) {
+      var query = root.query
+      root.windowed = false
+      root.open()
+      root.query = query
+      return
+    }
+    if (!root.opened || unmap.running) return
+    root.dismiss(true)
+    root.windowed = true
+    root.scanFiles()
+    Qt.callLater(function () { searchInput.forceActiveFocus() })
+  }
+
+  function raise() {
+    var all = Hyprland.toplevels.values
+    for (var i = 0; i < all.length; i++) {
+      var t = all[i]
+      if (t.wayland && t.wayland.appId === "org.quickshell" && t.title === pinned.title)
+        Hyprland.dispatch("hl.dsp.focus({ window = \"address:0x" + t.address + "\" })")
+    }
   }
 
   function closeForPopoutSwitch() { root.dismiss(true) }
@@ -492,7 +527,7 @@ Item {
       else if (e.appId) root.appLibrary.launch(e.appId, e.label)
       else if (e.path && !browse) Quickshell.execDetached(["omarchy-open-path", e.path])
       else if (e.path && root.shell) {
-        root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path))
+        root.shell.summon("xpo.files", MenuIndex.pathPayload(e.path, root.windowed))
         root.launched = "xpo.files"
       }
       else if (e.copy) root.copy(e.copy)
@@ -500,6 +535,8 @@ Item {
     }
     // A panel or the browser takes the backdrop over at once; anything else fades out with it, as Esc does.
     root.dismiss(!!e.plugin || browse)
+    // A pinned search has nothing to unmap first, and stays for the next pick.
+    if (root.windowed) { root.queued(); root.queued = null; root.query = "" }
   }
 
   // Persist each pick; shell shutdown has no reliable flush point. Opening a setting is no pick.
@@ -738,7 +775,7 @@ Item {
   property int scanEpoch: 0
   // The skip list suggests home's folders alone, so only a search scans the added folders.
   function scanFiles() {
-    if (!root.opened || root.mode !== "file" && root.listing !== "skipped") return
+    if (!root.opened && !root.windowed || root.mode !== "file" && root.listing !== "skipped") return
     if (!homeScan.found && !homeScan.running) { homeScan.epoch = root.scanEpoch; homeScan.running = true }
     if (root.mode === "file" && root.folders.length && !folderScan.found && !folderScan.running) {
       folderScan.epoch = root.scanEpoch; folderScan.running = true
@@ -751,7 +788,11 @@ Item {
     homeScan.found = folderScan.found = null
     root.files = null
   }
-  onModeChanged: root.scanFiles()
+  // A pinned search outlives an open, so each new file search scans afresh, as each open does.
+  onModeChanged: {
+    if (root.windowed && root.mode !== "file") root.dropScan()
+    root.scanFiles()
+  }
   onListingChanged: root.scanFiles()
   onOpenedChanged: {
     if (root.shell) root.shell.panelSurfaceVisible(root.opened)
@@ -929,6 +970,30 @@ Item {
   onBindRowsChanged: if (root.opened) root.rebuildIndex()
   onSettingRowsChanged: if (root.opened) root.rebuildIndex()
 
+  // The pinned search: a plain toplevel Hyprland tiles like any app. Files opened from it shows
+  // inside it as its guest, and the search waits underneath until Files lets go.
+  FloatingWindow {
+    id: pinned
+    property var guest: null
+    visible: root.windowed
+    title: "Search"
+    // The backdrop's tint, which Hyprland blurs as it blurs the backdrop; Files brings its own ground.
+    color: guest ? guest.ground : Color.menu.scrim
+    implicitWidth: Style.space(700)
+    implicitHeight: Style.space(700)
+    Component.onCompleted: Pinned.window = pinned
+    onGuestChanged: if (!guest) Qt.callLater(function () { searchInput.forceActiveFocus() })
+    onClosed: { guest = null; root.windowed = false; root.dropScan() }
+
+    Item {
+      id: pinnedSlot
+      visible: !pinned.guest
+      anchors.centerIn: parent
+      width: root.searchWidth
+      height: root.searchHeight
+    }
+  }
+
   PanelWindow {
     id: surface
     visible: root.opened
@@ -1026,6 +1091,7 @@ Item {
     }
 
     Item {
+      id: stage
       anchors.fill: parent
       opacity: root.shown ? 1 : 0
       scale: root.shown ? 1 : 0.92
@@ -1034,6 +1100,7 @@ Item {
 
       // Render the dial into one layer for one shared shadow pass.
       Item {
+        id: dial
         anchors.centerIn: parent
         width: root.ringBox
         height: width
@@ -1064,13 +1131,22 @@ Item {
         }
 
         BorderSurface {
+          parent: root.windowed ? pinnedSlot : dial
           anchors.centerIn: parent
           width: root.searchWidth
           height: root.searchHeight
           radius: height / 2
           color: root.surfaceFill
-          borderSpec: Border.flat(root.searching ? Color.accent : root.surfaceEdge,
+          // Accented while typing; a pinned field counts as searching even when empty.
+          borderSpec: Border.flat(root.query || root.listing ? Color.accent : root.surfaceEdge,
                                   Style.spacing.hairline)
+          // Out of the dial, the field casts the dial's shadow itself.
+          layer.enabled: root.windowed
+          layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowOpacity: 0.5
+            shadowVerticalOffset: Style.space(5)
+          }
 
           ClickShield {}
 
@@ -1124,12 +1200,14 @@ Item {
               visible: searchInput.cursorVisible
             }
             onTextChanged: root.query = text
+            // A pinned search outlives an open, so it refreshes windows and apps whenever it is focused.
+            onActiveFocusChanged: if (activeFocus && root.windowed) root.rebuildIndex()
             Keys.onPressed: function (event) { MenuKeys.onKey(root, event) }
           }
         }
       }
 
-      WheelResults { wheel: root }
+      WheelResults { wheel: root; parent: root.windowed ? pinnedSlot : stage }
     }
   }
 }

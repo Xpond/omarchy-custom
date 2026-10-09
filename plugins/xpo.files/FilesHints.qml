@@ -25,16 +25,17 @@ Item {
             ["/ at the end", "a folder"], [". at the end", "a file"],
             ["enter", "make it"], ["esc", "cancel"]]
          : [["type", "the new name"], ["enter", "rename"], ["esc", "cancel"]])
-    // A window closes like any other, so only the overlay offers esc and ctrl+t.
+    // A window closes like any other, so only the overlay offers esc; ctrl+t goes either way.
     : panel.held
       ? [["↑↓", "select"], ["→", "open"], ["←", "up"],
          ["ctrl+v", (panel.held.move ? "move " : "copy ") + panel.held.name + " here"],
-         ["ctrl+e", "edit"]].concat(panel.windowed ? [] : [["esc", "close"]])
+         ["ctrl+e", "edit"]].concat(panel.host ? [["esc", "search"]] : panel.windowed ? [] : [["esc", "close"]])
     : [["↑↓", "select"], ["→", "open"], ["←", "up"],
        ["shift+↑↓", "scroll"], ["ctrl+x/c/v", "move/copy"],
        ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
        ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"]]
-      .concat(panel.windowed ? [] : [["ctrl+t", "window"], ["esc", "close"]])
+      .concat(panel.host ? [["ctrl+t", "unpin"], ["esc", "search"]] : panel.windowed ? [["ctrl+t", "unpin"]]
+              : [["ctrl+t", "window"], ["esc", "close"]])
 
   Row {
     id: hints
