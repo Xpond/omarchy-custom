@@ -10,6 +10,8 @@ def check(repo, files, base, run, block, line):
     helper = base / "slow-diff.py"
     helper.write_text("""import pathlib, sys, time
 name = sys.argv[3]
+if name == 'empty.txt':
+    sys.exit()
 print('@@ -1 +1 @@' + chr(10) + '-old' + chr(10) + '+' + name, flush=True)
 if name == 'old.txt':
     pathlib.Path(sys.argv[2], 'ready').touch()
@@ -25,6 +27,7 @@ if name == 'old.txt':
   property var changes: ({'old.txt': 'M', 'next.txt': 'M'})
   property bool showsImage: false
   property string diffText: ""
+  property bool diffLoading: false
   property bool switched: false
 ''' + block(files, r"^  FilesGitProcess \{\n    id: differ") + block(files, r"^  function readDiff\(") + '''
   FileView {
@@ -68,6 +71,7 @@ if name == 'old.txt':
   property bool diffMode: true
   property bool editing: false
   property string diffText: '@@ -1 +1 @@\\n-old\\n+new\\n'
+  property bool diffLoading: false
   property string settledPath: ''
   property string imageDims: ''
   property var dirEntries: []
@@ -85,6 +89,55 @@ if name == 'old.txt':
     }
     root.settledSel = ({name: 'gone.txt', path: '/tmp/gone.txt', size: 0, isDir: false, missing: true})
     if (root.previewPath || root.previewText !== root.diffText) { console.error('FAIL deleted preview'); Qt.exit(1); return }
+    console.log('PASS'); Qt.quit()
+  } }
+''')
+
+    # With the diff on, a changed file waits blank for its diff rather than show its contents or a note
+    # first, sampled between events as a frame would be; a diff that comes back empty gives the file back.
+    for name in ["wait.txt", "empty.txt"]:
+        (base / name).write_text("contents\n")
+    segment = lambda first, last: files[files.index(first):files.index(last)]
+    run("git-diff-waits", '''
+  property string listedDir: ''' + json.dumps(str(base)) + '''
+  property string gitScript: ''' + json.dumps(str(helper)) + '''
+  property var changes: ({'wait.txt': 'M', 'empty.txt': 'M'})
+  property var settledSel: null
+  property int previewLimit: 262144
+  property bool showsImage: false
+  property bool diffMode: true
+  property bool editing: false
+  property string settledPath: ''
+  property string imageDims: ''
+  property var dirEntries: []
+  property var saving: null
+  property string previewHtml: ''
+  property var seen: []
+  QtObject { id: preview; property int paneHeight: 600; function resetScroll() {} }
+  QtObject { id: measurer; property bool running: false; property var command: [] }
+''' + preview.replace("Style.font.subtitle", "14")
+        + segment("  readonly property bool showsMarkdown:", "  readonly property string previewPath:")
+        + line(files, r"^  readonly property bool showsCode: .*")
+        + segment("  property string diffText:", "  onDiffModeChanged:")
+        + segment("  readonly property string previewBody:", "  onSelChanged:")
+        + block(files, r"^  onSettledSelChanged: \{").replace("Style.font.subtitle", "14")
+        + segment("  readonly property string previewNote:", "  // Payloads may choose")
+        + block(files, r"^  FileView \{\n    id: previewFile") + '''
+  function shown() {
+    return root.previewNote ? 'note' : root.previewText && root.previewText === root.fullText ? 'file'
+      : root.previewText ? 'diff' : root.previewBody ? 'markup' : 'blank'
+  }
+  Timer { interval: 1; repeat: true; running: !!root.settledSel; onTriggered: {
+    if (root.seen[root.seen.length - 1] !== root.shown()) root.seen.push(root.shown())
+  } }
+  function pick(name) { root.seen = []; root.settledSel = ({name: name, path: root.listedDir + '/' + name, size: 9, isDir: false}) }
+  Timer { interval: 50; running: true; onTriggered: { root.pick('wait.txt'); next.start() } }
+  Timer { id: next; interval: 700; onTriggered: {
+    if (root.seen.join() !== 'blank,diff') { console.error('FAIL before the diff', root.seen.join()); Qt.exit(1); return }
+    root.pick('empty.txt'); done.start()
+  } }
+  Timer { id: done; interval: 700; onTriggered: {
+    if (root.seen.join() !== 'blank,file') { console.error('FAIL empty diff', root.seen.join()); Qt.exit(1); return }
     console.log('PASS'); Qt.quit()
   } }
 ''')

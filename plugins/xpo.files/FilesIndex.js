@@ -24,6 +24,8 @@ function ordered(entries, order) {
     hits.push({ entry: e, time: order === "date" ? when(e.modified) : 0 })
   }
   hits.sort(function (a, b) {
+    // Deleted rows arrive with git's status, after the rest; last, they move no selection.
+    if (!a.entry.missing !== !b.entry.missing) return a.entry.missing ? 1 : -1
     if (a.entry.isDir !== b.entry.isDir) return a.entry.isDir ? -1 : 1
     var rank = 0
     if (order === "date") rank = b.time - a.time
@@ -205,7 +207,9 @@ function emboldened(line, other) {
 // is all header, in grey. A removed line next to an added one alike enough is a pair, and
 // each shows what changed in bold.
 function styledDiff(text) {
-  var lines = String(text || "").replace(/\n$/, "").split("\n"), header = lines[0].slice(0, 2) !== "@@"
+  // Nothing yet while a diff is on its way.
+  if (!text) return ""
+  var lines = String(text).replace(/\n$/, "").split("\n"), header = lines[0].slice(0, 2) !== "@@"
   return lines.map(function (line, i) {
     if (line.slice(0, 2) === "@@") line = ("⋯ " + line.replace(/^@@[^@]*@@ ?/, "")).trim()
     var lead = line.charAt(0)
