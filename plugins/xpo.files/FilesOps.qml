@@ -16,7 +16,7 @@ Item {
   function note(text) { root.fileNote = text; noteFade.restart() }
 
   function hold(e, move) {
-    if (!e) return
+    if (!e || e.missing) return
     root.held = { path: e.path, name: e.name, move: !!move }
     root.note((move ? "moving " : "copying ") + e.name)
   }
@@ -82,7 +82,7 @@ Item {
   Timer { id: doomArmed; interval: 3000; onTriggered: root.doomed = "" }
   function remove() {
     var e = panel.sel
-    if (!e || panel.editing) return
+    if (!e || e.missing || panel.editing) return
     if (root.doomed !== e.path) {
       root.doomed = e.path
       doomArmed.restart()
@@ -97,6 +97,7 @@ Item {
   function activate(e) {
     if (!e || panel.editing) return
     if (e.isDir) { panel.enter(e.path); return }
+    if (e.missing) { panel.diffMode = true; return }
     root.opening = e
     opener.command = ["omarchy-open-path", e.path]
     opener.running = true

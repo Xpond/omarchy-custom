@@ -227,26 +227,41 @@ the rows keep for them, placed past the row's glyph by its measured width. A
 changed file's heading leads with how many lines it adds and removes,
 `+11 −2  ·  name`, set off by the same dot as the facts after the name.
 
+Deleted files remain in the list as read-only rows. Missing parent folders
+remain navigable too; Enter on a deleted file shows its diff. These rows
+cannot be edited, renamed, copied, moved, or trashed.
+
 `Ctrl+D` shows a changed file's diff in place of its contents — staged and
 unstaged, against `HEAD`, coloured in the highlighter's One Dark. git's header
 goes, since the heading names the file, and each `@@` becomes a `⋯` break
 carrying git's context. git lists a block of removed lines before the lines
 that replaced them; instead each old line sits above the most alike new line,
 in order, with what changed in bold. Lines sharing under half their length at
-their two ends are not alike, and stay plain removals and additions. The
-gutter numbers lines as the file now has them, so a removed line has none.
+their two ends are not alike, and stay plain removals and additions. Pairing
+has a fixed work budget; larger blocks keep Git's unified order with every
+line intact, so selecting a heavily rewritten file cannot stall on pairing.
+The gutter numbers lines as the file now has them, so a removed line has none.
 Unchanged files and images keep their usual preview, so the arrows can walk
 the list with the diff on. The choice holds while the shell runs, and while
 it is on, `ctrl+d hide diff` is lit in the legend: the browser reopens in the
 diff, and an unexplained diff looks like a broken file. `Ctrl+E` edits the
 file, never the diff.
 
-Both are one `git` process. Marks are read whenever the folder's rows load —
-which a save also triggers — and whenever the browser opens; one status covers
-the folder previews too. A changed file's diff is read when the selection
-settles, shown or not, so the heading can count it. Outside a repository `git`
-prints nothing. `node tests/files-index.js` runs the commands, `statusCommand`
-and `diffCommand` in `FilesIndex.js`, on a scratch repository.
+Untracked files and files in repositories without a first commit compare
+against an empty file. A small diff remains readable even when the current
+file exceeds the normal 256 KiB content-preview limit.
+
+Marks are read whenever the folder's rows load — which a save also triggers —
+and whenever the browser opens; a short debounce combines duplicate requests,
+and one status covers the folder previews too. A changed file's diff is read
+when the selection settles, shown or not, so the heading can count it.
+`git-preview.py` resolves missing directories through their existing parent
+and chooses the comparison baseline. Each request owns its process and
+collector; cancelled output cannot update a later selection. Outside a
+repository the helper prints nothing.
+`node tests/files-index.js` and `node tests/files-git.js` exercise real Git
+repositories; `python3 tests/runtime.py` also checks cancellation, deleted
+directory navigation, large-file previews, and pairing time in Quickshell.
 `--no-optional-locks` keeps a status read off the index lock a commit may
 want; `--literal-pathspecs` keeps `a*b` from diffing `axb` too.
 

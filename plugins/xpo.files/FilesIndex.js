@@ -145,12 +145,21 @@ function readableDiff(text) {
   var at = ("\n" + text).indexOf("\n@@")
   if (at < 0) return text
   var lines = text.slice(at).split("\n").filter(function (l) { return l.charAt(0) !== "\\" })
-  var out = [], i = 0
+  // A fixed character-comparison budget bounds pairing work on the UI thread.
+  // Once spent, keep Git's ordinary unified order without dropping any lines.
+  var out = [], i = 0, budget = 50000
   while (i < lines.length) {
     if (lines[i].charAt(0) !== "-") { out.push(lines[i++]); continue }
-    var old = [], now = [], j = 0
-    while (i < lines.length && lines[i].charAt(0) === "-") old.push(lines[i++])
-    while (i < lines.length && lines[i].charAt(0) === "+") now.push(lines[i++])
+    var old = [], now = [], j = 0, oldChars = 0, newChars = 0
+    while (i < lines.length && lines[i].charAt(0) === "-") { oldChars += lines[i].length; old.push(lines[i++]) }
+    while (i < lines.length && lines[i].charAt(0) === "+") { newChars += lines[i].length; now.push(lines[i++]) }
+    var cost = old.length * newChars + now.length * oldChars
+    if (cost > budget) {
+      old.forEach(function (line) { out.push(line) })
+      now.forEach(function (line) { out.push(line) })
+      continue
+    }
+    budget -= cost
     old.forEach(function (o) {
       var best = -1, most = 0
       for (var k = j; k < now.length; k++) {
@@ -224,15 +233,14 @@ function diffNumbers(text) {
 
 // The listed folder's place in its repository, then git's status of everything under it.
 // Outside a repository it prints nothing.
-function statusCommand(dir) {
-  return ["sh", "-c", 'git -C "$1" rev-parse --show-prefix && exec git --no-optional-locks -C "$1" '
-    + "status --porcelain -z --no-renames -- .", "files", dir]
+function statusCommand(dir, script) {
+  return ["python3", script, "status", dir]
 }
 
 // statusCommand's output as marks by entry name in the listed folder, or in its folder
 // `under`: a file's status letter as git prints it, or ● on a folder holding changes.
 function changes(text, under) {
-  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : ""), marks = {}
+  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : ""), marks = Object.create(null)
   text.slice(cut + 1).split("\0").forEach(function (entry) {
     if (entry.slice(3, 3 + prefix.length) !== prefix) return
     var path = entry.slice(3 + prefix.length).replace(/\/$/, "")
@@ -243,15 +251,31 @@ function changes(text, under) {
   return marks
 }
 
+// Keep deleted files and their missing parent folders reachable in the existing list.
+function withDeleted(entries, text, dir, under, hidden) {
+  var out = entries.slice(), seen = Object.create(null)
+  entries.forEach(function (e) { seen[e.name] = true })
+  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : "")
+  text.slice(cut + 1).split("\0").forEach(function (entry) {
+    if (entry.slice(0, 2).indexOf("D") < 0 || entry.slice(3, 3 + prefix.length) !== prefix) return
+    var path = entry.slice(3 + prefix.length), slash = path.indexOf("/")
+    var name = slash < 0 ? path : path.slice(0, slash)
+    if (!name || seen[name] || (!hidden && name.charAt(0) === ".")) return
+    seen[name] = true
+    out.push({ name: name, path: dir.replace(/\/$/, "") + "/" + (under ? under + "/" : "") + name,
+               isDir: slash >= 0, size: 0, modified: null, missing: true })
+  })
+  return out
+}
+
 // How many lines a diff adds and removes.
 function diffStat(text) {
   return [(text.match(/^\+/gm) || []).length, (text.match(/^-/gm) || []).length]
 }
 
 // Everything uncommitted in one file, staged or not. Literal, so a name like a*b is not a glob.
-function diffCommand(dir, name) {
-  return ["git", "--no-optional-locks", "--literal-pathspecs", "-C", dir,
-          "diff", "--no-color", "--no-ext-diff", "HEAD", "--", name]
+function diffCommand(dir, name, script) {
+  return ["python3", script, "diff", dir, name]
 }
 
 // Links are inert here; flatten them to keep theme colors legible.

@@ -126,7 +126,7 @@ Item {
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
-      text: FilesIndex.countLabel(panel.rows.length, panel.entries.length,
+      text: FilesIndex.countLabel(panel.rows.length, panel.listedEntries.length,
                                   panel.query, panel.showHidden, panel.order)
       color: Color.menu.text
       opacity: 0.5
