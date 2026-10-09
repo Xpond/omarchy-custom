@@ -71,12 +71,24 @@ Item {
         Text {
           anchors.verticalCenter: parent.verticalCenter
           width: parent.width - glyph.width - trail.width - parent.spacing * 2
+                 - (mark.visible ? mark.width + parent.spacing : 0)
           elide: Text.ElideRight
           text: entry.modelData.name
           color: entry.active ? Color.menu.selectedText : Color.menu.text
           opacity: entry.active ? 1.0 : (entry.modelData.isDir ? 0.88 : 0.66)
           font.family: Style.font.menuFamily
           font.pixelSize: Style.font.body
+        }
+
+        // Uncommitted changes: git's letter on a file, a dot on a folder holding some.
+        Text {
+          id: mark
+          anchors.verticalCenter: parent.verticalCenter
+          visible: !!text
+          text: panel.changes[entry.modelData.name] || ""
+          color: Color.accent
+          font.family: Style.font.menuFamily
+          font.pixelSize: Style.font.bodySmall
         }
 
         Text {

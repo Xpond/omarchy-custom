@@ -57,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="omarchy-preview-") as temporary:
     shutil.copyfile(plugin / "FilesIndex.js", base / "FilesIndex.js")
     styled = (plugin / "FilesPreview.qml").read_text().replace("Style.font.subtitle", "panel.codePx")
     styled = styled.replace("  id: root", "  id: root\n  readonly property real testBodyX: content.mapToItem(root, content.children[0].width + content.spacing, 0).x")
-    handler = styled[styled.index("        onLineLaidOut:"):styled.index("      }\n    }\n  }\n\n  Rectangle")]
+    handler = styled[styled.index("        onLineLaidOut:", styled.index("id: rendered")):styled.index("      }\n    }\n  }\n\n  Rectangle")]
     rich = styled.replace("panel.showsCode ? Text.StyledText", "panel.showsCode ? Text.RichText")
     assert rich != styled and handler
     (base / "Styled.qml").write_text(styled)
@@ -164,5 +164,17 @@ Scope {
                                                "-alpha", "extract", "-format", "%[fx:mean]", "info:"])
                 assert float(ink) > 0, name + ": preview text is invisible"
     assert not failed, "\n".join(failed)
-    print("ok: %d code previews, plain and coloured at three sizes, match the rich text pixel for pixel"
-          % len(pairs))
+
+    # Numbers and code end on the same rows: "line N" and its digits all sit on the baseline.
+    def ink_bottoms(image, x0, x1):
+        w, h = map(int, size(image).split("x"))
+        raw = subprocess.check_output(["magick", image, "-alpha", "extract", "-depth", "8", "gray:-"])
+        inked = [any(raw[y * w + x] > 20 for x in range(x0, x1)) for y in range(h)]
+        return [y for y in range(h) if inked[y] and (y + 1 == h or not inked[y + 1])]
+    for px in (11, 13, 16):
+        name = "truncated.txt-%d-coloured" % px
+        image = base / "out" / (name + "-styled.png")
+        x = int(body_x[name])
+        assert ink_bottoms(image, 0, x - 4) == ink_bottoms(image, x, x + 200), name + ": numbers off their lines"
+    print("ok: %d code previews, plain and coloured at three sizes, match the rich text pixel for pixel,"
+          " numbers level with their lines" % len(pairs))

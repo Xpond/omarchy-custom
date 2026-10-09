@@ -70,6 +70,18 @@ assert.deepEqual(F.columns([], 2, 80, 4), [])
 assert.deepEqual(F.columns(preview, 2, 80, 4), [folder + "\n" + notes, clipped + "\n" + last])
 assert.deepEqual(F.columns(preview, 2, 80, 3), [folder + "\n" + notes, clipped + "\n…"])
 assert.deepEqual(F.columns(preview, 1, 38, 4), [[folder, notes, clipped, last].join("\n")])
+// Where a folder holds changes every row keeps room after its name for git's mark, drawn over it
+// from a column of its own, so sizes and dates still line up.
+const marks = { Folder: "●", "notes.txt": "M" }
+assert.deepEqual(F.columns(preview, 1, 38, 4, marks)[0].split("\n"),
+  ["󰉋  " + "Folder".padEnd(17) + "  " + "     " + "  " + " 2 Jan 26",
+   "󰈔  " + "notes.txt".padEnd(17) + "  " + " 1.0K" + "  " + "         ",
+   "󰈔  another-very-lon…" + "  " + "  12B" + "  " + "         ",
+   "󰈔  " + "last".padEnd(17) + "  " + "   0B" + "  " + "         "])
+const room = " ".repeat(2 + 17 + 1)
+assert.deepEqual(F.markColumns(preview, 1, 38, 4, marks), [room + "●\n" + room + "M\n\n"])
+assert.deepEqual(F.markColumns(preview, 2, 80, 3, marks).map(c => c.split("\n").length), [2, 1], "marks split as the rows do")
+assert.deepEqual(F.columns(preview, 1, 38, 4, {}), F.columns(preview, 1, 38, 4), "no marks, no room kept")
 
 for (const count of [0, 1, 399, 400, 401, 2000]) {
   let reads = 0

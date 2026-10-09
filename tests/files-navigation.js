@@ -149,6 +149,12 @@ assert.deepEqual(scrolls, [9, "to0"], "← or backspace went up instead of showi
 key("Key_Down")
 assert.equal(browser.index, 6, "the list did not take the keys back")
 console.log("ok: a hidden list leaves the keys to the preview; ← and backspace bring it back")
+// Ctrl+D swaps a changed file's contents for its diff and back, leaving the list where it was.
+browser.diffMode = false
+key("Key_D", 1 << 26); assert.equal(browser.diffMode, true)
+key("Key_D", 1 << 26); assert.equal(browser.diffMode, false)
+assert.equal(browser.index, 6, "ctrl+d moved the list")
+console.log("ok: ctrl+d toggles the diff")
 
 // → steps into folders but never opens a file.
 const opened = []

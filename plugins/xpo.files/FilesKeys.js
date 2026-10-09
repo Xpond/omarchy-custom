@@ -35,6 +35,7 @@ function onKey(panel, ops, preview, event) {
     case Qt.Key_O: panel.cycleOrder(); event.accepted = true; return
     case Qt.Key_T: panel.popOut(); event.accepted = true; return
     case Qt.Key_B: panel.listShown = !panel.listShown; event.accepted = true; return
+    case Qt.Key_D: panel.diffMode = !panel.diffMode; event.accepted = true; return
     case Qt.Key_N:
       if (event.modifiers & Qt.ShiftModifier) panel.beginNew()
       else panel.move(1)

@@ -63,6 +63,7 @@ red, and a save is confirmed by reading the file back.
 | `Ctrl+W` `Ctrl+Backspace` | back one word of the filter, or one segment of a typed path |
 | `Ctrl+T` | pop out into a window, and back — see [Popping out](#popping-out) |
 | `Ctrl+B` | slide the list out so the preview takes its width, and back |
+| `Ctrl+D` | show a changed file's diff instead of its contents, and back — see [Uncommitted changes](#uncommitted-changes) |
 | `F1` | show every key in the legend, or only the everyday ones |
 | `Esc` | clear the field, then close |
 
@@ -213,6 +214,41 @@ sit either side of any list you would write by hand, and the bytes do not lie.
 
 Arriving from the wheel while an edit is unsaved does not move: the browser
 stays on the file and asks you to save or discard it first.
+
+## Uncommitted changes
+
+Inside a git repository the list marks what changed since the last commit:
+git's own letter on a file — `M` modified, `A` added, `D` deleted, `?`
+untracked — and a dot on a folder with changes anywhere under it, so changes
+can be followed down from the root. A folder's preview carries the same marks
+between each name and its size. The preview is one plain text per column, and
+a plain text takes one colour, so the marks are a second text laid over room
+the rows keep for them, placed past the row's glyph by its measured width. A
+changed file's heading leads with how many lines it adds and removes,
+`+11 −2  ·  name`, set off by the same dot as the facts after the name.
+
+`Ctrl+D` shows a changed file's diff in place of its contents — staged and
+unstaged, against `HEAD`, coloured in the highlighter's One Dark. git's header
+goes, since the heading names the file, and each `@@` becomes a `⋯` break
+carrying git's context. git lists a block of removed lines before the lines
+that replaced them; instead each old line sits above the most alike new line,
+in order, with what changed in bold. Lines sharing under half their length at
+their two ends are not alike, and stay plain removals and additions. The
+gutter numbers lines as the file now has them, so a removed line has none.
+Unchanged files and images keep their usual preview, so the arrows can walk
+the list with the diff on. The choice holds while the shell runs, and while
+it is on, `ctrl+d hide diff` is lit in the legend: the browser reopens in the
+diff, and an unexplained diff looks like a broken file. `Ctrl+E` edits the
+file, never the diff.
+
+Both are one `git` process. Marks are read whenever the folder's rows load —
+which a save also triggers — and whenever the browser opens; one status covers
+the folder previews too. A changed file's diff is read when the selection
+settles, shown or not, so the heading can count it. Outside a repository `git`
+prints nothing. `node tests/files-index.js` runs the commands, `statusCommand`
+and `diffCommand` in `FilesIndex.js`, on a scratch repository.
+`--no-optional-locks` keeps a status read off the index lock a commit may
+want; `--literal-pathspecs` keeps `a*b` from diffing `axb` too.
 
 ## Moving files
 

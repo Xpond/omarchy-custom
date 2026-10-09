@@ -31,6 +31,56 @@ assert.equal(F.lineLabel("one\ntwo"), "2 lines")
 assert.equal(F.lineLabel("one\ntwo\n"), "2 lines")
 console.log("ok: line counts")
 
+// git's header goes once a hunk follows, and so do "\ No newline" notes. Each old line sits above the most
+// alike new line, in order: new lines it passes over come first, lines alike to nothing stay alone. The gutter
+// numbers lines as the file now has them, and the heading counts what was added and removed.
+const diff = F.readableDiff("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n@@ -8,4 +8,5 @@ def f():\n a <b>\n-if (isDir) go()\n-x = head(root.fullText)\n-gone\n\\ No newline at end of file\n+// note\n+if (isFile) go()\n+x = head(root.shownText)\n@@ -98,2 +99,2 @@\n z\n-old\n+new\n")
+assert.equal(diff, "@@ -8,4 +8,5 @@ def f():\n a <b>\n+// note\n-if (isDir) go()\n+if (isFile) go()\n-x = head(root.fullText)\n+x = head(root.shownText)\n-gone\n@@ -98,2 +99,2 @@\n z\n-old\n+new\n")
+assert.deepEqual(F.diffNumbers(diff).split("\n"), ["", "8", "9", "", "10", "", "11", "", "", "99", "", "100"])
+assert.deepEqual(F.diffStat(diff), [4, 4])
+// Hunks become ⋯ breaks carrying git's context; a pair shows what changed in bold, widened to whole words.
+const red = t => '<font color="#e06c75">' + t + "</font>", green = t => '<font color="#98c379">' + t + "</font>"
+assert.equal(F.styledDiff(diff), ['<font color="#61afef">⋯&#32;def&#32;f():</font>', "&#32;a&#32;&lt;b&gt;",
+  green("+//&#32;note"), red("-if&#32;(<b>isDir</b>)&#32;go()"), green("+if&#32;(<b>isFile</b>)&#32;go()"),
+  red("-x&#32;=&#32;head(root.<b>fullText</b>)"), green("+x&#32;=&#32;head(root.<b>shownText</b>)"), red("-gone"),
+  '<font color="#61afef">⋯</font>', "&#32;z", red("-old"), green("+new")].join("<br>"))
+// Without a hunk the header is the whole story: grey, unnumbered, uncounted.
+const binary = "diff --git a/p b/p\nBinary files a/p and b/p differ\n"
+const grey = t => '<font color="#7f848e">' + t + "</font>"
+assert.equal(F.readableDiff(binary), binary)
+assert.equal(F.styledDiff(binary), grey("diff&#32;--git&#32;a/p&#32;b/p") + "<br>" + grey("Binary&#32;files&#32;a/p&#32;and&#32;b/p&#32;differ"))
+assert.equal(F.diffNumbers(binary), "\n")
+assert.deepEqual(F.diffStat(binary), [0, 0])
+console.log("ok: diffs read old above new, changes in bold, numbered and counted")
+
+// The real git commands on a scratch repository: marks by entry name, folders holding changes, literal names.
+const { execFileSync, spawnSync } = require("node:child_process")
+const fs = require("node:fs"), os = require("node:os"), path = require("node:path")
+const repo = fs.mkdtempSync(path.join(os.tmpdir(), "files-git-"))
+const put = (name, text) => { fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true }); fs.writeFileSync(path.join(repo, name), text) }
+const git = (...args) => execFileSync("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t",
+  "-c", "commit.gpgsign=false", ...args], { stdio: "ignore" })
+const run = argv => spawnSync(argv[0], argv.slice(1), { encoding: "utf8" }).stdout
+for (const name of ["top.txt", "src/a.js", "src/a*b", "src/axb", "src/deep/b.txt", "src/same.txt", "src/gone.txt"]) put(name, "old\n")
+git("init", "-q"); git("add", "."); git("commit", "-qm", "base")
+put("src/a.js", "new\n"); put("src/a*b", "new\n"); put("src/axb", "new\n"); put("src/deep/b.txt", "new\n")
+put("src/new dir/x", "x"); put("src/fresh.md", "x"); put("src/staged.txt", "x"); git("add", "src/staged.txt")
+fs.rmSync(path.join(repo, "src/gone.txt"))
+assert.deepEqual(F.changes(run(F.statusCommand(repo))), { src: "●" })
+assert.deepEqual(F.changes(run(F.statusCommand(repo + "/src"))), { "a.js": "M", "a*b": "M", axb: "M", deep: "●",
+  "new dir": "?", "fresh.md": "?", "staged.txt": "A", "gone.txt": "D" })
+// One status of a folder also marks inside each of its folders, for their previews.
+const status = run(F.statusCommand(repo))
+assert.deepEqual(F.changes(status, "src"), F.changes(run(F.statusCommand(repo + "/src"))))
+assert.deepEqual(F.changes(status, "src/deep"), { "b.txt": "M" })
+assert.deepEqual(F.changes(status, "sr"), {}, "a folder is not a prefix of its neighbour's name")
+assert.deepEqual(F.changes(run(F.statusCommand(os.tmpdir()))), {}, "outside a repository")
+assert.equal(F.readableDiff(run(F.diffCommand(repo + "/src", "a*b"))), "@@ -1 +1 @@\n-old\n+new\n", "a*b was read as a glob")
+assert.equal(run(F.diffCommand(repo + "/src", "same.txt")), "")
+assert.match(run(F.diffCommand(repo + "/src", "staged.txt")), /^\+x$/m, "staged changes count")
+fs.rmSync(repo, { recursive: true })
+console.log("ok: git marks and diffs")
+
 // A full-sort reference checks ordering, picks, stable ties, and multi-term matching.
 function reference(files, query, limit, uses = {}) {
   const q = query.trim().toLowerCase()

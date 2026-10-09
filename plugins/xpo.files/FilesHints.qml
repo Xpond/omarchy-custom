@@ -11,6 +11,10 @@ Item {
   // Delete confirmation takes priority over the key legend.
   readonly property bool arming: !!panel && !!panel.doomed
   readonly property var listKey: ["ctrl+b", !!panel && panel.listShown ? "hide list" : "show list"]
+  // Offered where there is something to diff, or a diff to leave. Lit while the diff is on,
+  // since the browser reopens in it and a diff unexplained looks like a broken file.
+  readonly property var diffKey: !panel || !panel.diffMode && !Object.keys(panel.changes).length ? []
+    : [["ctrl+d", panel.diffMode ? "hide diff" : "show diff", panel.diffMode]]
   // With the list hidden the bare keys scroll the preview; see FilesKeys.
   readonly property var moves: !panel || panel.listShown
     ? [["↑↓", "select"], ["enter", "open"], ["←", "up"], ["shift+↑↓", "scroll"]]
@@ -39,9 +43,10 @@ Item {
     : panel.allKeys
       ? root.moves.concat([["ctrl+x/c/v", "move/copy"],
          ["ctrl+e", "edit"], ["ctrl+enter", "terminal"], ["ctrl+y", "copy path"],
-         ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"], root.listKey,
-         ["ctrl+t", panel.host || panel.windowed ? "unpin" : "window"]], root.leave, [["f1", "fewer keys"]])
-    : root.moves.concat([["ctrl+e", "edit"], root.listKey], root.leave, [["f1", "all keys"]])
+         ["ctrl+o", "sort"], ["f2", "rename"], ["ctrl+shift+n", "new"], ["del", "trash"], root.listKey],
+         root.diffKey, [["ctrl+t", panel.host || panel.windowed ? "unpin" : "window"]], root.leave,
+         [["f1", "fewer keys"]])
+    : root.moves.concat([["ctrl+e", "edit"], root.listKey], root.diffKey, root.leave, [["f1", "all keys"]])
 
   // A legend too long for one readable line takes two.
   readonly property var lines: root.pairs.length > 10
@@ -72,16 +77,16 @@ Item {
 
             Text {
               text: modelData[0]
-              color: root.arming ? panel.danger : Color.menu.text
-              opacity: root.arming ? 1.0 : 0.72
+              color: root.arming ? panel.danger : modelData[2] ? Color.accent : Color.menu.text
+              opacity: root.arming || modelData[2] ? 1.0 : 0.72
               font.family: Style.font.menuFamily
               font.pixelSize: Style.font.caption
             }
 
             Text {
               text: modelData[1]
-              color: root.arming ? panel.danger : Color.menu.text
-              opacity: root.arming ? 0.9 : 0.36
+              color: root.arming ? panel.danger : modelData[2] ? Color.accent : Color.menu.text
+              opacity: root.arming || modelData[2] ? 0.9 : 0.36
               font.family: Style.font.menuFamily
               font.pixelSize: Style.font.caption
             }
