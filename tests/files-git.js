@@ -59,6 +59,16 @@ try {
   console.log("ok: new files, unborn HEAD, literal names and deleted folders have diffs")
 } finally { fs.rmSync(repo, { recursive: true, force: true }) }
 
+// Deleted rows arrive with git's status, when a selection may already rest on a live row; they must not move it.
+const live = [{ name: "b.txt", isDir: false, size: 2 }, { name: "src", isDir: true, size: 0 }]
+const late = "\n D a.txt\0 D old/x\0"
+for (const order of ["name", "date", "size"]) {
+  const before = F.ordered(live, order), after = F.ordered(F.withDeleted(live, late, "/r", "", false), order)
+  assert.deepEqual(after.slice(0, before.length), before, order + ": a deleted row moved a live one")
+  assert.deepEqual(after.slice(before.length).map(e => e.name), ["old", "a.txt"], order)
+}
+console.log("ok: deleted rows follow the live ones, so their arrival moves no selection")
+
 const n = 2000, old = [], now = []
 for (let i = 0; i < n; i++) { old.push("-  oldItem" + i + " = true;"); now.push("+  newItem" + i + " = true;") }
 const large = "@@ -1," + n + " +1," + n + " @@\n" + old.join("\n") + "\n" + now.join("\n") + "\n"

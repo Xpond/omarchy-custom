@@ -227,9 +227,11 @@ the rows keep for them, placed past the row's glyph by its measured width. A
 changed file's heading leads with how many lines it adds and removes,
 `+11 −2  ·  name`, set off by the same dot as the facts after the name.
 
-Deleted files remain in the list as read-only rows. Missing parent folders
-remain navigable too; Enter on a deleted file shows its diff. These rows
-cannot be edited, renamed, copied, moved, or trashed.
+Deleted files remain in the list as read-only rows, below everything that
+exists: they arrive with git's status, just after the folder's rows, and so
+move no selection already made. Missing parent folders remain navigable too;
+Enter on a deleted file shows its diff. These rows cannot be edited, renamed,
+copied, moved, or trashed.
 
 `Ctrl+D` shows a changed file's diff in place of its contents — staged and
 unstaged, against `HEAD`, coloured in the highlighter's One Dark. git's header
@@ -242,10 +244,11 @@ has a fixed work budget; larger blocks keep Git's unified order with every
 line intact, so selecting a heavily rewritten file cannot stall on pairing.
 The gutter numbers lines as the file now has them, so a removed line has none.
 Unchanged files and images keep their usual preview, so the arrows can walk
-the list with the diff on. The choice holds while the shell runs, and while
-it is on, `ctrl+d hide diff` is lit in the legend: the browser reopens in the
-diff, and an unexplained diff looks like a broken file. `Ctrl+E` edits the
-file, never the diff.
+the list with the diff on. A changed file's preview waits blank for its diff
+rather than flash the file, which loads first; an empty diff gives it back.
+The choice holds while the shell runs, and while it is on, `ctrl+d hide diff`
+is lit in the legend: the browser reopens in the diff, and an unexplained diff
+looks like a broken file. `Ctrl+E` edits the file, never the diff.
 
 Untracked files and files in repositories without a first commit compare
 against an empty file. A small diff remains readable even when the current

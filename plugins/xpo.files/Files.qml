@@ -210,12 +210,15 @@ Item {
   onEntriesChanged: root.readChanges()
 
   property string diffText: ""
-  readonly property bool showsDiff: root.diffMode && !!root.diffText && !root.editing
+  // A diff on its way: with the diff on, the preview waits for it instead of flashing the file.
+  property bool diffLoading: false
+  readonly property bool showsDiff: root.diffMode && (!!root.diffText || root.diffLoading) && !root.editing
   FilesGitProcess {
     id: differ
     onFinished: function (output, code) {
       // --no-index returns 1 when a new file has content.
       root.diffText = code === 0 || code === 1 ? FilesIndex.readableDiff(output) : ""
+      root.diffLoading = false
     }
   }
   // Read whether shown or not, so the heading can count its lines. Only changed files have
@@ -223,7 +226,8 @@ Item {
   function readDiff() {
     differ.cancel()
     var e = root.settledSel
-    if (!e || e.isDir || root.showsImage || !root.changes[e.name]) { root.diffText = ""; return }
+    root.diffLoading = !!e && !e.isDir && !root.showsImage && !!root.changes[e.name]
+    if (!root.diffLoading) { root.diffText = ""; return }
     differ.start(FilesIndex.diffCommand(root.listedDir, e.name, root.gitScript))
   }
   onDiffModeChanged: preview.resetScroll()
@@ -285,12 +289,12 @@ Item {
       + (root.settledSel.modified
          ? "  ·  " + Qt.formatDateTime(root.settledSel.modified, "d MMM yyyy") : "")
 
-  // Empty while the preview has content of its own.
+  // Empty while the preview has content of its own, or waits for a diff.
   readonly property string previewNote:
     root.editing ? ""
     : !root.settledSel ? (root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
-    : root.showsCode || root.previewBody ? ""
+    : root.showsCode || root.previewBody || root.showsDiff ? ""
     : root.settledSel.missing ? "Deleted · Ctrl+D shows changes"
     : (root.showsImage && preview.imageStatus !== Image.Error) ? ""
     : FilesIndex.humanSize(root.settledSel.size) + "  ·  no preview"
