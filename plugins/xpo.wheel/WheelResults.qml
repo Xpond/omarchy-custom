@@ -5,6 +5,7 @@ import qs.Ui
 
 // Ranked search results using the ring's visual language.
 Item {
+  id: stack
   property var wheel: null
 
   anchors.top: parent.verticalCenter
@@ -66,13 +67,14 @@ Item {
 
         Behavior on color { ColorAnimation { duration: 90 } }
 
+        // A MouseArea's own wheel signal shadows the property here, so the wheel goes by the stack.
         MouseArea {
           anchors.fill: parent
           hoverEnabled: true
           onPositionChanged: function (mouse) {
-            if (wheel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) wheel.resultIndex = resultCard.row
+            if (stack.wheel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) stack.wheel.resultIndex = resultCard.row
           }
-          onClicked: wheel.run(wheel.results[resultCard.row])
+          onClicked: stack.wheel.run(stack.wheel.results[resultCard.row])
         }
 
         Row {
