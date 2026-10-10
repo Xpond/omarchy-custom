@@ -240,7 +240,13 @@ unstaged, against `HEAD`, coloured in the highlighter's One Dark. git's header
 goes, since the heading names the file, and each `@@` becomes a `⋯` break
 carrying git's context. git lists a block of removed lines before the lines
 that replaced them; instead each old line sits above the most alike new line,
-in order, with what changed in bold. Lines sharing under half their length at
+in order, with what changed in bold. A change inside a word bolds the whole
+word, one at a word's edge only itself; past ASCII every character counts as a
+word's, so bold never splits an emoji, its skin tone or an accent. A line
+without its last newline ends in a circle-slash, Nerd Font's octicon at
+U+F468, for git's `\ No newline at end of file`: a save that only adds the
+newline shows that mark rather than two identical lines.
+Lines sharing under half their length at
 their two ends are not alike, and stay plain removals and additions. Pairing
 has a fixed work budget; larger blocks keep Git's unified order with every
 line intact, so selecting a heavily rewritten file cannot stall on pairing.
