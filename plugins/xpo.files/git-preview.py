@@ -13,13 +13,19 @@ relative = os.path.relpath(folder, directory)
 git = ["git", "--no-optional-locks", "--literal-pathspecs", "-C", str(directory)]
 
 if mode == "status":
-    prefix = subprocess.run(git + ["rev-parse", "--show-prefix"], capture_output=True)
-    if prefix.returncode:
+    where = subprocess.run(git + ["rev-parse", "--show-toplevel", "--show-prefix"], capture_output=True)
+    if where.returncode:
         sys.exit(0)
-    under = "" if relative == "." else relative + "/"
-    sys.stdout.buffer.write(prefix.stdout.removesuffix(b"\n") + os.fsencode(under) + b"\n")
+    top, prefix = where.stdout.split(b"\n")[:2]
+    listed = prefix + os.fsencode("" if relative == "." else relative + "/")
+    sys.stdout.buffer.write(listed + b"\n")
     sys.stdout.flush()
-    command = git + ["status", "--porcelain", "-z", "--no-renames", "--untracked-files=all", "--", relative]
+    # git reports an untracked folder as one entry rather than walk it, however large. A path inside
+    # the listed folder opens it, so its own entries are marked, but only beside the folder's name
+    # without a trailing slash; from inside, "." would carry one, hence from the top.
+    path = listed.removesuffix(b"/") or b"."
+    command = git + ["-C", top, "status", "--porcelain", "-z", "--no-renames",
+                     "--untracked-files=normal", "--", path, path + b"/-"]
 else:
     name = "./" + os.path.normpath(os.path.join(relative, sys.argv[3]))
     # HEAD:./ resolves from -C, including literal punctuation in the filename.
