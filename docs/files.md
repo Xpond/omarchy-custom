@@ -264,11 +264,12 @@ file exceeds the normal 256 KiB content-preview limit.
 
 Marks are read whenever the folder's rows load — which a save also triggers —
 and whenever the browser opens; a short debounce combines duplicate requests,
-and one status covers the folder previews too. git reports an untracked folder
-as one entry instead of walking it, so an unignored `node_modules` costs one
-line rather than one per file; the status also names a path inside the listed
-folder, which makes git open that folder even when it is untracked. A changed
-file's diff is read
+and one status covers the folder previews too: it is read once into each
+folder's marks, so moving between folders costs nothing however many changes
+the repository holds. git reports an untracked folder as one entry instead of
+walking it, so an unignored `node_modules` costs one line rather than one per
+file; the status also names a path inside the listed folder, which makes git
+open that folder even when it is untracked. A changed file's diff is read
 when the selection settles, shown or not, so the heading can count it.
 `git-preview.py` resolves missing directories through their existing parent
 and chooses the comparison baseline. Each request owns its process and

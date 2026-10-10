@@ -251,33 +251,39 @@ function statusCommand(dir, script) {
   return ["python3", script, "status", dir]
 }
 
-// statusCommand's output as marks by entry name in the listed folder, or in its folder
-// `under`: a file's status letter as git prints it, or ● on a folder holding changes.
-function changes(text, under) {
-  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : ""), marks = Object.create(null)
+// statusCommand's output, read once into a part for the listed folder ("") and one for each of
+// its folders, so a selection reads only its own: marks by entry name, a file's status letter as
+// git prints it or ● on a folder holding changes, and the names deleted there, true for a folder.
+function readStatus(text) {
+  var cut = text.indexOf("\n"), prefix = text.slice(0, cut), out = Object.create(null)
+  out[""] = part()
   text.slice(cut + 1).split("\0").forEach(function (entry) {
     if (entry.slice(3, 3 + prefix.length) !== prefix) return
-    var path = entry.slice(3 + prefix.length).replace(/\/$/, "")
-    if (!path) return
-    var slash = path.indexOf("/")
-    marks[slash < 0 ? path : path.slice(0, slash)] = slash < 0 ? entry.slice(0, 2).trim().charAt(0) : "●"
+    var names = entry.slice(3 + prefix.length).replace(/\/$/, "").split("/", 3), code = entry.slice(0, 2)
+    if (!names[0]) return
+    for (var depth = 0; depth < Math.min(names.length, 2); depth++) {
+      var at = depth ? out[names[0]] || (out[names[0]] = part()) : out[""], deeper = names.length > depth + 1
+      at.marks[names[depth]] = deeper ? "●" : code.trim().charAt(0)
+      if (code.indexOf("D") >= 0) at.deleted[names[depth]] = deeper
+    }
   })
-  return marks
+  return out
 }
 
+function part() { return { marks: Object.create(null), deleted: Object.create(null) } }
+var UNCHANGED = part()
+
+// Marks by entry name in the listed folder, under "", or in one of its folders.
+function changes(status, under) { return (status[under] || UNCHANGED).marks }
+
 // Keep deleted files and their missing parent folders reachable in the existing list.
-function withDeleted(entries, text, dir, under, hidden) {
-  var out = entries.slice(), seen = Object.create(null)
+function withDeleted(entries, status, dir, under, hidden) {
+  var out = entries.slice(), seen = Object.create(null), deleted = (status[under] || UNCHANGED).deleted
   entries.forEach(function (e) { seen[e.name] = true })
-  var cut = text.indexOf("\n"), prefix = text.slice(0, cut) + (under ? under + "/" : "")
-  text.slice(cut + 1).split("\0").forEach(function (entry) {
-    if (entry.slice(0, 2).indexOf("D") < 0 || entry.slice(3, 3 + prefix.length) !== prefix) return
-    var path = entry.slice(3 + prefix.length), slash = path.indexOf("/")
-    var name = slash < 0 ? path : path.slice(0, slash)
-    if (!name || seen[name] || (!hidden && name.charAt(0) === ".")) return
-    seen[name] = true
+  Object.keys(deleted).forEach(function (name) {
+    if (seen[name] || (!hidden && name.charAt(0) === ".")) return
     out.push({ name: name, path: dir.replace(/\/$/, "") + "/" + (under ? under + "/" : "") + name,
-               isDir: slash >= 0, size: 0, modified: null, missing: true })
+               isDir: deleted[name], size: 0, modified: null, missing: true })
   })
   return out
 }
