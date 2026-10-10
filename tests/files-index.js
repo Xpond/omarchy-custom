@@ -69,12 +69,20 @@ put("src/new dir/x", "x"); put("src/fresh.md", "x"); put("src/staged.txt", "x");
 fs.rmSync(path.join(repo, "src/gone.txt"))
 assert.deepEqual({ ...F.changes(run(F.statusCommand(repo, script))) }, { src: "●" })
 assert.deepEqual({ ...F.changes(run(F.statusCommand(repo + "/src", script))) }, { "a.js": "M", "a*b": "M", axb: "M", deep: "●",
-  "new dir": "●", "fresh.md": "?", "staged.txt": "A", "gone.txt": "D" })
+  "new dir": "?", "fresh.md": "?", "staged.txt": "A", "gone.txt": "D" })
 // One status of a folder also marks inside each of its folders, for their previews.
 const status = run(F.statusCommand(repo, script))
 assert.deepEqual(F.changes(status, "src"), F.changes(run(F.statusCommand(repo + "/src", script))))
 assert.deepEqual({ ...F.changes(status, "src/deep") }, { "b.txt": "M" })
 assert.deepEqual({ ...F.changes(status, "sr") }, {}, "a folder is not a prefix of its neighbour's name")
+// An untracked folder is one entry however large, and its preview unmarked; inside, each entry is marked.
+fs.writeFileSync(path.join(repo, ".git/info/exclude"), "*.log\n")
+put("src/new dir/skip.log", "x")
+for (let i = 0; i < 500; i++) put("src/new dir/tree/" + i + "/f", "x")
+assert.equal(run(F.statusCommand(repo, script)), status, "git walked the untracked tree")
+assert.deepEqual({ ...F.changes(status, "src/new dir") }, {})
+assert.deepEqual({ ...F.changes(run(F.statusCommand(repo + "/src/new dir", script))) }, { x: "?", tree: "?" })
+assert.equal(F.changes(run(F.statusCommand(repo + "/src/new dir/tree", script)))["499"], "?")
 assert.deepEqual({ ...F.changes(run(F.statusCommand(os.tmpdir(), script))) }, {}, "outside a repository")
 assert.equal(F.readableDiff(run(F.diffCommand(repo + "/src", "a*b", script))), "@@ -1 +1 @@\n-old\n+new\n", "a*b was read as a glob")
 assert.equal(run(F.diffCommand(repo + "/src", "same.txt", script)), "")

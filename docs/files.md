@@ -220,7 +220,9 @@ stays on the file and asks you to save or discard it first.
 Inside a git repository the list marks what changed since the last commit:
 git's own letter on a file — `M` modified, `A` added, `D` deleted, `?`
 untracked — and a dot on a folder with changes anywhere under it, so changes
-can be followed down from the root. A folder's preview carries the same marks
+can be followed down from the root. A folder git does not track at all is `?`
+as a whole and its preview is unmarked; inside it, each entry has its own mark.
+A folder's preview carries the same marks
 between each name and its size. The preview is one plain text per column, and
 a plain text takes one colour, so the marks are a second text laid over room
 the rows keep for them, placed past the row's glyph by its measured width. A
@@ -256,7 +258,11 @@ file exceeds the normal 256 KiB content-preview limit.
 
 Marks are read whenever the folder's rows load — which a save also triggers —
 and whenever the browser opens; a short debounce combines duplicate requests,
-and one status covers the folder previews too. A changed file's diff is read
+and one status covers the folder previews too. git reports an untracked folder
+as one entry instead of walking it, so an unignored `node_modules` costs one
+line rather than one per file; the status also names a path inside the listed
+folder, which makes git open that folder even when it is untracked. A changed
+file's diff is read
 when the selection settles, shown or not, so the heading can count it.
 `git-preview.py` resolves missing directories through their existing parent
 and chooses the comparison baseline. Each request owns its process and
