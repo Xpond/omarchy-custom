@@ -47,10 +47,11 @@ if mode == "status":
             row[0] = "●".encode() if deeper else code.strip()[:1]
             if b"D" in code:
                 row[1] = b"d" if deeper else b"f"
-    # A part per folder, the listed one first and unnamed, cut by "/" since no name holds one. Each
-    # entry is its mark, then f or d if a deleted file or folder, else -, then its name.
-    sys.stdout.buffer.write(b"/".join(
-        name + b"\0" + b"\0".join(mark + gone + entry for entry, (mark, gone) in part.items())
+    # A part per folder, the listed one's always, so a status in a repository is never empty. Each
+    # opens with "/", which no name holds, and the folder's name, the listed one's empty; each entry
+    # is its mark, then f or d if a deleted file or folder, else -, then its name.
+    sys.stdout.buffer.write(b"".join(
+        b"/" + name + b"\0" + b"\0".join(mark + gone + entry for entry, (mark, gone) in part.items())
         for name, part in parts.items()))
     sys.exit(0)
 else:
