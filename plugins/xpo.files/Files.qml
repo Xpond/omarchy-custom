@@ -66,7 +66,7 @@ Item {
 
   // FolderListModel cannot combine directory filtering with our ranking.
   property var entries: []
-  readonly property var listedEntries: FilesIndex.withDeleted(root.entries, root.statusByFolder, root.listedDir, "", root.showHidden)
+  readonly property var listedEntries: FilesIndex.withDeleted(root.entries, root.listedStatus, root.listedDir, "", root.showHidden)
   readonly property string query: root.pathMode ? root.typedLeaf : root.filter
   readonly property var orderedEntries: FilesIndex.ordered(root.listedEntries, root.order)
   readonly property var rows: FilesIndex.matching(root.orderedEntries, root.query, root.order)
@@ -174,13 +174,14 @@ Item {
   // git's status of everything under the listed folder, reread whenever its rows load:
   // marks by entry name for the list, and for a folder's preview.
   property string status: ""
-  // Read once per status, so selecting a folder reads only its own part.
-  readonly property var statusByFolder: FilesIndex.readStatus(root.status)
+  // Only the parts shown are read: the listed folder's, and a selected folder's for its preview.
+  readonly property var listedStatus: FilesIndex.readStatus(root.status, "")
+  readonly property var childStatus: root.settledSel && root.settledSel.isDir
+    ? FilesIndex.readStatus(root.status, root.settledSel.name) : FilesIndex.UNCHANGED
   readonly property string gitScript:
     decodeURIComponent(String(Qt.resolvedUrl("git-preview.py")).replace(/^file:\/\//, ""))
-  readonly property var changes: FilesIndex.changes(root.statusByFolder, "")
-  readonly property var childChanges: root.settledSel && root.settledSel.isDir
-    ? FilesIndex.changes(root.statusByFolder, root.settledSel.name) : Object.create(null)
+  readonly property var changes: root.listedStatus.marks
+  readonly property var childChanges: root.childStatus.marks
   FilesGitProcess {
     id: gitStatus
     onFinished: function (output, code) {
@@ -235,7 +236,7 @@ Item {
   // Fill folder previews down the pane, then across it.
   property var dirEntries: []
   readonly property var previewEntries: root.settledSel && root.settledSel.isDir
-    ? FilesIndex.ordered(FilesIndex.withDeleted(root.dirEntries, root.statusByFolder, root.listedDir,
+    ? FilesIndex.ordered(FilesIndex.withDeleted(root.dirEntries, root.childStatus, root.listedDir,
                                                root.settledSel.name, root.showHidden), "name") : []
   readonly property bool showsDir: !!root.settledSel && root.settledSel.isDir
                                    && root.previewEntries.length > 0
