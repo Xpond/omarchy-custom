@@ -85,6 +85,17 @@ const room = " ".repeat(2 + 17 + 1)
 assert.deepEqual(F.markColumns(preview, 1, 38, 4, marks), [room + "●\n" + room + "M\n\n"])
 assert.deepEqual(F.markColumns(preview, 2, 80, 3, marks).map(c => c.split("\n").length), [2, 1], "marks split as the rows do")
 assert.deepEqual(F.columns(preview, 1, 38, 4, {}), F.columns(preview, 1, 38, 4), "no marks, no room kept")
+// A click finds the entry drawn at its column and line, and nothing on the overflow mark or past it.
+for (const [rows, chars, limit] of [[2, 80, 4], [2, 80, 3], [1, 38, 4], [3, 80, 4]]) {
+  const drawn = F.columns(preview, rows, chars, limit).map(c => c.split("\n"))
+  drawn.forEach((lines, column) => lines.concat([""]).forEach((text, line) => {
+    const e = F.columnEntry(preview, rows, chars, limit, column, line)
+    assert.equal(e ? F.row(e, F.shape(Math.min(4, limit), rows, chars)[1], false) : "", text === "…" ? "" : text,
+      "column " + column + " line " + line + " of " + rows + " rows, limit " + limit)
+  }))
+  assert.equal(F.columnEntry(preview, rows, chars, limit, -1, 0), null)
+  assert.equal(F.columnEntry(preview, rows, chars, limit, 0, -1), null)
+}
 
 for (const count of [0, 1, 399, 400, 401, 2000]) {
   let reads = 0

@@ -239,13 +239,14 @@ Item {
                                                root.settledSel.name, root.showHidden), "name") : []
   readonly property bool showsDir: !!root.settledSel && root.settledSel.isDir
                                    && root.previewEntries.length > 0
+  readonly property int dirLimit: 400
   readonly property int dirRows: Math.max(1, Math.floor(preview.paneHeight / root.lineHeight))
   readonly property int listPage: Math.max(1, Math.floor(list.view.height / root.rowHeight) - 1)
   readonly property int dirPaneChars: Math.max(20, Math.floor(preview.paneWidth / codeMetrics.advanceWidth))
   readonly property var dirColumns: root.showsDir
-    ? FilesIndex.columns(root.previewEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
+    ? FilesIndex.columns(root.previewEntries, root.dirRows, root.dirPaneChars, root.dirLimit, root.childChanges) : []
   readonly property var dirMarks: root.showsDir
-    ? FilesIndex.markColumns(root.previewEntries, root.dirRows, root.dirPaneChars, 400, root.childChanges) : []
+    ? FilesIndex.markColumns(root.previewEntries, root.dirRows, root.dirPaneChars, root.dirLimit, root.childChanges) : []
   // Align the first preview line with the centered text in the first list row.
   readonly property int dirTopPad: Math.max(0, Math.round((root.rowHeight - codeMetrics.height) / 2))
   readonly property string previewBody:
@@ -412,6 +413,18 @@ Item {
     root.enter(FilesIndex.parentOf(from))
     if (root.dir !== from) { root.pending = from.slice(from.lastIndexOf("/") + 1); root.index = -1 }
   }
+
+  // A click on an entry in a folder's preview enters that folder, landing on the entry; the second
+  // click of a double click opens it, whatever the preview shows by then.
+  property var picked: null
+  function pickPreview(column, line) {
+    root.picked = root.showsDir && !root.naming ? FilesIndex.columnEntry(root.previewEntries, root.dirRows,
+      root.dirPaneChars, root.dirLimit, column, line) : null
+    if (!root.picked) return
+    root.enter(root.settledSel.path)
+    root.pending = root.picked.name; root.index = -1
+  }
+  function openPicked() { if (!root.naming) ops.activate(root.picked) }
 
   // At home, hand Backspace navigation to the wheel, or back to the pinned search.
   function toWheel() {
@@ -590,8 +603,8 @@ Item {
 
   function childEntries() {
     if (!root.settledSel || !root.settledSel.isDir) return []
-    // The preview displays 400 entries; one extra preserves its overflow ellipsis.
-    return FilesIndex.snapshot(childFolder, 401)
+    // One past what the preview displays preserves its overflow ellipsis.
+    return FilesIndex.snapshot(childFolder, root.dirLimit + 1)
   }
 
   FileView {

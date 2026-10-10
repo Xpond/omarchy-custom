@@ -32,8 +32,14 @@ def line(source, pattern):
 
 with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     base = Path(temporary)
-    for name, plugin in [("FilesIndex.js", "xpo.files"), ("MenuIndex.js", "xpo.wheel"), ("MenuKeys.js", "xpo.wheel")]:
+    for name, plugin in [("FilesIndex.js", "xpo.files"), ("FilesPreview.qml", "xpo.files"), ("MenuIndex.js", "xpo.wheel"),
+                         ("MenuKeys.js", "xpo.wheel"), ("WheelResults.qml", "xpo.wheel"), ("ClickShield.qml", "xpo.wheel"),
+                         ("PanelIcon.qml", "xpo.wheel")]:
         shutil.copyfile(repo / "plugins" / plugin / name, base / name)
+    # The shell's own components for real plugin QML, and QtTest's events for real pointer input.
+    for name in ["Commons", "Ui"]:
+        (base / name).symlink_to(Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell" / name)
+    (base / "Pointer.qml").write_text("import QtTest\nTestEvent {}\n")
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QPA_PLATFORMTHEME="generic",
                QT_FORCE_STDERR_LOGGING="1", XDG_RUNTIME_DIR=str(base / "runtime"),
                XDG_CACHE_HOME=str(base / "cache"))

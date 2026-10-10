@@ -290,4 +290,16 @@ Item {
     font.family: Style.font.menuFamily
     font.pixelSize: Style.font.bodySmall
   }
+
+  // A click picks the folder entry under it and a double click opens the pick. Over the scroller
+  // rather than in it, so the second click counts whatever the pane shows by then.
+  MouseArea {
+    anchors.fill: scroller
+    enabled: !panel.editing
+    onClicked: function (mouse) {
+      var p = mapToItem(folderView, mouse.x, mouse.y), column = folderView.childAt(p.x, p.y)
+      panel.pickPreview(column ? column.index : -1, Math.floor(p.y / panel.lineHeight))
+    }
+    onDoubleClicked: panel.openPicked()
+  }
 }
