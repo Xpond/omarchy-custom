@@ -42,7 +42,7 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         onPositionChanged: function (mouse) {
-          if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) panel.index = entry.index
+          if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) { panel.pending = ""; panel.index = entry.index }
         }
         onClicked: operations.activate(entry.modelData)
       }
