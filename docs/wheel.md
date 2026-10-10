@@ -86,7 +86,8 @@ most likely to hit by accident -- the thing shaped like a text field, and the
 gap beside a row you missed -- must not count as "away". Neither is clickable
 in any other sense, and neither shows a hover state, because there is nothing
 to click for: the field always holds the keyboard, so a click can do nothing a
-keystroke does not already do.
+keystroke does not already do. The rows themselves are the exception: hovering
+one selects it and a click runs it, as on the ring.
 
 ## Pinning
 
@@ -363,6 +364,12 @@ very same object, re-runs every binding on it. So whatever the wheel re-reads on
 open is kept as raw text in a `string` (`conditionText`, `themeText`,
 `lockText`…) and parsed by bindings on that, and an open whose answers have not
 changed rebuilds nothing.
+
+**Inside a `MouseArea`, `wheel` is the `MouseArea`'s.** A handler looks up a bare
+name on its own object first, and every `MouseArea` has a `wheel` signal, so the
+results' `wheel` property is out of reach there: `wheel.run` throws, and for a
+month hovering a row selected nothing and a click ran nothing. Those handlers say
+`stack.wheel`; `python3 tests/runtime.py` hovers and clicks the real rows.
 
 **Do not use `omarchy-shell -q` when you need the answer.** Quiet mode
 suppresses stdout (`if (( !QUIET )) && [[ -n $output ]]`), so the result never
