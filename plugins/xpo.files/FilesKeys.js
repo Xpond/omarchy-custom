@@ -104,6 +104,7 @@ function onKey(panel, ops, preview, event) {
     if (!panel.filter && event.text === "/") panel.filter = panel.dir.slice(panel.home.length) + "/"
     else panel.filter += event.text
     panel.index = 0
+    panel.pending = ""
     event.accepted = true
   }
 }

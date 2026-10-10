@@ -208,3 +208,11 @@ typist.filter = ""; typist.dir = typist.home
 typeKey("Key_Slash", 0, "/")
 assert.equal(typist.filter, "/", "at home / is home")
 console.log("ok: / starts the path where you are")
+
+// A key typed while going up waits for the parent is the user's choice; the landing gives way.
+typist.pending = "gone"; typist.index = -1
+typeKey("Key_G", 0, "g")
+assert.equal(typist.pending, "", "typing left the landing armed to jump the filtered rows")
+assert.equal(typist.index, 0)
+console.log("ok: typing during a landing cancels it")
+
