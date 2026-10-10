@@ -192,7 +192,11 @@ Item {
     ? FilesIndex.changes(root.statusByFolder, root.settledSel.name) : Object.create(null)
   FilesGitProcess {
     id: gitStatus
-    onFinished: function (output, code) { root.status = code === 0 ? output : "" }
+    onFinished: function (output, code) {
+      root.status = code === 0 ? output : ""
+      // The rows came first, so a folder left that is in neither, as a hidden one, is not coming.
+      if (root.index < 0) { root.pending = ""; root.index = 0 }
+    }
   }
   function readChanges() {
     gitStatus.cancel()
@@ -202,7 +206,9 @@ Item {
   Timer {
     id: statusSoon
     interval: 60
-    onTriggered: gitStatus.start(FilesIndex.statusCommand(root.listedDir, root.gitScript))
+    // Read once the rows are in, so the deleted rows it adds come below them.
+    onTriggered: if (folder.status !== FolderListModel.Loading)
+      gitStatus.start(FilesIndex.statusCommand(root.listedDir, root.gitScript))
   }
   onListedDirChanged: {
     root.status = ""
@@ -291,10 +297,10 @@ Item {
       + (root.settledSel.modified
          ? "  ·  " + Qt.formatDateTime(root.settledSel.modified, "d MMM yyyy") : "")
 
-  // Empty while the preview has content of its own, or waits for a diff.
+  // Empty while the preview has content of its own, or waits for a diff or a landing.
   readonly property string previewNote:
     root.editing ? ""
-    : !root.settledSel ? (root.query ? "No match" : "Empty")
+    : !root.settledSel ? (root.pending ? "" : root.query ? "No match" : "Empty")
     : root.settledSel.isDir ? (root.showsDir ? "" : "Empty folder")
     : root.showsCode || root.previewBody || root.showsDiff ? ""
     : root.settledSel.missing ? "Deleted · Ctrl+D shows changes"
@@ -408,11 +414,12 @@ Item {
     root.pending = ""
   }
 
-  // Land on the folder just left, which rows claim once the parent loads.
+  // Land on the folder just left, which rows claim once the parent loads. A deleted one comes
+  // only with git's status, after the rows, so nothing is selected until it lands.
   function up() {
     var from = root.dir
     root.enter(FilesIndex.parentOf(from))
-    if (root.dir !== from) root.pending = from.slice(from.lastIndexOf("/") + 1)
+    if (root.dir !== from) { root.pending = from.slice(from.lastIndexOf("/") + 1); root.index = -1 }
   }
 
   // At home, hand Backspace navigation to the wheel, or back to the pinned search.
@@ -422,9 +429,12 @@ Item {
                              "xpo.wheel", "back", ""])
   }
 
+  // A move is the user's own choice, so a landing still on its way gives way to it. With nothing
+  // selected, down starts above the first row and up below the last.
   function move(step) {
-    var n = root.rows.length
-    if (n > 0) root.index = (root.index + step + n) % n
+    var n = root.rows.length, from = root.index < 0 && step < 0 ? n : root.index
+    root.pending = ""
+    if (n > 0) root.index = (from + step + n) % n
     list.view.positionViewAtIndex(root.index, ListView.Contain)
   }
 

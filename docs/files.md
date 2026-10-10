@@ -232,10 +232,12 @@ changed file's heading leads with how many lines it adds and removes,
 `+11 −2  ·  name`, set off by the same dot as the facts after the name.
 
 Deleted files remain in the list as read-only rows, below everything that
-exists: they arrive with git's status, just after the folder's rows, and so
-move no selection already made. Missing parent folders remain navigable too;
-Enter on a deleted file shows its diff. These rows cannot be edited, renamed,
-copied, moved, or trashed.
+exists: they arrive with git's status, which is read once the folder's rows are
+in, and so move no selection already made. Missing parent folders remain
+navigable too. Backing out of one selects nothing until its row arrives and
+then lands on it, rather than resting on the top row first; a key pressed
+meanwhile wins. Enter on a deleted file shows its diff. These rows cannot be
+edited, renamed, copied, moved, or trashed.
 
 `Ctrl+D` shows a changed file's diff in place of its contents — staged and
 unstaged, against `HEAD`, coloured in the highlighter's One Dark. git's header
@@ -279,7 +281,8 @@ collector; cancelled output cannot update a later selection. Outside a
 repository the helper prints nothing.
 `node tests/files-index.js` and `node tests/files-git.js` exercise real Git
 repositories; `python3 tests/runtime.py` also checks cancellation, deleted
-directory navigation, large-file previews, and pairing time in Quickshell.
+directory navigation and backing out of it, large-file previews, and pairing
+time in Quickshell.
 `--no-optional-locks` keeps a status read off the index lock a commit may
 want; `--literal-pathspecs` keeps `a*b` from diffing `axb` too.
 

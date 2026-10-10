@@ -189,3 +189,73 @@ if name == 'old.txt':
     }
   } }
 ''')
+
+    # Backing out lands straight on the folder just left, sampled between events as a frame would be.
+    # A deleted folder arrives only with git's status, after the parent's rows: nothing is selected until
+    # then, rather than the top row first. A key pressed meanwhile wins; a folder that never arrives, as a
+    # hidden one, gives the top row back once the status is in. A folder slow to list, its status quick
+    # (ignored, and asked for at once), still gets the status after its rows.
+    tree = base / "up-tree"
+    for name in ["a/f", "b/f", "gone/f", ".hid/f", "wide/aaa/f", "wide/sub/f"]:
+        (tree / name).parent.mkdir(parents=True)
+        (tree / name).write_text("x\n")
+    for i in range(20000):
+        (tree / "wide" / str(i)).touch()
+    (tree / ".gitignore").write_text("wide/\n")
+    for args in [["init", "-q"], ["add", "."], ["commit", "-qm", "base"]]:
+        subprocess.run(["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t",
+                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+    shutil.rmtree(tree / "gone")
+    run("git-up-lands", '''
+  property bool shown: true
+  property string home: ''' + json.dumps(str(base)) + '''
+  readonly property string tree: ''' + json.dumps(str(tree)) + '''
+  property string dir: root.tree
+  property bool showHidden: false
+  property string order: 'name'
+  property var entries: []
+  property var settledSel: null
+  property bool showsImage: false
+  property bool diffMode: false
+  property bool editing: false
+  QtObject { id: preview; function resetScroll() {} }
+  QtObject { id: list; property QtObject view: QtObject { function positionViewAtIndex(i, mode) {} } }
+''' + files[files.index("  // A leading / or ~ enters"):files.index("  property bool showHidden:")]
+        + files[start:end].replace('Qt.resolvedUrl("git-preview.py")', json.dumps(str(repo / "plugins/xpo.files/git-preview.py")))
+                          .replace("interval: 60", "interval: 1")
+        + "".join(line(files, p) for p in [r"^  readonly property var listedEntries: .*", r"^  readonly property string query: .*",
+                                           r"^  readonly property var orderedEntries: .*", r"^  readonly property var rows: .*"])
+        + files[files.index("  readonly property var sel:"):files.index("  // Debounce preview work")]
+        + files[files.index("  // A one-shot selection"):files.index("  function close()")]
+        + files[files.index("  // Empty while the preview"):files.index("  // Payloads may choose")]
+        + "".join(block(files, p) + "\n" for p in [r"^  FolderListModel \{\n    id: folder", r"^  function enter\(",
+                                                   r"^  function up\(", r"^  function move\(", r"^  onRowsChanged: \{"]) + '''
+  property var cases: [{ from: 'gone', want: 'gone' }, { from: 'a', want: 'a' }, { from: '.hid', want: 'a' },
+                       { from: 'gone', key: 1, want: 'a' }, { from: 'gone', key: -1, want: 'wide' },
+                       { from: 'wide/sub', want: 'sub' }]
+  property int at: 0
+  property bool left: false
+  property bool pressed: false
+  property real arrived: 0
+  property var seen: []
+  Timer { interval: 1; running: true; repeat: true; onTriggered: {
+    var c = root.cases[root.at], name = root.sel ? root.sel.name : '', from = root.tree + '/' + c.from
+    if (!root.left) {
+      if (root.dir !== from) { root.dir = from; return }
+      if (!root.rows.length) return
+      root.left = true; root.pressed = false; root.arrived = 0; root.seen = []
+      root.up(); return
+    }
+    if (name && name !== root.seen[root.seen.length - 1]) root.seen.push(name)
+    if (root.pending && root.previewNote) { console.error('FAIL the preview said ' + root.previewNote + ' while landing'); Qt.exit(1); return }
+    if (c.key && !root.pressed && root.rows.length) { root.pressed = true; root.move(c.key) }
+    if (!root.arrived && root.status) root.arrived = Date.now()
+    if (!root.arrived || Date.now() - root.arrived < 30) return
+    if (root.seen.join() !== c.want) {
+      console.error('FAIL backing out of ' + c.from + (c.key ? ' with a key' : '') + ' selected ' + root.seen.join())
+      Qt.exit(1); return
+    }
+    root.left = false
+    if (++root.at === root.cases.length) { console.log('PASS'); Qt.quit() }
+  } }
+''')
