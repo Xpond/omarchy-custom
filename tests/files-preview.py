@@ -96,6 +96,7 @@ Scope {
     property string previewNote: ""
     property int gutterGap: 16
     property int dirTopPad: 7
+    property color hoverFill: "transparent"
   }
   Panel { id: before }
   Panel { id: after }

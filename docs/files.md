@@ -82,11 +82,11 @@ stutter. The choice holds across the overlay and its windows while the shell run
 
 The mouse works too — hover only tints a row, a click selects it, a double click
 opens it, a click outside the card closes it, and the wheel scrolls whichever
-pane is under the pointer. A click on an entry in a folder's preview enters the
-folder with that entry selected, and a double click opens it. The click area
-lies over the whole preview, so the second click counts whatever the preview
-shows by then; dragging no longer scrolls the preview, the wheel and
-`Shift`+arrows do.
+pane is under the pointer. In a folder's preview, the entry under the pointer is
+tinted too; a click on it enters the folder with that entry selected, and a
+double click opens it. The click area lies over the whole preview, so the second
+click counts whatever the preview shows by then; dragging no longer scrolls the
+preview, the wheel and `Shift`+arrows do.
 
 ## Home is the floor
 
@@ -514,6 +514,11 @@ folders first *and* the filter's best match first *and* then alphabetical.
 `Delete` act on, so only a click moves it. When hover claimed it, a pointer
 drifting over the list moved the selection while you typed a rename, and `Return`
 renamed whichever file it had drifted to.
+
+**A landing scrolls the list only once the list holds the new rows.**
+`onRowsChanged` can run before the `ListView` takes the new model, and scrolling
+then moves the old rows: the selection landed far down a folder while the list
+stayed at the top. `claimPending()` asks for the scroll with `Qt.callLater`.
 
 **A change handler can see a stale binding.** `showsCode` is a binding on
 `previewText`, and `onPreviewTextChanged` can run *before* that binding

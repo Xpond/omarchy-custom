@@ -215,6 +215,7 @@ const picker = { showsDir: true, naming: "", previewEntries: [], dirRows: 1, dir
 const pickScope = { root: picker, ops: { activate: e => openedPicks.push(e) },
   FilesIndex: { columnEntry: (entries, rows, chars, limit, column, line) => column === 0 && line === 1 ? entry : null } }
 const pick = method(source, "pickPreview", pickScope), openPicked = method(source, "openPicked", pickScope)
+picker.previewEntry = method(source, "previewEntry", pickScope)
 pick(0, 1)
 assert.deepEqual([picker.dir, picker.pending, picker.index], ["/home/test/docs", "b.txt", -1], "a click did not land on the entry")
 openPicked()
