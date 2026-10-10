@@ -247,20 +247,21 @@ that replaced them; instead each old line sits above the most alike new line,
 in order, with what changed in bold. A change inside a word bolds the whole
 word, one at a word's edge only itself; past ASCII every character counts as a
 word's, so bold never splits an emoji, its skin tone or an accent. A line
-without its last newline ends in a circle-slash, Nerd Font's octicon at
-U+F468, for git's `\ No newline at end of file`: a save that only adds the
-newline shows that mark rather than two identical lines.
-Lines sharing under half their length at
-their two ends are not alike, and stay plain removals and additions. Pairing
-has a fixed work budget; larger blocks keep Git's unified order with every
-line intact, so selecting a heavily rewritten file cannot stall on pairing.
-The gutter numbers lines as the file now has them, so a removed line has none.
-Unchanged files and images keep their usual preview, so the arrows can walk
-the list with the diff on. A changed file's preview waits blank for its diff
-rather than flash the file, which loads first; an empty diff gives it back.
-The choice holds while the shell runs, and while it is on, `ctrl+d hide diff`
-is lit in the legend: the browser reopens in the diff, and an unexplained diff
-looks like a broken file. `Ctrl+E` edits the file, never the diff.
+without its last newline ends in a circle-slash, Nerd Font's octicon at U+F468,
+for git's `\ No newline at end of file`: a save that only adds the newline
+shows that mark rather than two identical lines. The mark counts for nothing
+when lines are compared, so even a lone `}` pairs. Lines sharing under half
+their length at their two ends are not alike, and stay plain removals and
+additions. Pairing has a fixed work budget; larger blocks keep Git's unified
+order with every line intact, so selecting a heavily rewritten file cannot
+stall on pairing. The gutter numbers lines as the file now has them, so a
+removed line has none. Unchanged files and images keep their usual preview, so
+the arrows can walk the list with the diff on. A changed file's preview waits
+blank for its diff rather than flash the file, which loads first; an empty diff
+gives it back. The choice holds while the shell runs, and while it is on,
+`ctrl+d hide diff` is lit in the legend: the browser reopens in the diff, and
+an unexplained diff looks like a broken file. `Ctrl+E` edits the file, never
+the diff.
 
 Untracked files and files in repositories without a first commit compare
 against an empty file. A small diff remains readable even when the current

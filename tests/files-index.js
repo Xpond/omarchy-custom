@@ -47,6 +47,10 @@ assert.equal(F.styledDiff(diff), ['<font color="#61afef">⋯&#32;def&#32;f():</f
 const pair = (a, b) => F.styledDiff(F.readableDiff("@@ -1 +1 @@\n" + a + "\n" + b + "\n")).split("<br>").slice(1)
 // A save that only adds the last newline: the old line's mark is what changed, not two identical lines.
 assert.deepEqual(pair("-end\n\\ No newline at end of file", "+end"), [red("-end<b>&#32;\uf468</b>"), green("+end<b></b>")])
+// The mark is no text of its own: a line too short to outweigh it still pairs, and two marks alone make no pair.
+assert.deepEqual(pair("-}\n\\ No newline at end of file", "+}"), [red("-}<b>&#32;\uf468</b>"), green("+}<b></b>")])
+assert.deepEqual(pair("-old\n\\ No newline at end of file", "+new\n\\ No newline at end of file"),
+  [red("-old&#32;\uf468"), green("+new&#32;\uf468")])
 // A change at a word's edge bolds only itself; one inside a word takes the word, on either side.
 assert.deepEqual(pair("-  foo,", "+  foo"), [red("-&#32;&#32;foo<b>,</b>"), green("+&#32;&#32;foo<b></b>")])
 assert.deepEqual(pair("-x = 1;", "+x = 10;"), [red("-x&#32;=&#32;<b>1</b>;"), green("+x&#32;=&#32;<b>10</b>;")])
