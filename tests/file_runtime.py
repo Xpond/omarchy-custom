@@ -47,6 +47,17 @@ def check(files, ops, base, run, block):
     pointer.mouseClick(preview, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
     pointer.mouseDoubleClickSequence(preview, p.x, p.y + 20, Qt.LeftButton, Qt.NoModifier, -1)
     if (root.picks.join() !== "1:3,1:4,open") { console.error("FAIL clicks in the preview gave", root.picks.join()); Qt.exit(1); return }
+    // Another folder under the resting pointer: new columns all sit at x 0 until the Row places them.
+    pointer.mouseMove(preview, p.x, p.y, -1, Qt.NoButton, Qt.NoModifier)
+    root.entries = root.entries.map(e => ({ name: "f" + e.name, isDir: false, size: 1, modified: null }))
+    swapped.start()
+  } }
+  Timer { id: swapped; interval: 100; onTriggered: {
+    var column = root.find(c => c.text === root.dirColumns[1])[0], p = column.mapToItem(preview, 10, 3 * 20 + 10)
+    var tint = root.find(c => c.line !== undefined && c.column !== undefined && c.visible)[0]
+    if (!tint || tint.column !== column || tint.line !== 3) { console.error("FAIL a folder under the pointer tinted the wrong entry"); Qt.exit(1); return }
+    pointer.mouseClick(preview, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+    if (root.picks.join() !== "1:3,1:4,open,1:3") { console.error("FAIL a click on a folder under the pointer gave", root.picks.join()); Qt.exit(1); return }
     pointer.mouseWheel(preview, p.x, p.y, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
     scrolled.start()
   } }

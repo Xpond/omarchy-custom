@@ -139,7 +139,8 @@ Item {
       id: hovered
       readonly property real px: pointer.mouseX + scroller.contentX - folderView.x
       readonly property real py: pointer.mouseY + scroller.contentY - folderView.y
-      readonly property Item column: pointer.containsMouse && panel.dirColumns.length ? folderView.childAt(px, py) : null
+      readonly property Item column: pointer.containsMouse && panel.dirColumns.length && folderView.placed
+                                    ? folderView.childAt(px, py) : null
       readonly property int line: Math.floor(py / panel.lineHeight)
       visible: !!column && !!panel.previewEntry(column.index, line)
       x: folderView.x + (column ? column.x : 0) - panel.gutterGap / 2
@@ -152,6 +153,9 @@ Item {
 
     Row {
       id: folderView
+      // New columns all sit at x 0 until the Row places them, so the tint looks again after.
+      property int placed: 0
+      onPositioningComplete: placed++
       visible: panel.showsDir
       y: panel.dirTopPad
       spacing: panel.gutterGap * 2
