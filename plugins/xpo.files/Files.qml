@@ -64,15 +64,6 @@ Item {
     return null
   }
 
-  // Ignore Qt's synthetic hover moves when filtered rows shift under the pointer.
-  property point hoverAt: Qt.point(-1, -1)
-  function hoverMoved(pt) {
-    if (root.editing) return false
-    if (root.hoverAt.x === pt.x && root.hoverAt.y === pt.y) return false
-    root.hoverAt = pt
-    return true
-  }
-
   // FolderListModel cannot combine directory filtering with our ranking.
   property var entries: []
   readonly property var listedEntries: FilesIndex.withDeleted(root.entries, root.statusByFolder, root.listedDir, "", root.showHidden)

@@ -69,11 +69,23 @@ assert.equal(busy.root.op, undefined)
 assert.match(calls.at(-1), /still running/)
 
 const listSource = read("plugins/xpo.files/FilesList.qml")
-const clickHandler = listSource.match(/onClicked:\s*([^\n]+)/)[1]
-const activated = []
-new Function("operations", "panel", "entry", clickHandler)(
-  { activate: entry => activated.push(entry) }, {}, { modelData: { name: "picked" } })
-assert.deepEqual(activated, [{ name: "picked" }], "clicking a file row does not activate it")
+// Hover only tints; a click selects and a double click opens, neither while naming or editing.
+assert.doesNotMatch(listSource, /onPositionChanged|onEntered/, "hovering a row selects it")
+const mouse = name => new Function("operations", "panel", "entry", listSource.match(new RegExp(name + ":\\s*([^\\n]+)"))[1])
+const activated = [], row = { index: 4, modelData: { name: "picked" } }
+const clicked = { index: 0, pending: "gone", naming: "", editing: false }
+const operations = { activate: entry => activated.push(entry) }
+mouse("onClicked")(operations, clicked, row)
+assert.deepEqual([clicked.index, clicked.pending, activated], [4, "", []], "a click must select, and only select")
+mouse("onDoubleClicked")(operations, clicked, row)
+assert.deepEqual(activated, [row.modelData], "a double click does not open the row")
+for (const busy of [{ naming: "rename" }, { editing: true }]) {
+  const held = Object.assign({ index: 0, pending: "", naming: "", editing: false }, busy)
+  mouse("onClicked")(operations, held, row)
+  assert.equal(held.index, 0, "a click moved the selection away from the row being " + (held.naming ? "renamed" : "edited"))
+}
+mouse("onDoubleClicked")(operations, { naming: "rename" }, row)
+assert.equal(activated.length, 1, "a double click opened a row mid-rename")
 assert.match(source, /FilesList\s*\{[^}]*operations:\s*ops/s,
   "Files.qml does not hand its operations object to the list")
 
@@ -215,4 +227,3 @@ typeKey("Key_G", 0, "g")
 assert.equal(typist.pending, "", "typing left the landing armed to jump the filtered rows")
 assert.equal(typist.index, 0)
 console.log("ok: typing during a landing cancels it")
-
