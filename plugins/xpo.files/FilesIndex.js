@@ -192,10 +192,14 @@ function shared(a, b) {
   return [p, s]
 }
 
+// The newline mark is a note on the line rather than its text, so it leaves a pair as alike as it was.
 function likeness(a, b) {
+  a = unmarked(a); b = unmarked(b)
   var ends = shared(a, b)
   return (ends[0] + ends[1]) / Math.max(a.length, b.length, 1)
 }
+
+function unmarked(line) { return line.endsWith(NO_NEWLINE) ? line.slice(0, -NO_NEWLINE.length) : line }
 
 // Beyond ASCII everything counts as a word character, so bold never splits an emoji, its
 // skin tone, a joiner or an accent from the character they belong to.
