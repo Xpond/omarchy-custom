@@ -142,11 +142,11 @@ function styledCode(text) {
 // heading already names the file. git lists a whole block of removed lines before the
 // lines that replaced them; instead each old line goes straight above the most alike new
 // line still unused, in order, and the new lines it passes over go first as plain additions.
-// A "\ No newline at end of file" note would split a block, so it goes too.
+// A "\ No newline at end of file" note would split a block, so it becomes a mark on its line.
 function readableDiff(text) {
   var at = ("\n" + text).indexOf("\n@@")
   if (at < 0) return text
-  var lines = text.slice(at).split("\n").filter(function (l) { return l.charAt(0) !== "\\" })
+  var lines = text.slice(at).replace(/\n\\[^\n]*/g, NO_NEWLINE).split("\n")
   // A fixed character-comparison budget bounds pairing work on the UI thread.
   // Once spent, keep Git's ordinary unified order without dropping any lines.
   var out = [], i = 0, budget = 50000
@@ -177,6 +177,10 @@ function readableDiff(text) {
   return out.join("\n")
 }
 
+// Ends a line without its last newline: Nerd Font's octicon circle-slash. The space keeps it
+// out of the line's last word, so a save that only adds the newline bolds the mark alone.
+var NO_NEWLINE = " \uf468"
+
 // Lines whose shared start and end cover this much of the longer are one line, changed.
 var ALIKE = 0.5
 
@@ -193,11 +197,17 @@ function likeness(a, b) {
   return (ends[0] + ends[1]) / Math.max(a.length, b.length, 1)
 }
 
-// What differs between a line and the one it pairs with, widened to whole words, in bold.
+// Beyond ASCII everything counts as a word character, so bold never splits an emoji, its
+// skin tone, a joiner or an accent from the character they belong to.
+function wordAt(text, at) { return /[\w\u0080-\uffff]/.test(text.charAt(at)) }
+
+// What differs between a line and the one it pairs with, in bold. A change that starts or ends
+// inside a word, on either side, takes the whole word; one at a word's edge only itself.
 function emboldened(line, other) {
   var ends = shared(line, other), p = ends[0], s = ends[1]
-  while (p > 0 && /\w/.test(line[p - 1])) p--
-  while (s > 0 && /\w/.test(line[line.length - s])) s--
+  if (wordAt(line, p) || wordAt(other, p)) while (p > 0 && wordAt(line, p - 1)) p--
+  if (wordAt(line, line.length - s - 1) || wordAt(other, other.length - s - 1))
+    while (s > 0 && wordAt(line, line.length - s)) s--
   return styledCode(line.slice(0, p)) + "<b>" + styledCode(line.slice(p, line.length - s)) + "</b>"
     + styledCode(line.slice(line.length - s))
 }

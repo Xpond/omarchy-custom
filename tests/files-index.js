@@ -31,19 +31,29 @@ assert.equal(F.lineLabel("one\ntwo"), "2 lines")
 assert.equal(F.lineLabel("one\ntwo\n"), "2 lines")
 console.log("ok: line counts")
 
-// git's header goes once a hunk follows, and so do "\ No newline" notes. Each old line sits above the most
+// git's header goes once a hunk follows; a "\ No newline" note marks its line. Each old line sits above the most
 // alike new line, in order: new lines it passes over come first, lines alike to nothing stay alone. The gutter
 // numbers lines as the file now has them, and the heading counts what was added and removed.
 const diff = F.readableDiff("diff --git a/x b/x\nindex 1..2 100644\n--- a/x\n+++ b/x\n@@ -8,4 +8,5 @@ def f():\n a <b>\n-if (isDir) go()\n-x = head(root.fullText)\n-gone\n\\ No newline at end of file\n+// note\n+if (isFile) go()\n+x = head(root.shownText)\n@@ -98,2 +99,2 @@\n z\n-old\n+new\n")
-assert.equal(diff, "@@ -8,4 +8,5 @@ def f():\n a <b>\n+// note\n-if (isDir) go()\n+if (isFile) go()\n-x = head(root.fullText)\n+x = head(root.shownText)\n-gone\n@@ -98,2 +99,2 @@\n z\n-old\n+new\n")
+assert.equal(diff, "@@ -8,4 +8,5 @@ def f():\n a <b>\n+// note\n-if (isDir) go()\n+if (isFile) go()\n-x = head(root.fullText)\n+x = head(root.shownText)\n-gone \uf468\n@@ -98,2 +99,2 @@\n z\n-old\n+new\n")
 assert.deepEqual(F.diffNumbers(diff).split("\n"), ["", "8", "9", "", "10", "", "11", "", "", "99", "", "100"])
 assert.deepEqual(F.diffStat(diff), [4, 4])
 // Hunks become ⋯ breaks carrying git's context; a pair shows what changed in bold, widened to whole words.
 const red = t => '<font color="#e06c75">' + t + "</font>", green = t => '<font color="#98c379">' + t + "</font>"
 assert.equal(F.styledDiff(diff), ['<font color="#61afef">⋯&#32;def&#32;f():</font>', "&#32;a&#32;&lt;b&gt;",
   green("+//&#32;note"), red("-if&#32;(<b>isDir</b>)&#32;go()"), green("+if&#32;(<b>isFile</b>)&#32;go()"),
-  red("-x&#32;=&#32;head(root.<b>fullText</b>)"), green("+x&#32;=&#32;head(root.<b>shownText</b>)"), red("-gone"),
+  red("-x&#32;=&#32;head(root.<b>fullText</b>)"), green("+x&#32;=&#32;head(root.<b>shownText</b>)"), red("-gone&#32;\uf468"),
   '<font color="#61afef">⋯</font>', "&#32;z", red("-old"), green("+new")].join("<br>"))
+const pair = (a, b) => F.styledDiff(F.readableDiff("@@ -1 +1 @@\n" + a + "\n" + b + "\n")).split("<br>").slice(1)
+// A save that only adds the last newline: the old line's mark is what changed, not two identical lines.
+assert.deepEqual(pair("-end\n\\ No newline at end of file", "+end"), [red("-end<b>&#32;\uf468</b>"), green("+end<b></b>")])
+// A change at a word's edge bolds only itself; one inside a word takes the word, on either side.
+assert.deepEqual(pair("-  foo,", "+  foo"), [red("-&#32;&#32;foo<b>,</b>"), green("+&#32;&#32;foo<b></b>")])
+assert.deepEqual(pair("-x = 1;", "+x = 10;"), [red("-x&#32;=&#32;<b>1</b>;"), green("+x&#32;=&#32;<b>10</b>;")])
+// Beyond ASCII everything counts as a word character, so bold never splits an emoji, its skin tone or an accent.
+assert.deepEqual(pair("-a 😀", "+a 😃"), [red("-a&#32;<b>😀</b>"), green("+a&#32;<b>😃</b>")])
+assert.deepEqual(pair("-👍🏻 ok", "+👍🏽 ok"), [red("-<b>👍🏻</b>&#32;ok"), green("+<b>👍🏽</b>&#32;ok")])
+assert.deepEqual(pair("-cafe\u0301", "+cafe"), [red("-<b>cafe\u0301</b>"), green("+<b>cafe</b>")])
 // Without a hunk the header is the whole story: grey, unnumbered, uncounted.
 const binary = "diff --git a/p b/p\nBinary files a/p and b/p differ\n"
 const grey = t => '<font color="#7f848e">' + t + "</font>"
