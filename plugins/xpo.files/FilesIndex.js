@@ -249,40 +249,34 @@ function diffNumbers(text) {
   }).join("\n")
 }
 
-// The listed folder's place in its repository, then git's status of everything under it.
+// git's status of everything under the listed folder, sorted into a part per folder.
 // Outside a repository it prints nothing.
 function statusCommand(dir, script) {
   return ["python3", script, "status", dir]
 }
 
-// statusCommand's output, read once into a part for the listed folder ("") and one for each of
-// its folders, so a selection reads only its own: marks by entry name, a file's status letter as
-// git prints it or ● on a folder holding changes, and the names deleted there, true for a folder.
-function readStatus(text) {
-  var cut = text.indexOf("\n"), prefix = text.slice(0, cut), out = Object.create(null)
-  out[""] = part()
-  text.slice(cut + 1).split("\0").forEach(function (entry) {
-    if (entry.slice(3, 3 + prefix.length) !== prefix) return
-    var names = entry.slice(3 + prefix.length).replace(/\/$/, "").split("/", 3), code = entry.slice(0, 2)
-    if (!names[0]) return
-    for (var depth = 0; depth < Math.min(names.length, 2); depth++) {
-      var at = depth ? out[names[0]] || (out[names[0]] = part()) : out[""], deeper = names.length > depth + 1
-      at.marks[names[depth]] = deeper ? "●" : code.trim().charAt(0)
-      if (code.indexOf("D") >= 0) at.deleted[names[depth]] = deeper
-    }
+// One folder's part of statusCommand's output, the listed folder's under "" or one of its folders'
+// under its name: marks by entry name, a file's status letter as git prints it or ● on a folder
+// holding changes, and the names deleted there, true for a folder. The rest of the output stays
+// unread, so however many changes lie deeper, a folder costs only its own entries.
+function readStatus(text, under) {
+  var out = { marks: Object.create(null), deleted: Object.create(null) }
+  var at = under ? text.indexOf("/" + under + "\0") + 1 : 0
+  if (under && !at) return out
+  var end = text.indexOf("/", at)
+  text.slice(text.indexOf("\0", at) + 1, end < 0 ? text.length : end).split("\0").forEach(function (entry) {
+    if (!entry) return
+    out.marks[entry.slice(2)] = entry.charAt(0)
+    if (entry.charAt(1) !== "-") out.deleted[entry.slice(2)] = entry.charAt(1) === "d"
   })
   return out
 }
 
-function part() { return { marks: Object.create(null), deleted: Object.create(null) } }
-var UNCHANGED = part()
-
-// Marks by entry name in the listed folder, under "", or in one of its folders.
-function changes(status, under) { return (status[under] || UNCHANGED).marks }
+var UNCHANGED = readStatus("", "")
 
 // Keep deleted files and their missing parent folders reachable in the existing list.
 function withDeleted(entries, status, dir, under, hidden) {
-  var out = entries.slice(), seen = Object.create(null), deleted = (status[under] || UNCHANGED).deleted
+  var out = entries.slice(), seen = Object.create(null), deleted = status.deleted
   entries.forEach(function (e) { seen[e.name] = true })
   Object.keys(deleted).forEach(function (name) {
     if (seen[name] || (!hidden && name.charAt(0) === ".")) return

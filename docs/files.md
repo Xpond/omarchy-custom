@@ -274,17 +274,22 @@ file exceeds the normal 256 KiB content-preview limit.
 
 Marks are read whenever the folder's rows load — which a save also triggers —
 and whenever the browser opens; a short debounce combines duplicate requests,
-and one status covers the folder previews too: it is read once into each
-folder's marks, so moving between folders costs nothing however many changes
-the repository holds. git reports an untracked folder as one entry instead of
-walking it, so an unignored `node_modules` costs one line rather than one per
-file; the status also names a path inside the listed folder, which makes git
-open that folder even when it is untracked. A changed file's diff is read
-when the selection settles, shown or not, so the heading can count it.
-`git-preview.py` resolves missing directories through their existing parent
-and chooses the comparison baseline. Each request owns its process and
-collector; cancelled output cannot update a later selection. Outside a
-repository the helper prints nothing.
+and one status covers the folder previews too. `git-preview.py` sorts it into
+a part per folder, and the browser reads only the listed folder's part and the
+selected folder's, so moving between folders asks git nothing, and no folder
+costs more than its own entries however many changes lie deeper. With 60,000
+deleted files under `vendor`, reading them all at once held the browser for
+0.2–1 s each time it opened there; the helper now sorts them in about 0.15 s
+of its own, and the browser spends 1–3 ms. git reports an untracked folder as
+one entry instead of walking it, so an unignored `node_modules` costs one line
+rather than one per file; the status also names a path inside the listed
+folder, which makes git open that folder even when it is untracked. A changed
+file's diff is read when the selection settles, shown or not, so the heading
+can count it. `git-preview.py` resolves missing directories through their
+existing parent and chooses the comparison baseline. Each request owns its
+process and collector; cancelled output cannot update a later selection, and
+a stopped status read stops git too. Outside a repository the helper prints
+nothing.
 `node tests/files-index.js` and `node tests/files-git.js` exercise real Git
 repositories; `python3 tests/runtime.py` also checks cancellation, deleted
 directory navigation and backing out of it, large-file previews, and pairing

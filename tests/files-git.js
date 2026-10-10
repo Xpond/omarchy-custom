@@ -1,7 +1,7 @@
 // Git edge cases use real repositories; missing entries must stay safe to browse.
 const assert = require("node:assert/strict")
 const fs = require("node:fs"), os = require("node:os"), path = require("node:path")
-const { spawnSync } = require("node:child_process")
+const { spawn, spawnSync } = require("node:child_process")
 const { library, read, method } = require("./qml.js")
 const F = library("plugins/xpo.files/FilesIndex.js")
 const script = path.resolve(__dirname, "../plugins/xpo.files/git-preview.py")
@@ -13,7 +13,7 @@ function run(argv, codes = [0]) {
 }
 const git = (...args) => run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t",
   "-c", "commit.gpgsign=false", ...args])
-const status = dir => F.readStatus(run(F.statusCommand(dir, script)))
+const status = (dir, under = "") => F.readStatus(run(F.statusCommand(dir, script)), under)
 const diff = (dir, name) => F.readableDiff(run(F.diffCommand(dir, name, script), [0, 1]))
 function put(name, text = "old\n") {
   fs.mkdirSync(path.dirname(path.join(repo, name)), { recursive: true })
@@ -32,11 +32,11 @@ try {
     assert.equal(diff(repo, name), "@@ -0,0 +1 @@\n+new\n", name)
   }
   assert.equal(fs.existsSync(path.join(repo, "injected")), false)
-  const clean = F.changes(status(repo), "")
+  const clean = status(repo).marks
   assert.equal(clean.constructor, undefined)
   assert.equal(clean.__proto__, undefined)
   put("constructor", "new\n"); put("__proto__", "new\n")
-  const changed = F.changes(status(repo), "")
+  const changed = status(repo).marks
   assert.equal(changed.constructor, "M")
   assert.equal(changed.__proto__, "M")
   fs.unlinkSync(path.join(repo, "gone.txt"))
@@ -50,10 +50,10 @@ try {
   assert.equal(row.path, nested + "/a*b")
   assert.equal(row.missing, true)
   assert.equal(diff(nested, row.name), "@@ -1 +0,0 @@\n-old\n")
-  assert.deepEqual(F.withDeleted([], status(repo + "/gone folder"), repo + "/gone folder", "deep", false), [row])
+  assert.deepEqual(F.withDeleted([], status(repo + "/gone folder", "deep"), repo + "/gone folder", "deep", false), [row])
   const live = { name: "gone.txt", path: repo + "/gone.txt", isDir: false }
   assert.equal(F.withDeleted([live], status(repo), repo, "", true).filter(e => e.name === live.name).length, 1)
-  const hidden = F.readStatus("\n D .hidden\0 D .folder/x\0")
+  const hidden = { deleted: { ".hidden": false, ".folder": true } }
   assert.equal(F.withDeleted([], hidden, repo, "", false).length, 0)
   assert.equal(F.withDeleted([], hidden, repo, "", true).length, 2)
   console.log("ok: new files, unborn HEAD, literal names and deleted folders have diffs")
@@ -61,7 +61,7 @@ try {
 
 // Deleted rows arrive with git's status, when a selection may already rest on a live row; they must not move it.
 const live = [{ name: "b.txt", isDir: false, size: 2 }, { name: "src", isDir: true, size: 0 }]
-const late = F.readStatus("\n D a.txt\0 D old/x\0")
+const late = { deleted: { "a.txt": false, old: true } }
 for (const order of ["name", "date", "size"]) {
   const before = F.ordered(live, order), after = F.ordered(F.withDeleted(live, late, "/r", "", false), order)
   assert.deepEqual(after.slice(0, before.length), before, order + ": a deleted row moved a live one")
@@ -69,16 +69,40 @@ for (const order of ["name", "date", "size"]) {
 }
 console.log("ok: deleted rows follow the live ones, so their arrival moves no selection")
 
-// A status is read once; a folder selected after reads only its own part, so moving through the
-// list stays instant however many changes the repository holds.
-const many = Array.from({ length: 60000 }, (_, i) => " D node_modules/p" + (i % 600) + "/f" + i + ".js")
-const big = F.readStatus("\n" + many.join("\0") + "\0"), start = Date.now()
-for (let i = 0; i < 100; i++)
-  for (const name of ["node_modules", "src"]) { F.changes(big, name); F.withDeleted([], big, "/r", name, false) }
-assert.ok(Date.now() - start < 250, "selecting a folder read the whole status again")
-assert.equal(F.changes(big, "").node_modules, "●")
-assert.equal(F.withDeleted([], big, "/r", "node_modules", false).length, 600)
-console.log("ok: one status read serves every folder selected after it")
+// A git that prints a canned status, or hangs in one.
+function fakeGit(status) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "files-git-fake-"))
+  fs.writeFileSync(path.join(dir, "status"), status)
+  fs.writeFileSync(path.join(dir, "git"), '#!/bin/sh\ncase "$*" in *rev-parse*) printf "%s\\n\\n" "' + dir + '" ;;\n'
+    + '*) echo $$ > "' + dir + '/pid"; [ -s "' + dir + '/status" ] && exec cat "' + dir + '/status"; exec sleep 30 ;; esac\n', { mode: 0o755 })
+  return { dir, env: { ...process.env, PATH: dir + ":" + process.env.PATH } }
+}
+
+// 60,000 changes under a folder: its status is sorted by folder, and the browser reads only the
+// listed folder's part and a selected one's, so opening the folder or selecting in it waits on no other.
+const many = fakeGit(Array.from({ length: 60000 }, (_, i) => " D vendor/p" + (i % 600) + "/f" + i + ".js\0").join(""))
+const big = spawnSync("python3", [script, "status", many.dir + "/vendor"], { encoding: "utf8", env: many.env }).stdout
+fs.rmSync(many.dir, { recursive: true })
+const start = Date.now()
+for (let i = 0; i < 100; i++) { F.readStatus(big, ""); F.readStatus(big, "p599") }
+assert.ok(Date.now() - start < 250, "reading a folder's part read the whole status")
+assert.equal(F.withDeleted([], F.readStatus(big, ""), "/r", "", false).length, 600)
+assert.equal(F.withDeleted([], F.readStatus(big, "p599"), "/r", "p599", false).length, 100)
+console.log("ok: a folder's status costs its own entries, however many lie deeper")
+
+// Stopping a status read stops git too, mid-status.
+const hung = fakeGit(""), reader = spawn("python3", [script, "status", hung.dir], { env: hung.env })
+const nap = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+const written = () => { try { return +fs.readFileSync(hung.dir + "/pid", "utf8") } catch { return 0 } }
+while (!written()) nap(10)
+reader.kill()
+const pid = written(), alive = () => { try { process.kill(pid, 0); return true } catch { return false } }
+for (let i = 0; i < 200 && alive(); i++) nap(10)
+const stayed = alive()
+if (stayed) process.kill(pid)
+fs.rmSync(hung.dir, { recursive: true })
+assert.ok(!stayed, "git kept running after its status read was stopped")
+console.log("ok: stopping a status read stops git")
 
 const n = 2000, old = [], now = []
 for (let i = 0; i < n; i++) { old.push("-  oldItem" + i + " = true;"); now.push("+  newItem" + i + " = true;") }
