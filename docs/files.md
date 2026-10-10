@@ -80,8 +80,9 @@ nothing left to delete, brings the list back rather than going up. The preview s
 once the list is out: reflowing a Markdown table every frame of the slide would
 stutter. The choice holds across the overlay and its windows while the shell runs.
 
-The mouse works too — hover selects, click opens, a click outside the card
-closes it, and the wheel scrolls whichever pane is under the pointer.
+The mouse works too — hover only tints a row, a click selects it, a double click
+opens it, a click outside the card closes it, and the wheel scrolls whichever
+pane is under the pointer.
 
 ## Home is the floor
 
@@ -235,7 +236,7 @@ Deleted files remain in the list as read-only rows, below everything that
 exists: they arrive with git's status, which is read once the folder's rows are
 in, and so move no selection already made. Missing parent folders remain
 navigable too. Backing out of one selects nothing until its row arrives and
-then lands on it, rather than resting on the top row first; a key pressed
+then lands on it, rather than resting on the top row first; a key or a click
 meanwhile wins. Enter on a deleted file shows its diff. These rows cannot be
 edited, renamed, copied, moved, or trashed.
 
@@ -381,7 +382,7 @@ What makes it safe rather than merely possible:
 **It is modal, because the keyboard is a filter.** Every printable key in this
 panel lands in the search field; nothing can type into a file and into a search
 box at once. While `editing`, the whole keyboard goes to the editor and only the
-edit verbs are kept. Hover, clicks and the click-outside shield stop moving the
+edit verbs are kept. Clicks and the click-outside shield stop moving the
 selection for the same reason.
 
 **It edits plain source, not the rendering.** What the preview draws is pygments
@@ -505,11 +506,10 @@ leaves every folder standing; and it sorts on one field, where a browser wants
 folders first *and* the filter's best match first *and* then alphabetical.
 `FilesIndex.snapshot()` costs one pass per directory entered and buys both.
 
-**Hover claims the selection on `positionChanged`, never on `entered`.**
-Retyping a query re-lays the rows out under a cursor that has not moved, and
-`entered` fires on every row that slides beneath it — which drags the selection
-around mid-keystroke and leaves you unsure what `Return` will run. Real pointer
-motion is the only thing that should claim it.
+**Hover never claims the selection.** The selection is what `Return`, `F2` and
+`Delete` act on, so only a click moves it. When hover claimed it, a pointer
+drifting over the list moved the selection while you typed a rename, and `Return`
+renamed whichever file it had drifted to.
 
 **A change handler can see a stale binding.** `showsCode` is a binding on
 `previewText`, and `onPreviewTextChanged` can run *before* that binding

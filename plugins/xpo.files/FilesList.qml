@@ -37,14 +37,14 @@ Item {
         border.color: entry.doomed ? panel.danger : Color.accent
       }
 
+      // Hover only tints the row. A click selects and a double click opens, never while naming
+      // or editing, so the row being renamed or edited stays the one selected.
       MouseArea {
         id: pointer
         anchors.fill: parent
         hoverEnabled: true
-        onPositionChanged: function (mouse) {
-          if (panel.hoverMoved(mapToItem(null, mouse.x, mouse.y))) { panel.pending = ""; panel.index = entry.index }
-        }
-        onClicked: operations.activate(entry.modelData)
+        onClicked: if (!panel.naming && !panel.editing) { panel.pending = ""; panel.index = entry.index }
+        onDoubleClicked: if (!panel.naming) operations.activate(entry.modelData)
       }
 
       Row {
