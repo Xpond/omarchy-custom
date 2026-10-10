@@ -145,10 +145,11 @@ if name == 'old.txt':
     directory = base / "git-tree"
     (directory / "gone/deep").mkdir(parents=True)
     (directory / "gone/deep/a.txt").write_text("removed\n")
-    def git(*args):
-        subprocess.run(["git", "-C", str(directory), "-c", "user.name=t", "-c", "user.email=t@t",
-                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
-    git("init", "-q"); git("add", "."); git("commit", "-qm", "base")
+    def commit(where):
+        for args in [["init", "-q"], ["add", "."], ["commit", "-qm", "base"]]:
+            subprocess.run(["git", "-C", str(where), "-c", "user.name=t", "-c", "user.email=t@t",
+                            "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+    commit(directory)
     shutil.rmtree(directory / "gone")
     start = files.index('  property string status:')
     end = files.index('  // Fill folder previews', start)
@@ -202,9 +203,7 @@ if name == 'old.txt':
     for i in range(20000):
         (tree / "wide" / str(i)).touch()
     (tree / ".gitignore").write_text("wide/\n")
-    for args in [["init", "-q"], ["add", "."], ["commit", "-qm", "base"]]:
-        subprocess.run(["git", "-C", str(tree), "-c", "user.name=t", "-c", "user.email=t@t",
-                        "-c", "commit.gpgsign=false", *args], check=True, capture_output=True)
+    commit(tree)
     shutil.rmtree(tree / "gone")
     run("git-up-lands", '''
   property bool shown: true
