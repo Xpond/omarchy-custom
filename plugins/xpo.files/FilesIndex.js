@@ -261,9 +261,8 @@ function statusCommand(dir, script) {
 // unread, so however many changes lie deeper, a folder costs only its own entries.
 function readStatus(text, under) {
   var out = { marks: Object.create(null), deleted: Object.create(null) }
-  var at = under ? text.indexOf("/" + under + "\0") + 1 : 0
-  if (under && !at) return out
-  var end = text.indexOf("/", at)
+  var at = text.indexOf("/" + under + "\0") + 1, end = text.indexOf("/", at)
+  if (!at) return out
   text.slice(text.indexOf("\0", at) + 1, end < 0 ? text.length : end).split("\0").forEach(function (entry) {
     if (!entry) return
     out.marks[entry.slice(2)] = entry.charAt(0)
