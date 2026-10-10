@@ -1,9 +1,7 @@
 """Reactive wheel query, history, launch and menu reload behavior."""
 import json
 import os
-from pathlib import Path
 import re
-import shutil
 import subprocess
 
 
@@ -164,12 +162,6 @@ Item {
 
     # The real results under real pointer events: hovering a row selects it and a click runs it. A
     # MouseArea's own wheel signal shadowed the wheel property in their handlers, so neither did.
-    shell = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "shell"
-    for name in ["Commons", "Ui"]:
-        (base / name).symlink_to(shell / name)
-    for name in ["WheelResults.qml", "ClickShield.qml", "PanelIcon.qml"]:
-        shutil.copyfile(Path(__file__).resolve().parents[1] / "plugins/xpo.wheel" / name, base / name)
-    (base / "Pointer.qml").write_text("import QtTest\nTestEvent {}\n")
     run("results-pointer", '''
   property int searchHeight: 48
   property int searchWidth: 480

@@ -428,6 +428,12 @@ function columns(entries, rows, paneChars, limit, marks) {
   return out
 }
 
+// The entry columns() draws at a column and line, or null where it draws none.
+function columnEntry(entries, rows, paneChars, limit, column, line) {
+  var n = Math.min(entries.length, limit), per = shape(n, rows, paneChars)[0], i = column * per + line
+  return column >= 0 && line >= 0 && line < per && i < n ? entries[i] : null
+}
+
 // git's letter or dot in the room each row of columns() keeps for it, counted from just past
 // the row's glyph; the preview draws these over the rows in another colour.
 function markColumns(entries, rows, paneChars, limit, marks) {

@@ -82,7 +82,11 @@ stutter. The choice holds across the overlay and its windows while the shell run
 
 The mouse works too — hover only tints a row, a click selects it, a double click
 opens it, a click outside the card closes it, and the wheel scrolls whichever
-pane is under the pointer.
+pane is under the pointer. A click on an entry in a folder's preview enters the
+folder with that entry selected, and a double click opens it. The click area
+lies over the whole preview, so the second click counts whatever the preview
+shows by then; dragging no longer scrolls the preview, the wheel and
+`Shift`+arrows do.
 
 ## Home is the floor
 

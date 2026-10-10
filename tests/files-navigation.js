@@ -208,6 +208,29 @@ climb()
 assert.equal(climber.pending, "", "home has nothing above it to land on")
 console.log("ok: going up selects the folder it came from")
 
+// A click in a folder's preview enters that folder and lands on the entry; a double click opens it.
+const openedPicks = [], entry = { name: "b.txt", path: "/home/test/docs/b.txt" }
+const picker = { showsDir: true, naming: "", previewEntries: [], dirRows: 1, dirPaneChars: 80, dirLimit: 400,
+  settledSel: { path: "/home/test/docs" }, enter(d) { this.dir = d; this.pending = ""; this.index = 0 } }
+const pickScope = { root: picker, ops: { activate: e => openedPicks.push(e) },
+  FilesIndex: { columnEntry: (entries, rows, chars, limit, column, line) => column === 0 && line === 1 ? entry : null } }
+const pick = method(source, "pickPreview", pickScope), openPicked = method(source, "openPicked", pickScope)
+pick(0, 1)
+assert.deepEqual([picker.dir, picker.pending, picker.index], ["/home/test/docs", "b.txt", -1], "a click did not land on the entry")
+openPicked()
+assert.deepEqual(openedPicks, [entry], "a double click did not open the entry")
+picker.dir = "/home/test"; pick(0, 5)
+assert.deepEqual([picker.dir, picker.picked], ["/home/test", null], "a click on no entry moved the list")
+openPicked()
+assert.deepEqual(openedPicks, [entry, null], "a double click on no entry opened the last one")
+picker.naming = "rename"; pick(0, 1)
+assert.deepEqual([picker.dir, picker.picked], ["/home/test", null], "a click mid-rename moved the list")
+picker.picked = entry; openPicked()
+assert.equal(openedPicks.length, 2, "a double click mid-rename opened the entry")
+picker.naming = ""; picker.showsDir = false; pick(0, 1)
+assert.equal(picker.picked, null, "a click on a file's preview picked an entry")
+console.log("ok: a click in a folder's preview lands on its entry, a double click opens it")
+
 // A leading / starts the path from the folder being browsed.
 const typist = { home: "/home/test", dir: "/home/test/xpo/docs", filter: "", index: 3,
   editing: false, naming: "", listShown: true }
