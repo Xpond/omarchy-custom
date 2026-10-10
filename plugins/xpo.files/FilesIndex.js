@@ -447,9 +447,11 @@ function row(e, width, marked) {
        + lead(stamp(e.modified), DATE_COL)
 }
 
+// A cut after an emoji's first half would draw a broken glyph, so it falls short of the emoji.
 function clip(name, cap) {
-  var t = String(name)
-  return t.length > cap ? t.slice(0, cap - 1) + "\u2026" : t
+  var t = String(name), cut = cap - 1, half = t.charCodeAt(cut - 1)
+  if (half >= 0xd800 && half < 0xdc00) cut--
+  return t.length > cap ? t.slice(0, cut) + "\u2026" : t
 }
 
 function pad(s, n) { var t = String(s); while (t.length < n) t += " "; return t }

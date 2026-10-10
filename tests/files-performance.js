@@ -70,6 +70,9 @@ assert.deepEqual(F.columns([], 2, 80, 4), [])
 assert.deepEqual(F.columns(preview, 2, 80, 4), [folder + "\n" + notes, clipped + "\n" + last])
 assert.deepEqual(F.columns(preview, 2, 80, 3), [folder + "\n" + notes, clipped + "\n…"])
 assert.deepEqual(F.columns(preview, 1, 38, 4), [[folder, notes, clipped, last].join("\n")])
+// A long name is cut short of an emoji rather than between its two halves.
+assert.equal(F.clip("a".repeat(16) + "😀😀", 18), "a".repeat(16) + "…")
+assert.equal(F.clip("a".repeat(15) + "😀😀", 18), "a".repeat(15) + "😀…")
 // Where a folder holds changes every row keeps room after its name for git's mark, drawn over it
 // from a column of its own, so sizes and dates still line up.
 const marks = { Folder: "●", "notes.txt": "M" }

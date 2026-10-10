@@ -190,6 +190,8 @@ are set the way the browser's own rows are — name at the left, size and date o
 at the right edge — and filled down the pane and then across it: `dirRows` is how
 many lines the pane is tall, `dirPaneChars` how many characters wide, so eight
 files spread their facts across the full width and forty break into two columns.
+A name too long for its column ends in `…`, cut short of an emoji rather than
+through it.
 A bare column of names left seven eighths of a pane as wide as a file of code
 empty, and the answer was not a narrower pane.
 
