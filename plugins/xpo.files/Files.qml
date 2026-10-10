@@ -338,7 +338,8 @@ Item {
       if (root.rows[i].name === root.pending) {
         root.index = i
         root.pending = ""
-        list.view.positionViewAtIndex(root.index, ListView.Contain)
+        // Once the list holds the new rows: asked any sooner, it scrolls the old ones.
+        Qt.callLater(function () { list.view.positionViewAtIndex(root.index, ListView.Contain) })
         return
       }
     }
@@ -417,9 +418,12 @@ Item {
   // A click on an entry in a folder's preview enters that folder, landing on the entry; the second
   // click of a double click opens it, whatever the preview shows by then.
   property var picked: null
+  function previewEntry(column, line) {
+    return root.showsDir ? FilesIndex.columnEntry(root.previewEntries, root.dirRows, root.dirPaneChars,
+                                                   root.dirLimit, column, line) : null
+  }
   function pickPreview(column, line) {
-    root.picked = root.showsDir && !root.naming ? FilesIndex.columnEntry(root.previewEntries, root.dirRows,
-      root.dirPaneChars, root.dirLimit, column, line) : null
+    root.picked = root.naming ? null : root.previewEntry(column, line)
     if (!root.picked) return
     root.enter(root.settledSel.path)
     root.pending = root.picked.name; root.index = -1

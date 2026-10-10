@@ -7,8 +7,8 @@ from file_edits import check as check_file_edits
 def check(files, ops, base, run, block):
     check_file_edits(files, base, run, block)
 
-    # The real preview under real pointer events: a click on an entry picks its column and line, a
-    # double click opens the pick, and the scroll wheel still reaches the preview beneath.
+    # The real preview under real pointer events: the entry under the pointer is tinted, a click picks
+    # its column and line, a double click opens the pick, and the wheel still scrolls the preview.
     run("preview-pointer", '''
   property var entries: Array.from({ length: 200 }, (_, i) => ({ name: "e" + i, isDir: false, size: 1, modified: null }))
   property var dirColumns: FilesIndex.columns(root.entries, 10, 120, 400, ({}))
@@ -31,7 +31,9 @@ def check(files, ops, base, run, block):
   property string previewText: ""
   property string shownText: ""
   property var settledSel: null
+  property color hoverFill: "gray"
   property var picks: []
+  function previewEntry(column, line) { return FilesIndex.columnEntry(root.entries, 10, 120, 400, column, line) }
   function pickPreview(column, line) { root.picks.push(column + ":" + line) }
   function openPicked() { root.picks.push("open") }
   Pointer { id: pointer }
@@ -39,6 +41,9 @@ def check(files, ops, base, run, block):
   function find(test) { var out = [], walk = item => item.children.forEach(c => { if (test(c)) out.push(c); walk(c) }); walk(preview); return out }
   Timer { interval: 200; running: true; onTriggered: {
     var column = root.find(c => c.text === root.dirColumns[1])[0], p = column.mapToItem(preview, 10, 3 * 20 + 10)
+    pointer.mouseMove(preview, p.x, p.y, -1, Qt.NoButton, Qt.NoModifier)
+    var tint = root.find(c => c.line !== undefined && c.column !== undefined && c.visible)[0]
+    if (!tint || tint.mapToItem(column, 0, 0).y !== 3 * 20) { console.error("FAIL hovering an entry did not tint its line"); Qt.exit(1); return }
     pointer.mouseClick(preview, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
     pointer.mouseDoubleClickSequence(preview, p.x, p.y + 20, Qt.LeftButton, Qt.NoModifier, -1)
     if (root.picks.join() !== "1:3,1:4,open") { console.error("FAIL clicks in the preview gave", root.picks.join()); Qt.exit(1); return }
@@ -47,6 +52,35 @@ def check(files, ops, base, run, block):
   } }
   Timer { id: scrolled; interval: 300; onTriggered: {
     if (!(root.find(c => c.flickableDirection !== undefined)[0].contentY > 0)) { console.error("FAIL the wheel did not scroll the preview"); Qt.exit(1); return }
+    console.log("PASS"); Qt.quit()
+  } }
+''')
+
+    # A landing far down the list scrolls the real list to it once the new rows are in.
+    run("land-scrolls", '''
+  property var rows: [{ name: "a", isDir: false, size: 0 }]
+  property int index: 0
+  property int rowHeight: 30
+  property string pending: ""
+  property string naming: ""
+  property bool editing: false
+  property string doomed: ""
+  property var changes: ({})
+  property color activeFill: "blue"
+  property color hoverFill: "gray"
+  property color danger: "red"
+''' + block(files, r"  function claimPending\(") + block(files, r"  onRowsChanged: \{") + '''
+  Window { width: 400; height: 300; visible: true; FilesList { id: list; anchors.fill: parent; panel: root } }
+  Timer { interval: 100; running: true; onTriggered: {
+    root.pending = "b150"; root.index = -1
+    root.rows = Array.from({ length: 200 }, (_, i) => ({ name: "b" + i, isDir: false, size: 0 }))
+    landed.start()
+  } }
+  Timer { id: landed; interval: 100; onTriggered: {
+    var row = list.view.itemAtIndex(150)
+    if (root.index !== 150 || !row || row.y < list.view.contentY || row.y + row.height > list.view.contentY + list.view.height) {
+      console.error("FAIL a landing on row 150 left the list at", list.view.contentY); Qt.exit(1); return
+    }
     console.log("PASS"); Qt.quit()
   } }
 ''')

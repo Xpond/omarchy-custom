@@ -133,6 +133,23 @@ Item {
     boundsBehavior: Flickable.StopAtBounds
     clip: true
 
+    // The folder entry under the pointer, tinted as the list tints a row. Where it lies is also
+    // what a click picks.
+    Rectangle {
+      id: hovered
+      readonly property real px: pointer.mouseX + scroller.contentX - folderView.x
+      readonly property real py: pointer.mouseY + scroller.contentY - folderView.y
+      readonly property Item column: pointer.containsMouse && panel.dirColumns.length ? folderView.childAt(px, py) : null
+      readonly property int line: Math.floor(py / panel.lineHeight)
+      visible: !!column && !!panel.previewEntry(column.index, line)
+      x: folderView.x + (column ? column.x : 0) - panel.gutterGap / 2
+      y: folderView.y + line * panel.lineHeight
+      width: (column ? column.width : 0) + panel.gutterGap
+      height: panel.lineHeight
+      radius: height / 2
+      color: panel.hoverFill
+    }
+
     Row {
       id: folderView
       visible: panel.showsDir
@@ -294,12 +311,11 @@ Item {
   // A click picks the folder entry under it and a double click opens the pick. Over the scroller
   // rather than in it, so the second click counts whatever the pane shows by then.
   MouseArea {
+    id: pointer
     anchors.fill: scroller
     enabled: !panel.editing
-    onClicked: function (mouse) {
-      var p = mapToItem(folderView, mouse.x, mouse.y), column = folderView.childAt(p.x, p.y)
-      panel.pickPreview(column ? column.index : -1, Math.floor(p.y / panel.lineHeight))
-    }
+    hoverEnabled: true
+    onClicked: panel.pickPreview(hovered.column ? hovered.column.index : -1, hovered.line)
     onDoubleClicked: panel.openPicked()
   }
 }

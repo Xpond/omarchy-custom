@@ -32,7 +32,7 @@ def line(source, pattern):
 
 with tempfile.TemporaryDirectory(prefix="omarchy-runtime-") as temporary:
     base = Path(temporary)
-    for name, plugin in [("FilesIndex.js", "xpo.files"), ("FilesPreview.qml", "xpo.files"), ("MenuIndex.js", "xpo.wheel"),
+    for name, plugin in [("FilesIndex.js", "xpo.files"), ("FilesList.qml", "xpo.files"), ("FilesPreview.qml", "xpo.files"), ("MenuIndex.js", "xpo.wheel"),
                          ("MenuKeys.js", "xpo.wheel"), ("WheelResults.qml", "xpo.wheel"), ("ClickShield.qml", "xpo.wheel"),
                          ("PanelIcon.qml", "xpo.wheel")]:
         shutil.copyfile(repo / "plugins" / plugin / name, base / name)
