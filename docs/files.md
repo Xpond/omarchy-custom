@@ -224,12 +224,12 @@ git's own letter on a file — `M` modified, `A` added, `D` deleted, `?`
 untracked — and a dot on a folder with changes anywhere under it, so changes
 can be followed down from the root. A folder git does not track at all is `?`
 as a whole and its preview is unmarked; inside it, each entry has its own mark.
-A folder's preview carries the same marks
-between each name and its size. The preview is one plain text per column, and
-a plain text takes one colour, so the marks are a second text laid over room
-the rows keep for them, placed past the row's glyph by its measured width. A
-changed file's heading leads with how many lines it adds and removes,
-`+11 −2  ·  name`, set off by the same dot as the facts after the name.
+A folder's preview carries the same marks between each name and its size. The
+preview is one plain text per column, and a plain text takes one colour, so the
+marks are a second text laid over room the rows keep for them, placed past the
+row's glyph by its measured width. A changed file's heading leads with how many
+lines it adds and removes, `+11 −2  ·  name`, set off by the same dot as the
+facts after the name.
 
 Deleted files remain in the list as read-only rows, below everything that
 exists: they arrive with git's status, which is read once the folder's rows are
